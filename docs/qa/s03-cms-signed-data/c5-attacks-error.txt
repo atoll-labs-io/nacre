@@ -1,0 +1,34 @@
+=== script: /tmp/qa-s03.JYEfH5/scratch/consumer/src/bin/c5_digest_path.rs
+// Criterion 5, second entry: every attack file through verify_detached_digest (the ByteRange path),
+// with the right digest, a digest of the wrong length, and the digest of other content.
+use nacre_cms::SignedData;
+use sha2::{Digest, Sha256};
+
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let content = std::fs::read(&args[1]).expect("content");
+    let right = Sha256::digest(&content);
+    let other = Sha256::digest(b"other content");
+    for f in &args[2..] {
+        let sd = SignedData::from_der(&std::fs::read(f).expect("file")).expect("decode");
+        let show = |d: &[u8]| match sd.verify_detached_digest(d) { Ok(_) => "Ok".to_string(), Err(e) => format!("Err({e:?})") };
+        println!("{f}: right digest {} | 20-byte digest {} | other digest {}", show(&right), show(&right[..20]), show(&other));
+    }
+}
+
+=== cwd: /tmp/qa-s03.JYEfH5/copy/crates/nacre-cms/tests/corpus
+=== stdin: (none)
+$ /tmp/qa-s03.JYEfH5/scratch/consumer/target/debug/c5_digest_path openssl/content.bin openssl/ec-detached.der attacks/*.der
+--- stdout
+openssl/ec-detached.der: right digest Ok | 20-byte digest Err(DigestLength { expected: 32, actual: 20 }) | other digest Err(MessageDigestMismatch)
+attacks/alg-confusion.der: right digest Err(AlgorithmMismatch) | 20-byte digest Err(AlgorithmMismatch) | other digest Err(AlgorithmMismatch)
+attacks/cert-substitution.der: right digest Err(SigningCertificateMismatch) | 20-byte digest Err(SigningCertificateMismatch) | other digest Err(SigningCertificateMismatch)
+attacks/content-type-mismatch.der: right digest Err(ContentTypeMismatch) | 20-byte digest Err(ContentTypeMismatch) | other digest Err(ContentTypeMismatch)
+attacks/message-digest-absent.der: right digest Err(MissingAttribute(ObjectIdentifier(1.2.840.113549.1.9.4))) | 20-byte digest Err(MissingAttribute(ObjectIdentifier(1.2.840.113549.1.9.4))) | other digest Err(MissingAttribute(ObjectIdentifier(1.2.840.113549.1.9.4)))
+attacks/message-digest-mismatch.der: right digest Err(MessageDigestMismatch) | 20-byte digest Err(DigestLength { expected: 32, actual: 20 }) | other digest Err(MessageDigestMismatch)
+attacks/sid-unknown.der: right digest Err(SignerCertificateNotFound) | 20-byte digest Err(SignerCertificateNotFound) | other digest Err(SignerCertificateNotFound)
+attacks/signed-attrs-absent.der: right digest Err(MissingSignedAttributes) | 20-byte digest Err(MissingSignedAttributes) | other digest Err(MissingSignedAttributes)
+attacks/signed-attrs-duplicate.der: right digest Err(DuplicateAttribute(ObjectIdentifier(1.2.840.113549.1.9.4))) | 20-byte digest Err(DuplicateAttribute(ObjectIdentifier(1.2.840.113549.1.9.4))) | other digest Err(DuplicateAttribute(ObjectIdentifier(1.2.840.113549.1.9.4)))
+--- stderr
+--- exit code: 0
+

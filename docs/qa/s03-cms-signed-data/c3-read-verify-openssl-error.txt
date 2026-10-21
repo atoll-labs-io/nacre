@@ -1,0 +1,88 @@
+(scripts: src/bin/c3_verify.rs, quoted in c3-read-verify-openssl.txt; keys generated under the scratch folder by openssl and never kept)
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c3
+=== stdin: (none)
+$ echo '--- detached signature, no content given'; /tmp/qa-s03.JYEfH5/scratch/consumer/target/debug/c3_verify qa-ec-detached.der -
+--- stdout
+--- detached signature, no content given
+from_der: Ok, 1 signer(s), 1 certificate(s), econtent = None
+verify: Err(ContentMissing) -> "no content to verify"
+--- stderr
+--- exit code: 1
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c3
+=== stdin: (none)
+$ echo '--- attached signature, a detached content also given'; /tmp/qa-s03.JYEfH5/scratch/consumer/target/debug/c3_verify qa-rsa-attached.der qa-content.txt
+--- stdout
+--- attached signature, a detached content also given
+from_der: Ok, 1 signer(s), 1 certificate(s), econtent = Some(46)
+verify: Err(ContentAmbiguous) -> "both a detached and an encapsulated content"
+--- stderr
+--- exit code: 1
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c3
+=== stdin: (none)
+$ echo '--- the signature given in PEM instead of DER'; openssl cms -sign -binary -md sha256 -signer ec.pem -inkey ec.key -in qa-content.txt -outform PEM -out qa-ec.pem.p7s && /tmp/qa-s03.JYEfH5/scratch/consumer/target/debug/c3_verify qa-ec.pem.p7s qa-content.txt
+--- stdout
+--- the signature given in PEM instead of DER
+from_der: Err(Der(Error { kind: TagUnknown { byte: 45 }, position: Some(Length(1)) })) -> "invalid DER: unknown/unsupported ASN.1 DER tag: 0x2d at DER byte 1"
+--- stderr
+--- exit code: 2
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c3
+=== stdin: (none)
+$ echo '--- a certificate DER instead of a SignedData'; openssl x509 -in ec.pem -outform DER -out ec-cert.der && /tmp/qa-s03.JYEfH5/scratch/consumer/target/debug/c3_verify ec-cert.der qa-content.txt
+--- stdout
+--- a certificate DER instead of a SignedData
+from_der: Err(Der(Error { kind: TagUnexpected { expected: Some(Tag(0x06: OBJECT IDENTIFIER)), actual: Tag(0x10: SEQUENCE) }, position: None })) -> "invalid DER: unexpected ASN.1 DER tag: expected OBJECT IDENTIFIER, got SEQUENCE"
+--- stderr
+--- exit code: 2
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c3
+=== stdin: (none)
+$ echo '--- a CMS Data ContentInfo, not SignedData'; openssl cms -data_create -binary -in qa-content.txt -outform DER -out qa-data.der && /tmp/qa-s03.JYEfH5/scratch/consumer/target/debug/c3_verify qa-data.der qa-content.txt
+--- stdout
+--- a CMS Data ContentInfo, not SignedData
+from_der: Err(NotSignedData) -> "the content is not a SignedData"
+--- stderr
+--- exit code: 2
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c3
+=== stdin: (none)
+$ echo '--- two signers (OpenSSL -resign adds the RSA signer)'; openssl cms -resign -binary -inform DER -in qa-ec-detached.der -signer rsa.pem -inkey rsa.key -md sha256 -outform DER -out qa-two-signers.der && /tmp/qa-s03.JYEfH5/scratch/consumer/target/debug/c3_verify qa-two-signers.der qa-content.txt
+--- stdout
+--- two signers (OpenSSL -resign adds the RSA signer)
+from_der: Ok, 2 signer(s), 2 certificate(s), econtent = None
+verify: Err(SignerCount(2)) -> "2 signer infos, exactly one is supported"
+--- stderr
+--- exit code: 1
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c3
+=== stdin: (none)
+$ echo '--- ECDSA P-384 with SHA-384 (outside the supported set)'; openssl cms -sign -binary -md sha384 -signer p384.pem -inkey p384.key -in qa-content.txt -outform DER -out qa-p384.der && /tmp/qa-s03.JYEfH5/scratch/consumer/target/debug/c3_verify qa-p384.der qa-content.txt
+--- stdout
+--- ECDSA P-384 with SHA-384 (outside the supported set)
+from_der: Ok, 1 signer(s), 1 certificate(s), econtent = None
+verify: Err(UnsupportedAlgorithm(ObjectIdentifier(2.16.840.1.101.3.4.2.2))) -> "unsupported algorithm 2.16.840.1.101.3.4.2.2"
+--- stderr
+--- exit code: 1
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c3
+=== stdin: (none)
+$ echo '--- RSA-PSS (outside the supported set)'; openssl cms -sign -binary -md sha256 -signer rsa.pem -inkey rsa.key -keyopt rsa_padding_mode:pss -in qa-content.txt -outform DER -out qa-pss.der && /tmp/qa-s03.JYEfH5/scratch/consumer/target/debug/c3_verify qa-pss.der qa-content.txt
+--- stdout
+--- RSA-PSS (outside the supported set)
+from_der: Ok, 1 signer(s), 1 certificate(s), econtent = None
+verify: Err(UnsupportedAlgorithm(ObjectIdentifier(1.2.840.113549.1.1.10))) -> "unsupported algorithm 1.2.840.113549.1.1.10"
+--- stderr
+--- exit code: 1
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c3
+=== stdin: (none)
+$ echo '--- no signed attributes (-noattr), detached'; openssl cms -sign -binary -noattr -md sha256 -signer ec.pem -inkey ec.key -in qa-content.txt -outform DER -out qa-noattr.der && /tmp/qa-s03.JYEfH5/scratch/consumer/target/debug/c3_verify qa-noattr.der qa-content.txt
+--- stdout
+--- no signed attributes (-noattr), detached
+from_der: Ok, 1 signer(s), 1 certificate(s), econtent = None
+verify: Err(MissingSignedAttributes) -> "the signer info has no signed attributes"
+--- stderr
+--- exit code: 1
+

@@ -1,0 +1,196 @@
+=== script: /tmp/qa-s03.JYEfH5/scratch/consumer/src/bin/c3_verify.rs
+// Criterion 3: read an OpenSSL SignedData and verify it; args: <der> <content or -> [attached]
+use nacre_cms::SignedData;
+
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let der = std::fs::read(&args[1]).expect("read der");
+    let content = if args[2] == "-" { None } else { Some(std::fs::read(&args[2]).expect("read content")) };
+    match SignedData::from_der(&der) {
+        Err(e) => { println!("from_der: Err({e:?}) -> \"{e}\""); std::process::exit(2) }
+        Ok(sd) => {
+            println!("from_der: Ok, {} signer(s), {} certificate(s), econtent = {:?}",
+                sd.signer_infos.len(), sd.certificates.len(), sd.econtent().map(|c| c.len()));
+            match sd.verify(content.as_deref()) {
+                Ok(v) => println!("verify: Ok, signer certificate {} bytes", v.certificate().len()),
+                Err(e) => { println!("verify: Err({e:?}) -> \"{e}\""); std::process::exit(1) }
+            }
+        }
+    }
+}
+
+=== script: /tmp/qa-s03.JYEfH5/flip.py
+# flip.py <in> <out> <hex marker>: flip the last bit of the byte right after the first occurrence of the marker
+import sys
+d = bytearray(open(sys.argv[1], 'rb').read()); m = bytes.fromhex(sys.argv[3]); i = d.find(m)
+assert i >= 0, "marker not found"; j = i + len(m); d[j] ^= 1
+open(sys.argv[2], 'wb').write(d); print(f"flipped byte at offset {j}: {d[j]^1:#04x} -> {d[j]:#04x}")
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c3
+=== stdin: (none)
+$ openssl version
+--- stdout
+OpenSSL 3.6.5 29 Sep 2026 (Library: OpenSSL 3.6.5 29 Sep 2026)
+--- stderr
+--- exit code: 0
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c3
+=== stdin: (none)
+$ openssl cms -sign -binary -cades -md sha256 -signer ec.pem -inkey ec.key -in qa-content.txt -outform DER -out qa-ec-detached.der && echo signed
+--- stdout
+signed
+--- stderr
+--- exit code: 0
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c3
+=== stdin: (none)
+$ openssl cms -sign -binary -md sha256 -signer rsa.pem -inkey rsa.key -in qa-content.txt -outform DER -out qa-rsa-detached.der && echo signed
+--- stdout
+signed
+--- stderr
+--- exit code: 0
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c3
+=== stdin: (none)
+$ openssl cms -sign -binary -nodetach -md sha256 -signer rsa.pem -inkey rsa.key -in qa-content.txt -outform DER -out qa-rsa-attached.der && echo signed
+--- stdout
+signed
+--- stderr
+--- exit code: 0
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c3
+=== stdin: (none)
+$ /tmp/qa-s03.JYEfH5/scratch/consumer/target/debug/c3_verify qa-ec-detached.der qa-content.txt
+--- stdout
+from_der: Ok, 1 signer(s), 1 certificate(s), econtent = None
+verify: Ok, signer certificate 464 bytes
+--- stderr
+--- exit code: 0
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c3
+=== stdin: (none)
+$ /tmp/qa-s03.JYEfH5/scratch/consumer/target/debug/c3_verify qa-rsa-detached.der qa-content.txt
+--- stdout
+from_der: Ok, 1 signer(s), 1 certificate(s), econtent = None
+verify: Ok, signer certificate 863 bytes
+--- stderr
+--- exit code: 0
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c3
+=== stdin: (none)
+$ /tmp/qa-s03.JYEfH5/scratch/consumer/target/debug/c3_verify qa-rsa-attached.der -
+--- stdout
+from_der: Ok, 1 signer(s), 1 certificate(s), econtent = Some(46)
+verify: Ok, signer certificate 863 bytes
+--- stderr
+--- exit code: 0
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c3
+=== stdin: (none)
+$ /tmp/qa-s03.JYEfH5/scratch/consumer/target/debug/c3_verify ec-detached.der content.bin
+--- stdout
+from_der: Ok, 1 signer(s), 1 certificate(s), econtent = None
+verify: Ok, signer certificate 484 bytes
+--- stderr
+--- exit code: 0
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c3
+=== stdin: (none)
+$ /tmp/qa-s03.JYEfH5/scratch/consumer/target/debug/c3_verify rsa-detached.der content.bin
+--- stdout
+from_der: Ok, 1 signer(s), 1 certificate(s), econtent = None
+verify: Ok, signer certificate 883 bytes
+--- stderr
+--- exit code: 0
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c3
+=== stdin: (none)
+$ /tmp/qa-s03.JYEfH5/scratch/consumer/target/debug/c3_verify ec-attached.der -
+--- stdout
+from_der: Ok, 1 signer(s), 1 certificate(s), econtent = Some(80)
+verify: Ok, signer certificate 484 bytes
+--- stderr
+--- exit code: 0
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c3
+=== stdin: (none)
+$ echo '--- one byte of the content changed'; sed 's/OpenSSL/OpenSSl/' qa-content.txt > qa-content-altered.txt && cmp qa-content.txt qa-content-altered.txt; /tmp/qa-s03.JYEfH5/scratch/consumer/target/debug/c3_verify qa-ec-detached.der qa-content-altered.txt; /tmp/qa-s03.JYEfH5/scratch/consumer/target/debug/c3_verify qa-rsa-detached.der qa-content-altered.txt
+--- stdout
+--- one byte of the content changed
+qa-content.txt qa-content-altered.txt sont différents: octet 32, ligne 1
+from_der: Ok, 1 signer(s), 1 certificate(s), econtent = None
+verify: Err(MessageDigestMismatch) -> "the content digest differs from the messageDigest attribute"
+from_der: Ok, 1 signer(s), 1 certificate(s), econtent = None
+verify: Err(MessageDigestMismatch) -> "the content digest differs from the messageDigest attribute"
+--- stderr
+--- exit code: 1
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c3
+=== stdin: (none)
+$ openssl asn1parse -inform DER -in qa-ec-detached.der | grep -A2 -E 'signingTime|messageDigest|cont \[ 0 \]' | head -20
+--- stdout
+   15:d=1  hl=4 l=1080 cons: cont [ 0 ]        
+   19:d=2  hl=4 l=1076 cons: SEQUENCE          
+   23:d=3  hl=2 l=   1 prim: INTEGER           :01
+--
+   54:d=3  hl=4 l= 464 cons: cont [ 0 ]        
+   58:d=4  hl=4 l= 460 cons: SEQUENCE          
+   62:d=5  hl=4 l= 371 cons: SEQUENCE          
+   66:d=6  hl=2 l=   3 cons: cont [ 0 ]        
+   68:d=7  hl=2 l=   1 prim: INTEGER           :02
+   71:d=6  hl=2 l=  20 prim: INTEGER           :74A2F24BBC03836AE6E65DEA03A692DE85D285E1
+--
+  632:d=5  hl=4 l= 378 cons: cont [ 0 ]        
+  636:d=6  hl=2 l=  24 cons: SEQUENCE          
+  638:d=7  hl=2 l=   9 prim: OBJECT            :contentType
+--
+  664:d=7  hl=2 l=   9 prim: OBJECT            :signingTime
+  675:d=7  hl=2 l=  15 cons: SET               
+  677:d=8  hl=2 l=  13 prim: UTCTIME           :261021225234Z
+--
+  694:d=7  hl=2 l=   9 prim: OBJECT            :messageDigest
+--- stderr
+--- exit code: 0
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c3
+=== stdin: (none)
+$ python3 -I /tmp/qa-s03.JYEfH5/flip.py qa-ec-detached.der qa-ec-attr-altered.der 2a864886f70d010905310f170d && /tmp/qa-s03.JYEfH5/scratch/consumer/target/debug/c3_verify qa-ec-attr-altered.der qa-content.txt
+--- stdout
+flipped byte at offset 679: 0x32 -> 0x33
+from_der: Ok, 1 signer(s), 1 certificate(s), econtent = None
+verify: Err(SignatureInvalid) -> "the signature is invalid"
+--- stderr
+--- exit code: 1
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c3
+=== stdin: (none)
+$ python3 -I /tmp/qa-s03.JYEfH5/flip.py qa-rsa-detached.der qa-rsa-attr-altered.der 2a864886f70d010905310f170d && /tmp/qa-s03.JYEfH5/scratch/consumer/target/debug/c3_verify qa-rsa-attr-altered.der qa-content.txt
+--- stdout
+flipped byte at offset 1078: 0x32 -> 0x33
+from_der: Ok, 1 signer(s), 1 certificate(s), econtent = None
+verify: Err(SignatureInvalid) -> "the signature is invalid"
+--- stderr
+--- exit code: 1
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c3
+=== stdin: (none)
+$ echo '--- OpenSSL judges the same altered attribute file:'; openssl cms -verify -binary -inform DER -in qa-ec-attr-altered.der -content qa-content.txt -noverify -out /dev/null
+--- stdout
+--- OpenSSL judges the same altered attribute file:
+--- stderr
+CMS Verification failure
+40545B044E7F0000:error:030000EA:digital envelope routines:EVP_DigestVerifyFinal:provider signature failure:crypto/evp/m_sigver.c:707:ECDSA digest_verify_final:
+40545B044E7F0000:error:1700009E:CMS routines:CMS_SignerInfo_verify:verification failure:crypto/cms/cms_sd.c:1004:
+--- exit code: 4
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c3
+=== stdin: (none)
+$ echo '--- one byte of the encapsulated content changed (no detached content given)'; python3 -I /tmp/qa-s03.JYEfH5/flip.py qa-rsa-attached.der qa-rsa-econtent-altered.der $(printf 'QA s03 ' | xxd -p) && /tmp/qa-s03.JYEfH5/scratch/consumer/target/debug/c3_verify qa-rsa-econtent-altered.der -
+--- stdout
+--- one byte of the encapsulated content changed (no detached content given)
+flipped byte at offset 65: 0x63 -> 0x62
+from_der: Ok, 1 signer(s), 1 certificate(s), econtent = Some(46)
+verify: Err(MessageDigestMismatch) -> "the content digest differs from the messageDigest attribute"
+--- stderr
+--- exit code: 1
+

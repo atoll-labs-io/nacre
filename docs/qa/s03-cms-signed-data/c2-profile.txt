@@ -1,0 +1,50 @@
+=== script: /tmp/qa-s03.JYEfH5/scratch/consumer/src/bin/c2_profile.rs
+// Criterion 2: a profile forbids an attribute; PAdES never writes signing-time.
+use nacre_cms::{Profile, SignedData, oid, sign_detached};
+use nacre_core::TestSigner;
+use sha2::{Digest, Sha256};
+use x509_cert::time::Time;
+use der::DateTime;
+
+fn has_signing_time(der: &[u8]) -> bool {
+    let sd = SignedData::from_der(der).expect("decode");
+    sd.signer_infos[0].signed_attrs.as_ref().expect("attrs").attributes().expect("attrs")
+        .iter().any(|a| a.oid == oid::SIGNING_TIME)
+}
+
+fn main() {
+    let signer = TestSigner::from_secret(&[0x42; 32]).expect("signer");
+    let digest = Sha256::digest(b"a PDF ByteRange, say");
+    let t = Time::from(DateTime::new(2026, 10, 22, 12, 0, 0).expect("dt"));
+    let pades = sign_detached(&digest, &signer, &Profile::PADES, None).expect("pades none");
+    println!("PADES, no time asked: Ok, signing-time written = {}", has_signing_time(&pades));
+    match sign_detached(&digest, &signer, &Profile::PADES, Some(t)) {
+        Ok(d) => println!("PADES, time asked: Ok, signing-time written = {}", has_signing_time(&d)),
+        Err(e) => println!("PADES, time asked: Err({e:?}) -> \"{e}\""),
+    }
+    let cms = sign_detached(&digest, &signer, &Profile::CMS, Some(t)).expect("cms");
+    println!("CMS, time asked: Ok, signing-time written = {}", has_signing_time(&cms));
+    // A caller-defined profile forbidding signing-certificate-v2.
+    static FORBID: [der::asn1::ObjectIdentifier; 1] = [oid::SIGNING_CERTIFICATE_V2];
+    let custom = Profile::forbidding(&FORBID);
+    match sign_detached(&digest, &signer, &custom, None) {
+        Ok(_) => println!("custom profile forbidding signing-certificate-v2: Ok (written)"),
+        Err(e) => println!("custom profile forbidding signing-certificate-v2: Err({e:?}) -> \"{e}\""),
+    }
+    println!("PADES forbids signing-time: {}", Profile::PADES.forbids(&oid::SIGNING_TIME));
+    println!("CMS forbids signing-time: {}", Profile::CMS.forbids(&oid::SIGNING_TIME));
+}
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c2
+=== stdin: (none)
+$ /tmp/qa-s03.JYEfH5/scratch/consumer/target/debug/c2_profile
+--- stdout
+PADES, no time asked: Ok, signing-time written = false
+PADES, time asked: Err(ForbiddenAttribute(ObjectIdentifier(1.2.840.113549.1.9.5))) -> "the profile forbids attribute 1.2.840.113549.1.9.5"
+CMS, time asked: Ok, signing-time written = true
+custom profile forbidding signing-certificate-v2: Err(ForbiddenAttribute(ObjectIdentifier(1.2.840.113549.1.9.16.2.47))) -> "the profile forbids attribute 1.2.840.113549.1.9.16.2.47"
+PADES forbids signing-time: true
+CMS forbids signing-time: false
+--- stderr
+--- exit code: 0
+
