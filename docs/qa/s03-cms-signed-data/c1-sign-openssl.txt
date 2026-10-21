@@ -1,0 +1,149 @@
+=== script: /tmp/qa-s03.JYEfH5/scratch/consumer/Cargo.toml
+[package]
+name = "consumer"
+version = "0.0.0"
+edition = "2024"
+
+[workspace]
+
+[dependencies]
+nacre-cms = { path = "/tmp/qa-s03.JYEfH5/copy/crates/nacre-cms" }
+nacre-core = { path = "/tmp/qa-s03.JYEfH5/copy/crates/nacre-core", features = ["test-signer"] }
+sha2 = "0.11"
+x509-cert = "0.3"
+der = { version = "0.8", features = ["alloc", "oid"] }
+
+=== script: /tmp/qa-s03.JYEfH5/scratch/consumer/src/bin/c1_sign.rs
+// Criterion 1: digest + Signer -> detached DER SignedData with the three signed attributes.
+use nacre_cms::{Profile, SignedData, oid, sign_detached};
+use nacre_core::{Signer, TestSigner};
+use sha2::{Digest, Sha256};
+
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let content = std::fs::read(&args[1]).expect("read content");
+    let out = &args[2];
+    let signer = TestSigner::from_secret(&[0x42; 32]).expect("signer");
+    let digest = Sha256::digest(&content);
+    let der = sign_detached(&digest, &signer, &Profile::CMS, None).expect("sign");
+    std::fs::write(out, &der).expect("write");
+    std::fs::write(format!("{out}.cert.der"), &signer.certificate_chain()[0]).expect("cert");
+    println!("wrote {} bytes to {out}", der.len());
+    let sd = SignedData::from_der(&der).expect("decode own output");
+    println!("econtent present: {}", sd.econtent().is_some());
+    let si = &sd.signer_infos[0];
+    for a in si.signed_attrs.as_ref().expect("signed attrs").attributes().expect("attrs") {
+        let name = match a.oid {
+            o if o == oid::CONTENT_TYPE => "content-type",
+            o if o == oid::MESSAGE_DIGEST => "message-digest",
+            o if o == oid::SIGNING_CERTIFICATE_V2 => "signing-certificate-v2",
+            o if o == oid::SIGNING_TIME => "signing-time",
+            _ => "other",
+        };
+        println!("signed attribute {} ({name}), {} value(s)", a.oid, a.values.len());
+    }
+    println!("verify(Some(content)) = {:?}", sd.verify(Some(&content)).map(|v| v.certificate().len()));
+}
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c1
+=== stdin: (none)
+$ cat content.txt
+--- stdout
+Fictitious contract, QA s03, 2026-10-22.
+Second line.
+--- stderr
+--- exit code: 0
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c1
+=== stdin: (none)
+$ /tmp/qa-s03.JYEfH5/scratch/consumer/target/debug/c1_sign content.txt sig.der
+--- stdout
+wrote 839 bytes to sig.der
+econtent present: false
+signed attribute 1.2.840.113549.1.9.3 (content-type), 1 value(s)
+signed attribute 1.2.840.113549.1.9.4 (message-digest), 1 value(s)
+signed attribute 1.2.840.113549.1.9.16.2.47 (signing-certificate-v2), 1 value(s)
+verify(Some(content)) = Ok(467)
+--- stderr
+--- exit code: 0
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c1
+=== stdin: (none)
+$ openssl x509 -inform DER -in sig.der.cert.der -out cert.pem && openssl x509 -in cert.pem -noout -subject -ext keyUsage
+--- stdout
+subject=C=FR, O=Nacre tests, CN=Nacre test signer
+X509v3 Key Usage: critical
+    Certificate Sign, CRL Sign
+--- stderr
+--- exit code: 0
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c1
+=== stdin: (none)
+$ openssl cms -verify -binary -inform DER -in sig.der -content content.txt -CAfile cert.pem -purpose any -cades -out /dev/null
+--- stdout
+--- stderr
+CAdES Verification successful
+--- exit code: 0
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c1
+=== stdin: (none)
+$ openssl cms -verify -binary -inform DER -in sig.der -content content.txt -noverify -out /dev/null
+--- stdout
+--- stderr
+CMS Verification successful
+--- exit code: 0
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c1
+=== stdin: (none)
+$ openssl cms -verify -binary -inform DER -in sig.der -content content.txt -CAfile cert.pem -out /dev/null
+--- stdout
+--- stderr
+CMS Verification failure
+40A4C625137F0000:error:17000064:CMS routines:cms_signerinfo_verify_cert:certificate verify error:crypto/cms/cms_smime.c:329:Verify error: unsuitable certificate purpose
+--- exit code: 4
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c1
+=== stdin: (none)
+$ openssl cms -cmsout -print -inform DER -in sig.der | sed -n '/signerInfos:/,$p'
+--- stdout
+    signerInfos:
+        version: 1
+        d.issuerAndSerialNumber: 
+          issuer:           C=FR, O=Nacre tests, CN=Nacre test signer
+          serialNumber: 1
+        digestAlgorithm: 
+          algorithm: sha256 (2.16.840.1.101.3.4.2.1)
+          parameter: <ABSENT>
+        signedAttrs:
+            object: contentType (1.2.840.113549.1.9.3)
+            set:
+              OBJECT:pkcs7-data (1.2.840.113549.1.7.1)
+
+            object: messageDigest (1.2.840.113549.1.9.4)
+            set:
+              OCTET STRING:
+                0000 - f9 9d 4f 25 3a 0b 05 04-33 06 50 3b 54   ..O%:...3.P;T
+                000d - 5d 7e 99 92 1a 88 bc 6a-12 b9 da eb eb   ]~.....j.....
+                001a - a4 a9 dc c4 f4 f2                        ......
+
+            object: id-smime-aa-signingCertificateV2 (1.2.840.113549.1.9.16.2.47)
+            set:
+              SEQUENCE:
+    0:d=0  hl=2 l=  38 cons: SEQUENCE          
+    2:d=1  hl=2 l=  36 cons:  SEQUENCE          
+    4:d=2  hl=2 l=  34 cons:   SEQUENCE          
+    6:d=3  hl=2 l=  32 prim:    OCTET STRING      [HEX DUMP]:659ABB194C1787A26EBB62E4166901EFEB7B750A66304AEBFD9A69552207FAF6
+        signatureAlgorithm: 
+          algorithm: ecdsa-with-SHA256 (1.2.840.10045.4.3.2)
+          parameter: <ABSENT>
+        signature: 
+          0000 - 30 45 02 20 67 c1 86 1b-a5 79 ff 15 ae b2 3e   0E. g....y....>
+          000f - 20 c7 a5 fd da 12 1a 31-fa 9a ac 27 8d 9d 18    ......1...'...
+          001e - b7 69 d5 e8 c8 f4 02 21-00 b4 7e b7 6a a6 06   .i.....!..~.j..
+          002d - cc f4 42 36 39 6b 89 d6-75 58 9b 5e 5f 11 0f   ..B69k..uX.^_..
+          003c - 6a 4a e7 c8 88 d5 18 1e-01 66 db               jJ.......f.
+        unsignedAttrs:
+          <ABSENT>
+--- stderr
+--- exit code: 0
+

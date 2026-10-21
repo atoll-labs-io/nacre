@@ -1,0 +1,98 @@
+(scripts: src/bin/c3_verify.rs, quoted in c3-read-verify-openssl.txt)
+=== cwd: /tmp/qa-s03.JYEfH5/copy
+=== stdin: (none)
+$ grep -E '^\| ' docs/security/attacks/cms.md | cut -d'|' -f3,5
+--- stdout
+ Cas du corpus | Erreur rendue 
+ --- | --- 
+ `alg-confusion.der` | `Error::AlgorithmMismatch` 
+ `signed-attrs-absent.der` | `Error::MissingSignedAttributes` 
+ `message-digest-absent.der` | `Error::MissingAttribute(messageDigest)` 
+ `signed-attrs-duplicate.der` | `Error::DuplicateAttribute(messageDigest)` 
+ `message-digest-mismatch.der` | `Error::MessageDigestMismatch` 
+ `sid-unknown.der` | `Error::SignerCertificateNotFound` 
+ `cert-substitution.der` | `Error::SigningCertificateMismatch` 
+ `content-type-mismatch.der` | `Error::ContentTypeMismatch` 
+--- stderr
+--- exit code: 0
+
+=== cwd: /tmp/qa-s03.JYEfH5/copy/crates/nacre-cms/tests/corpus
+=== stdin: (none)
+$ for f in attacks/*.der; do echo "== $f"; /tmp/qa-s03.JYEfH5/scratch/consumer/target/debug/c3_verify $f openssl/content.bin; echo "exit $?"; done
+--- stdout
+== attacks/alg-confusion.der
+from_der: Ok, 1 signer(s), 1 certificate(s), econtent = None
+verify: Err(AlgorithmMismatch) -> "the signature algorithm does not match the signer key"
+exit 1
+== attacks/cert-substitution.der
+from_der: Ok, 1 signer(s), 2 certificate(s), econtent = None
+verify: Err(SigningCertificateMismatch) -> "the signingCertificateV2 attribute names another certificate"
+exit 1
+== attacks/content-type-mismatch.der
+from_der: Ok, 1 signer(s), 1 certificate(s), econtent = None
+verify: Err(ContentTypeMismatch) -> "the contentType attribute differs from eContentType"
+exit 1
+== attacks/message-digest-absent.der
+from_der: Ok, 1 signer(s), 1 certificate(s), econtent = None
+verify: Err(MissingAttribute(ObjectIdentifier(1.2.840.113549.1.9.4))) -> "signed attribute 1.2.840.113549.1.9.4 is missing"
+exit 1
+== attacks/message-digest-mismatch.der
+from_der: Ok, 1 signer(s), 1 certificate(s), econtent = None
+verify: Err(MessageDigestMismatch) -> "the content digest differs from the messageDigest attribute"
+exit 1
+== attacks/sid-unknown.der
+from_der: Ok, 1 signer(s), 1 certificate(s), econtent = None
+verify: Err(SignerCertificateNotFound) -> "no certificate matches the signer identifier"
+exit 1
+== attacks/signed-attrs-absent.der
+from_der: Ok, 1 signer(s), 1 certificate(s), econtent = None
+verify: Err(MissingSignedAttributes) -> "the signer info has no signed attributes"
+exit 1
+== attacks/signed-attrs-duplicate.der
+from_der: Ok, 1 signer(s), 1 certificate(s), econtent = None
+verify: Err(DuplicateAttribute(ObjectIdentifier(1.2.840.113549.1.9.4))) -> "signed attribute 1.2.840.113549.1.9.4 appears more than once"
+exit 1
+--- stderr
+--- exit code: 0
+
+=== cwd: /tmp/qa-s03.JYEfH5/copy/crates/nacre-cms/tests/corpus
+=== stdin: (none)
+$ for f in attacks/*.der; do printf '%s: ' $f; openssl cms -verify -binary -inform DER -in $f -content openssl/content.bin -noverify -out /dev/null 2>&1 | head -1; done
+--- stdout
+attacks/alg-confusion.der: CMS Verification successful
+attacks/cert-substitution.der: CMS Verification successful
+attacks/content-type-mismatch.der: CMS Verification successful
+attacks/message-digest-absent.der: CMS Verification failure
+attacks/message-digest-mismatch.der: CMS Verification failure
+attacks/sid-unknown.der: CMS Verification failure
+attacks/signed-attrs-absent.der: CMS Verification successful
+attacks/signed-attrs-duplicate.der: CMS Verification failure
+--- stderr
+--- exit code: 0
+
+=== cwd: /tmp/qa-s03.JYEfH5/copy
+=== stdin: (none)
+$ cargo run -q -p nacre-cms --example forge_attacks -- /tmp/qa-s03.JYEfH5/scratch/c5/regen && for f in crates/nacre-cms/tests/corpus/attacks/*.der; do cmp $f /tmp/qa-s03.JYEfH5/scratch/c5/regen/$(basename $f) && echo "identical $(basename $f)"; done
+--- stdout
+identical alg-confusion.der
+identical cert-substitution.der
+identical content-type-mismatch.der
+identical message-digest-absent.der
+identical message-digest-mismatch.der
+identical sid-unknown.der
+identical signed-attrs-absent.der
+identical signed-attrs-duplicate.der
+--- stderr
+--- exit code: 0
+
+=== cwd: /tmp/qa-s03.JYEfH5/copy
+=== stdin: (none)
+$ cargo test -q -p nacre-cms --test attacks 2>&1 | tail -4
+--- stdout
+running 8 tests
+........
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+--- stderr
+--- exit code: 0
+
