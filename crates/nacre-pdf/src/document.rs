@@ -6,6 +6,7 @@ use crate::acroform::{self, SignatureField};
 use crate::filter;
 use crate::limits::{Limits, MAX_INPUT_LEN};
 use crate::parse::Parser;
+use crate::revision::Update;
 use crate::xref::{self, Entry, Revision};
 use crate::{Dictionary, Error, Object, ObjectId};
 
@@ -116,6 +117,35 @@ impl<'a> Document<'a> {
             self.limits.max_total_decoded,
         )
         .object(id)
+    }
+
+    /// Starts one incremental revision appended to this document.
+    pub fn update(&self) -> Update<'_, 'a> {
+        Update::new(self)
+    }
+
+    pub(crate) fn input(&self) -> &'a [u8] {
+        self.input
+    }
+
+    pub(crate) fn limits(&self) -> &Limits {
+        &self.limits
+    }
+
+    /// The highest object number any cross-reference section lists.
+    pub(crate) fn highest_entry(&self) -> Option<u32> {
+        self.entries.keys().max().copied()
+    }
+
+    /// Follows `value` while it is a reference, as [`Resolver::follow`] does.
+    pub(crate) fn follow(&self, value: &Object) -> Result<(Option<ObjectId>, Object), Error> {
+        Resolver::new(
+            self.input,
+            &self.entries,
+            self.limits,
+            self.limits.max_total_decoded,
+        )
+        .follow(value)
     }
 }
 

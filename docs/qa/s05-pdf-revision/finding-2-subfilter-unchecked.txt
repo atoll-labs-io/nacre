@@ -1,0 +1,112 @@
+Finding 2 — /SubFilter is written as given, even empty or with its slash, and validators then see an unknown signature type (run, then replay).
+Working copy: /tmp/qa-s05.nOrhFm/repo. Probe: see c1-c4-c5-plain-revision.txt. d64.der: 64 random bytes (only the /SubFilter written is under test).
+## run
+$ SUBFILTER= /tmp/qa-s05.nOrhFm/scratch/target/debug/probe embed /tmp/qa-s05.nOrhFm/repo/crates/nacre-pdf/tests/corpus/real/chrome-print.pdf sf.pdf /tmp/qa-s05.nOrhFm/scratch/craft/d64.der
+byte_range: [0, 19067, 35453, 861]; output length 36314
+prefix intact: true
+out[a]='<' out[b-1]='>'
+byte_range covers whole file: true
+slot hex digits: 16384, DER hex at start: true, rest zeros: true
+output: reparse ok, 36314 bytes, 2 revisions
+  field "Nacre1" 43 0 R /V Some("42 0 R")
+  /Sig /SubFilter = Name([])
+  /Sig /ByteRange = Array([Integer(0), Integer(19067), Integer(35453), Integer(861)])
+  /Sig /Contents = string of 8192 bytes
+exit 0
+
+$ grep -ao '/SubFilter...' sf.pdf | tail -1
+/SubFilter /
+$ qpdf --check sf.pdf
+checking sf.pdf
+PDF Version: 1.4
+File is not encrypted
+File is not linearized
+No syntax or stream encoding errors found; the file may still contain
+errors that qpdf cannot detect
+exit 0
+$ pdfsig sf.pdf | grep -E 'Type|Validation'
+  - Signature Type: unknown
+  - Signature Validation: Signature has not yet been verified.
+
+$ SUBFILTER=/ETSI.CAdES.detached /tmp/qa-s05.nOrhFm/scratch/target/debug/probe embed /tmp/qa-s05.nOrhFm/repo/crates/nacre-pdf/tests/corpus/real/chrome-print.pdf sf.pdf /tmp/qa-s05.nOrhFm/scratch/craft/d64.der
+byte_range: [0, 19089, 35475, 861]; output length 36336
+prefix intact: true
+out[a]='<' out[b-1]='>'
+byte_range covers whole file: true
+slot hex digits: 16384, DER hex at start: true, rest zeros: true
+output: reparse ok, 36336 bytes, 2 revisions
+  field "Nacre1" 43 0 R /V Some("42 0 R")
+  /Sig /SubFilter = Name([47, 69, 84, 83, 73, 46, 67, 65, 100, 69, 83, 46, 100, 101, 116, 97, 99, 104, 101, 100])
+  /Sig /ByteRange = Array([Integer(0), Integer(19089), Integer(35475), Integer(861)])
+  /Sig /Contents = string of 8192 bytes
+exit 0
+
+$ grep -ao '/SubFilter...' sf.pdf | tail -1
+/SubFilter /#2FETSI.CAdES.detached
+$ qpdf --check sf.pdf
+checking sf.pdf
+PDF Version: 1.4
+File is not encrypted
+File is not linearized
+No syntax or stream encoding errors found; the file may still contain
+errors that qpdf cannot detect
+exit 0
+$ pdfsig sf.pdf | grep -E 'Type|Validation'
+  - Signature Type: unknown
+  - Signature Validation: Signature has not yet been verified.
+
+## replay
+$ SUBFILTER= /tmp/qa-s05.nOrhFm/scratch/target/debug/probe embed /tmp/qa-s05.nOrhFm/repo/crates/nacre-pdf/tests/corpus/real/chrome-print.pdf sf.pdf /tmp/qa-s05.nOrhFm/scratch/craft/d64.der
+byte_range: [0, 19067, 35453, 861]; output length 36314
+prefix intact: true
+out[a]='<' out[b-1]='>'
+byte_range covers whole file: true
+slot hex digits: 16384, DER hex at start: true, rest zeros: true
+output: reparse ok, 36314 bytes, 2 revisions
+  field "Nacre1" 43 0 R /V Some("42 0 R")
+  /Sig /SubFilter = Name([])
+  /Sig /ByteRange = Array([Integer(0), Integer(19067), Integer(35453), Integer(861)])
+  /Sig /Contents = string of 8192 bytes
+exit 0
+
+$ grep -ao '/SubFilter...' sf.pdf | tail -1
+/SubFilter /
+$ qpdf --check sf.pdf
+checking sf.pdf
+PDF Version: 1.4
+File is not encrypted
+File is not linearized
+No syntax or stream encoding errors found; the file may still contain
+errors that qpdf cannot detect
+exit 0
+$ pdfsig sf.pdf | grep -E 'Type|Validation'
+  - Signature Type: unknown
+  - Signature Validation: Signature has not yet been verified.
+
+$ SUBFILTER=/ETSI.CAdES.detached /tmp/qa-s05.nOrhFm/scratch/target/debug/probe embed /tmp/qa-s05.nOrhFm/repo/crates/nacre-pdf/tests/corpus/real/chrome-print.pdf sf.pdf /tmp/qa-s05.nOrhFm/scratch/craft/d64.der
+byte_range: [0, 19089, 35475, 861]; output length 36336
+prefix intact: true
+out[a]='<' out[b-1]='>'
+byte_range covers whole file: true
+slot hex digits: 16384, DER hex at start: true, rest zeros: true
+output: reparse ok, 36336 bytes, 2 revisions
+  field "Nacre1" 43 0 R /V Some("42 0 R")
+  /Sig /SubFilter = Name([47, 69, 84, 83, 73, 46, 67, 65, 100, 69, 83, 46, 100, 101, 116, 97, 99, 104, 101, 100])
+  /Sig /ByteRange = Array([Integer(0), Integer(19089), Integer(35475), Integer(861)])
+  /Sig /Contents = string of 8192 bytes
+exit 0
+
+$ grep -ao '/SubFilter...' sf.pdf | tail -1
+/SubFilter /#2FETSI.CAdES.detached
+$ qpdf --check sf.pdf
+checking sf.pdf
+PDF Version: 1.4
+File is not encrypted
+File is not linearized
+No syntax or stream encoding errors found; the file may still contain
+errors that qpdf cannot detect
+exit 0
+$ pdfsig sf.pdf | grep -E 'Type|Validation'
+  - Signature Type: unknown
+  - Signature Validation: Signature has not yet been verified.
+

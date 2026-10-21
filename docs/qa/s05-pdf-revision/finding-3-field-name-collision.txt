@@ -1,0 +1,88 @@
+Finding 3 — the new signature field may take the full name of an existing non-signature field (run, then replay).
+Working copy: /tmp/qa-s05.nOrhFm/repo. Probe: see c1-c4-c5-plain-revision.txt. form-xfa-irs-w9.pdf holds 23 fields; its first is the text field topmostSubform[0].Page1[0].f1_01[0].
+## run
+$ FIELD=topmostSubform[0].Page1[0].f1_01[0] /tmp/qa-s05.nOrhFm/scratch/target/debug/probe embed /tmp/qa-s05.nOrhFm/repo/crates/nacre-pdf/tests/corpus/real/form-xfa-irs-w9.pdf fld.pdf /tmp/qa-s05.nOrhFm/scratch/craft/d64.der
+byte_range: [0, 140953, 157339, 1085]; output length 158424
+prefix intact: true
+out[a]='<' out[b-1]='>'
+byte_range covers whole file: true
+slot hex digits: 16384, DER hex at start: true, rest zeros: true
+output: reparse ok, 158424 bytes, 3 revisions
+  field "topmostSubform[0].Page1[0].f1_01[0]" 1082 0 R /V Some("1081 0 R")
+  /Sig /SubFilter = Name([69, 84, 83, 73, 46, 67, 65, 100, 69, 83, 46, 100, 101, 116, 97, 99, 104, 101, 100])
+  /Sig /ByteRange = Array([Integer(0), Integer(140953), Integer(157339), Integer(1085)])
+  /Sig /Contents = string of 8192 bytes
+exit 0
+
+$ qpdf --check fld.pdf | grep -c WARNING
+0
+$ qpdf --json --json-key=acroform fld.pdf | (python: count fields, list duplicate full names and /Sig fields)
+fields: 24
+same full name twice: ['topmostSubform[0].Page1[0].f1_01[0]']
+types under that name: ['/Tx', '/Sig']
+/Sig fields: ['topmostSubform[0].Page1[0].f1_01[0]']
+
+$ FIELD=a.b /tmp/qa-s05.nOrhFm/scratch/target/debug/probe embed /tmp/qa-s05.nOrhFm/repo/crates/nacre-pdf/tests/corpus/real/form-xfa-irs-w9.pdf fld.pdf /tmp/qa-s05.nOrhFm/scratch/craft/d64.der
+byte_range: [0, 140953, 157339, 1021]; output length 158360
+prefix intact: true
+out[a]='<' out[b-1]='>'
+byte_range covers whole file: true
+slot hex digits: 16384, DER hex at start: true, rest zeros: true
+output: reparse ok, 158360 bytes, 3 revisions
+  field "a.b" 1082 0 R /V Some("1081 0 R")
+  /Sig /SubFilter = Name([69, 84, 83, 73, 46, 67, 65, 100, 69, 83, 46, 100, 101, 116, 97, 99, 104, 101, 100])
+  /Sig /ByteRange = Array([Integer(0), Integer(140953), Integer(157339), Integer(1021)])
+  /Sig /Contents = string of 8192 bytes
+exit 0
+
+$ qpdf --check fld.pdf | grep -c WARNING
+0
+$ qpdf --json --json-key=acroform fld.pdf | (python: count fields, list duplicate full names and /Sig fields)
+fields: 24
+same full name twice: []
+types under that name: []
+/Sig fields: ['a.b']
+
+## replay
+$ FIELD=topmostSubform[0].Page1[0].f1_01[0] /tmp/qa-s05.nOrhFm/scratch/target/debug/probe embed /tmp/qa-s05.nOrhFm/repo/crates/nacre-pdf/tests/corpus/real/form-xfa-irs-w9.pdf fld.pdf /tmp/qa-s05.nOrhFm/scratch/craft/d64.der
+byte_range: [0, 140953, 157339, 1085]; output length 158424
+prefix intact: true
+out[a]='<' out[b-1]='>'
+byte_range covers whole file: true
+slot hex digits: 16384, DER hex at start: true, rest zeros: true
+output: reparse ok, 158424 bytes, 3 revisions
+  field "topmostSubform[0].Page1[0].f1_01[0]" 1082 0 R /V Some("1081 0 R")
+  /Sig /SubFilter = Name([69, 84, 83, 73, 46, 67, 65, 100, 69, 83, 46, 100, 101, 116, 97, 99, 104, 101, 100])
+  /Sig /ByteRange = Array([Integer(0), Integer(140953), Integer(157339), Integer(1085)])
+  /Sig /Contents = string of 8192 bytes
+exit 0
+
+$ qpdf --check fld.pdf | grep -c WARNING
+0
+$ qpdf --json --json-key=acroform fld.pdf | (python: count fields, list duplicate full names and /Sig fields)
+fields: 24
+same full name twice: ['topmostSubform[0].Page1[0].f1_01[0]']
+types under that name: ['/Tx', '/Sig']
+/Sig fields: ['topmostSubform[0].Page1[0].f1_01[0]']
+
+$ FIELD=a.b /tmp/qa-s05.nOrhFm/scratch/target/debug/probe embed /tmp/qa-s05.nOrhFm/repo/crates/nacre-pdf/tests/corpus/real/form-xfa-irs-w9.pdf fld.pdf /tmp/qa-s05.nOrhFm/scratch/craft/d64.der
+byte_range: [0, 140953, 157339, 1021]; output length 158360
+prefix intact: true
+out[a]='<' out[b-1]='>'
+byte_range covers whole file: true
+slot hex digits: 16384, DER hex at start: true, rest zeros: true
+output: reparse ok, 158360 bytes, 3 revisions
+  field "a.b" 1082 0 R /V Some("1081 0 R")
+  /Sig /SubFilter = Name([69, 84, 83, 73, 46, 67, 65, 100, 69, 83, 46, 100, 101, 116, 97, 99, 104, 101, 100])
+  /Sig /ByteRange = Array([Integer(0), Integer(140953), Integer(157339), Integer(1021)])
+  /Sig /Contents = string of 8192 bytes
+exit 0
+
+$ qpdf --check fld.pdf | grep -c WARNING
+0
+$ qpdf --json --json-key=acroform fld.pdf | (python: count fields, list duplicate full names and /Sig fields)
+fields: 24
+same full name twice: []
+types under that name: []
+/Sig fields: ['a.b']
+

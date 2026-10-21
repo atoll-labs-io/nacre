@@ -1,0 +1,15 @@
+Criteria 1, 4 and 5 — invalid input to the plain revision.
+Working copy: /tmp/qa-s05.nOrhFm/repo (files of 'git ls-files' on story/s05-pdf-revision), after 'cargo fetch' then 'cargo build --workspace --all-features' (both exit 0).
+Tools: qpdf 12.4.2 (/tmp/s05-qpdf/bin/qpdf, conda-forge), poppler pdfsig/pdfinfo 26.08.0, OpenSSL 3.6.5. Outputs written under /tmp/qa-s05.nOrhFm/scratch/out, never in the worktree.
+Probe: see c1-c4-c5-plain-revision.txt.
+
+### Input that is not a PDF
+$ /tmp/qa-s05.nOrhFm/scratch/target/debug/probe plain /tmp/qa-s05.nOrhFm/scratch/craft/text.txt x.pdf
+parse error: the input does not start with %PDF-
+exit 1
+
+$ head -c 5000 chrome-print.pdf > truncated.pdf; probe plain truncated.pdf x.pdf
+parse error: no startxref statement in the last 1024 bytes
+exit 1
+$ probe plain does-not-exist.pdf x.pdf
+exit 2

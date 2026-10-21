@@ -46,6 +46,7 @@ Built at test time by `tests/support/mod.rs`, never stored:
 | Case | Attack or defect | Refusal |
 | --- | --- | --- |
 | `xref_entry_pointing_elsewhere` | the catalog's xref offset moved 3 bytes | `ObjectMismatch` |
+| `xref_entry_pointing_at_another_object` | the catalog's xref entry holds the offset of object 2, a well-formed `2 0 obj` | `ObjectMismatch` |
 | `missing_catalog` | `/Root 9 0 R` with no object 9 | `ObjectNotFound` |
 | `object_stream_index_past_n` | the AcroForm stored at index `/N` of its object stream | `ObjectStream` |
 | `other_filter_on_xref_stream` | an xref stream under `/LZWDecode` | `UnsupportedFilter` |
@@ -57,6 +58,9 @@ Built at test time by `tests/support/mod.rs`, never stored:
 | 50,000,001 bytes | a valid file padded one byte past `MAX_INPUT_LEN` | `TooLarge` |
 | `huge_declared_counts` | subsection `0 8388607` in a 1 KB file | `XrefTable` |
 | `xref_stream_wrong_decoded_length` | an xref stream one byte longer than its `/W` × `/Index` | `XrefStream` |
+| `certified_no_changes` | DocMDP `/P 1` reached through `/Perms`, an indirect `/DocMDP` and indirect `/TransformParams`; a new approval signature is refused, a plain revision and a `/DocTimeStamp` slot are not | `CertifiedNoChanges` |
+| `page_tree_loop` | a `/Pages` node whose `/Kids` lists itself; the writer looks for the first page | `Limit` "page tree depth" |
+| `direct_acroform`, `indirect_fields`, `indirect_annots` | not defects: the AcroForm and page shapes the signature field is hooked into (direct `/AcroForm`; indirect `/Fields`; indirect page `/Annots`) | accepted |
 
 ## Credits
 

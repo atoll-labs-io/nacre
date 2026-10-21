@@ -1,0 +1,381 @@
+Criteria 1, 4 and 5 — a revision without signature appended to each of the 10 real corpus files of s04, through the public API (Document::update, Update::add, add_stream, set_catalog, finish), then reread by Document::parse and judged by qpdf --check and pdfinfo.
+Working copy: /tmp/qa-s05.nOrhFm/repo (files of 'git ls-files' on story/s05-pdf-revision), after 'cargo fetch' then 'cargo build --workspace --all-features' (both exit 0).
+Tools: qpdf 12.4.2 (/tmp/s05-qpdf/bin/qpdf, conda-forge), poppler pdfsig/pdfinfo 26.08.0, OpenSSL 3.6.5. Outputs written under /tmp/qa-s05.nOrhFm/scratch/out, never in the worktree.
+Probe: a scratch binary crate depending on nacre-pdf by path; it calls only the public interface. Mode 'plain' adds a dictionary and an unfiltered stream, points a new catalog key /NacreQA at the stream, finishes, checks the prefix, rereads. Modes 'prepare' and 'embed' call Update::sign with a SignatureSpec read from FIELD, SUBFILTER, LEN (defaults Nacre1, ETSI.CAdES.detached, 8192) and optional k=v entries; 'prepare' writes signed_parts()[0] ++ signed_parts()[1]; 'embed' prepares again (deterministic), calls embed(der) and writes the result. A panic prints PANIC and exits 101.
+Cargo.toml:
+[package]
+name = "probe"
+version = "0.0.0"
+edition = "2024"
+
+[workspace]
+
+[dependencies]
+nacre-pdf = { path = "/tmp/qa-s05.nOrhFm/repo/crates/nacre-pdf" }
+src/main.rs:
+```rust
+use nacre_pdf::{Dictionary, Document, Object, ObjectId, SignatureSpec};
+use std::process::exit;
+
+fn short(o: &Object) -> String {
+    let s = format!("{o:?}");
+    s.chars().take(400).collect()
+}
+
+fn summary(label: &str, bytes: &[u8]) -> Option<()> {
+    match Document::parse(bytes) {
+        Ok(doc) => {
+            println!("{label}: reparse ok, {} bytes, {} revisions", bytes.len(), doc.revisions().len());
+            for (i, r) in doc.revisions().iter().enumerate() {
+                println!("  revision {i}: end={} startxref={} xref={:?}", r.end, r.startxref, r.xref);
+            }
+            for f in doc.signature_fields() {
+                println!("  field {:?} {} /V {:?}", f.name, f.id, f.value.map(|v| v.to_string()));
+            }
+            Some(())
+        }
+        Err(e) => { println!("{label}: reparse ERROR: {e}"); None }
+    }
+}
+
+fn spec(args: &[String]) -> SignatureSpec {
+    let mut entries = Dictionary::new();
+    if let Some(extra) = args.get(0) {
+        for kv in extra.split(',').filter(|s| !s.is_empty()) {
+            let (k, v) = kv.split_once('=').unwrap_or((kv, ""));
+            entries.insert(k.as_bytes(), Object::Name(v.as_bytes().to_vec()));
+        }
+    }
+    SignatureSpec {
+        field: std::env::var("FIELD").unwrap_or("Nacre1".into()),
+        sub_filter: std::env::var("SUBFILTER").unwrap_or("ETSI.CAdES.detached".into()).into_bytes(),
+        contents_len: std::env::var("LEN").ok().and_then(|s| s.parse().ok()).unwrap_or(8192),
+        entries,
+    }
+}
+
+fn main() {
+    let a: Vec<String> = std::env::args().collect();
+    if a.len() < 4 { eprintln!("usage: probe plain|prepare|embed <in.pdf> <out> [der] [entries k=v,...]"); exit(2) }
+    let input = std::fs::read(&a[2]).unwrap_or_else(|e| { eprintln!("cannot read {}: {e}", a[2]); exit(2) });
+    let code = std::panic::catch_unwind(|| -> i32 {
+        let doc = match Document::parse(&input) { Ok(d) => d, Err(e) => { println!("parse error: {e}"); return 1 } };
+        let before = doc.revisions().len();
+        match a[1].as_str() {
+            "plain" => {
+                let mut up = doc.update();
+                let mut d = Dictionary::new();
+                d.insert(b"Type", Object::Name(b"NacreQA".to_vec()));
+                d.insert(b"Note", Object::String(b"QA (s05) \\ plain revision".to_vec()));
+                let id1 = match up.add(Object::Dictionary(d.clone())) { Ok(i) => i, Err(e) => { println!("add error: {e}"); return 1 } };
+                let id2 = match up.add_stream(Dictionary::new(), b"hello DSS".to_vec()) { Ok(i) => i, Err(e) => { println!("add_stream error: {e}"); return 1 } };
+                up.set_catalog(b"NacreQA", Object::Reference(id2));
+                let out = match up.finish() { Ok(o) => o, Err(e) => { println!("finish error: {e}"); return 1 } };
+                println!("added {id1} and {id2}; catalog /NacreQA -> {id2}");
+                println!("prefix intact: {}", out.starts_with(&input));
+                std::fs::write(&a[3], &out).ok();
+                let Ok(d2) = Document::parse(&out) else { summary("output", &out); return 1 };
+                summary("output", &out);
+                println!("revisions: {before} -> {}", d2.revisions().len());
+                println!("catalog /NacreQA = {:?}", d2.catalog().get(b"NacreQA"));
+                println!("object {id1} equals added dict: {}", d2.object(id1).map(|o| o == Object::Dictionary(d.clone())).unwrap_or(false));
+                match d2.object(id2) { Ok(Object::Stream(s)) => println!("object {id2} stream data: {:?}", String::from_utf8_lossy(&out[s.data.clone()])), o => println!("object {id2}: {o:?}") }
+                0
+            }
+            "prepare" | "embed" => {
+                let sp = spec(&a[if a[1] == "embed" { 5 } else { 4 }..].to_vec());
+                let field = sp.field.clone();
+                let prep = match doc.update().sign(sp) { Ok(p) => p, Err(e) => { println!("sign error: {e}"); println!("debug: {e:?}"); return 1 } };
+                let br = prep.byte_range();
+                let parts = prep.signed_parts();
+                if a[1] == "prepare" {
+                    let mut tbs = parts[0].to_vec(); tbs.extend_from_slice(parts[1]);
+                    // the prepared file is parts[0] + slot + parts[1]
+                    let total = br[2] + br[3];
+                    println!("byte_range: {br:?}; total length {total}; signed bytes {}", tbs.len());
+                    std::fs::write(&a[3], &tbs).ok();
+                    return 0;
+                }
+                let der = std::fs::read(&a[4]).unwrap_or_default();
+                let out = match prep.embed(&der) { Ok(o) => o, Err(e) => { println!("embed error: {e}"); println!("debug: {e:?}"); println!("byte_range after error: {:?}", prep.byte_range()); return 1 } };
+                println!("byte_range: {br:?}; output length {}", out.len());
+                println!("prefix intact: {}", out.starts_with(&input));
+                println!("out[a]={:?} out[b-1]={:?}", out[br[1]] as char, out[br[2]-1] as char);
+                println!("byte_range covers whole file: {}", br[0] == 0 && br[2] + br[3] == out.len());
+                let slot = &out[br[1]+1..br[2]-1];
+                let hexlen = 2 * der.len();
+                println!("slot hex digits: {}, DER hex at start: {}, rest zeros: {}", slot.len(),
+                    slot[..hexlen].iter().map(|c| *c as char).collect::<String>().eq_ignore_ascii_case(&der.iter().map(|b| format!("{b:02x}")).collect::<String>()),
+                    slot[hexlen..].iter().all(|c| *c == b'0'));
+                std::fs::write(&a[3], &out).ok();
+                let Ok(d2) = Document::parse(&out) else { summary("output", &out); return 1 };
+                summary("output", &out);
+                if let Some(f) = d2.signature_fields().iter().find(|f| f.name == field) {
+                    if let Ok(Object::Dictionary(fd)) = d2.object(f.id) { println!("field dict: {}", short(&Object::Dictionary(fd))); }
+                    if let Some(v) = f.value { if let Ok(Object::Dictionary(sd)) = d2.object(v) {
+                        for (k, val) in sd.iter() { if k != b"Contents" { println!("  /Sig /{} = {}", String::from_utf8_lossy(k), short(val)); } else if let Object::String(s) = val { println!("  /Sig /Contents = string of {} bytes", s.len()); } }
+                    } }
+                }
+                let _ = ObjectId::new(0,0);
+                0
+            }
+            _ => 2,
+        }
+    });
+    match code { Ok(c) => exit(c), Err(_) => { println!("PANIC"); exit(101) } }
+}
+```
+
+Original revisions (from s04's reader) appear first in each output; the last revision line is the one added.
+
+=== certified-dss
+$ probe plain certified-dss.pdf certified-dss.plain.pdf
+added 56 0 R and 57 0 R; catalog /NacreQA -> 57 0 R
+prefix intact: true
+output: reparse ok, 153517 bytes, 3 revisions
+  revision 0: end=127672 startxref=126665 xref=Table
+  revision 1: end=152955 startxref=152262 xref=Table
+  revision 2: end=153517 startxref=153284 xref=Table
+  field "signature-test" 8 0 R /V Some("40 0 R")
+  field "signature-test2" 9 0 R /V None
+revisions: 2 -> 3
+catalog /NacreQA = Some(Reference(ObjectId { number: 57, generation: 0 }))
+object 56 0 R equals added dict: true
+object 57 0 R stream data: "hello DSS"
+exit 0
+$ cmp -n 152955 certified-dss.pdf certified-dss.plain.pdf
+identical prefix
+$ qpdf --check certified-dss.plain.pdf
+checking certified-dss.plain.pdf
+PDF Version: 1.4
+File is not encrypted
+File is not linearized
+No syntax or stream encoding errors found; the file may still contain
+errors that qpdf cannot detect
+qpdf exit 0
+=== chrome-print
+$ probe plain chrome-print.pdf chrome-print.plain.pdf
+added 42 0 R and 43 0 R; catalog /NacreQA -> 43 0 R
+prefix intact: true
+output: reparse ok, 19480 bytes, 2 revisions
+  revision 0: end=18950 startxref=18032 xref=Table
+  revision 1: end=19480 startxref=19323 xref=Table
+revisions: 1 -> 2
+catalog /NacreQA = Some(Reference(ObjectId { number: 43, generation: 0 }))
+object 42 0 R equals added dict: true
+object 43 0 R stream data: "hello DSS"
+exit 0
+$ cmp -n 18950 chrome-print.pdf chrome-print.plain.pdf
+identical prefix
+$ qpdf --check chrome-print.plain.pdf
+checking chrome-print.plain.pdf
+PDF Version: 1.4
+File is not encrypted
+File is not linearized
+No syntax or stream encoding errors found; the file may still contain
+errors that qpdf cannot detect
+qpdf exit 0
+=== firefox-print
+$ probe plain firefox-print.pdf firefox-print.plain.pdf
+added 25 0 R and 26 0 R; catalog /NacreQA -> 26 0 R
+prefix intact: true
+output: reparse ok, 25501 bytes, 2 revisions
+  revision 0: end=25050 startxref=24472 xref=Table
+  revision 1: end=25501 startxref=25344 xref=Table
+revisions: 1 -> 2
+catalog /NacreQA = Some(Reference(ObjectId { number: 26, generation: 0 }))
+object 25 0 R equals added dict: true
+object 26 0 R stream data: "hello DSS"
+exit 0
+$ cmp -n 25050 firefox-print.pdf firefox-print.plain.pdf
+identical prefix
+$ qpdf --check firefox-print.plain.pdf
+checking firefox-print.plain.pdf
+PDF Version: 1.4
+File is not encrypted
+File is not linearized
+No syntax or stream encoding errors found; the file may still contain
+errors that qpdf cannot detect
+qpdf exit 0
+=== form-xfa-irs-w9
+$ probe plain form-xfa-irs-w9.pdf form-xfa-irs-w9.plain.pdf
+added 1081 0 R and 1082 0 R; catalog /NacreQA -> 1082 0 R
+prefix intact: true
+output: reparse ok, 141580 bytes, 3 revisions
+  revision 0: end=126744 startxref=116 xref=Stream
+  revision 1: end=140815 startxref=140462 xref=Stream
+  revision 2: end=141580 startxref=141300 xref=Stream
+revisions: 2 -> 3
+catalog /NacreQA = Some(Reference(ObjectId { number: 1082, generation: 0 }))
+object 1081 0 R equals added dict: true
+object 1082 0 R stream data: "hello DSS"
+exit 0
+$ cmp -n 140815 form-xfa-irs-w9.pdf form-xfa-irs-w9.plain.pdf
+identical prefix
+$ qpdf --check form-xfa-irs-w9.plain.pdf
+checking form-xfa-irs-w9.plain.pdf
+PDF Version: 1.7 extension level 11
+File is not encrypted
+File is not linearized
+No syntax or stream encoding errors found; the file may still contain
+errors that qpdf cannot detect
+qpdf exit 0
+=== ghostscript-pdfa2
+$ probe plain ghostscript-pdfa2.pdf ghostscript-pdfa2.plain.pdf
+added 39 0 R and 40 0 R; catalog /NacreQA -> 40 0 R
+prefix intact: true
+output: reparse ok, 16383 bytes, 2 revisions
+  revision 0: end=15883 startxref=15530 xref=Stream
+  revision 1: end=16383 startxref=16120 xref=Stream
+revisions: 1 -> 2
+catalog /NacreQA = Some(Reference(ObjectId { number: 40, generation: 0 }))
+object 39 0 R equals added dict: true
+object 40 0 R stream data: "hello DSS"
+exit 0
+$ cmp -n 15883 ghostscript-pdfa2.pdf ghostscript-pdfa2.plain.pdf
+identical prefix
+$ qpdf --check ghostscript-pdfa2.plain.pdf
+checking ghostscript-pdfa2.plain.pdf
+PDF Version: 1.7
+File is not encrypted
+File is not linearized
+No syntax or stream encoding errors found; the file may still contain
+errors that qpdf cannot detect
+qpdf exit 0
+=== libreoffice-pdfa3
+$ probe plain libreoffice-pdfa3.pdf libreoffice-pdfa3.plain.pdf
+added 993 0 R and 994 0 R; catalog /NacreQA -> 994 0 R
+prefix intact: true
+output: reparse ok, 207017 bytes, 2 revisions
+  revision 0: end=206397 startxref=186328 xref=Table
+  revision 1: end=207017 startxref=206776 xref=Table
+revisions: 1 -> 2
+catalog /NacreQA = Some(Reference(ObjectId { number: 994, generation: 0 }))
+object 993 0 R equals added dict: true
+object 994 0 R stream data: "hello DSS"
+exit 0
+$ cmp -n 206397 libreoffice-pdfa3.pdf libreoffice-pdfa3.plain.pdf
+identical prefix
+$ qpdf --check libreoffice-pdfa3.plain.pdf
+checking libreoffice-pdfa3.plain.pdf
+PDF Version: 1.6
+File is not encrypted
+File is not linearized
+No syntax or stream encoding errors found; the file may still contain
+errors that qpdf cannot detect
+qpdf exit 0
+=== signed-lta-pyhanko
+$ probe plain signed-lta-pyhanko.pdf signed-lta-pyhanko.plain.pdf
+added 33 0 R and 34 0 R; catalog /NacreQA -> 34 0 R
+prefix intact: true
+output: reparse ok, 47444 bytes, 6 revisions
+  revision 0: end=739 startxref=565 xref=Table
+  revision 1: end=1393 startxref=1129 xref=Table
+  revision 2: end=25853 startxref=25590 xref=Table
+  revision 3: end=46212 startxref=45662 xref=Table
+  revision 4: end=46884 startxref=46578 xref=Table
+  revision 5: end=47444 startxref=47225 xref=Table
+  field "Sig1" 7 0 R /V Some("10 0 R")
+  field "Timestamp-977301ad-bec9-4cae-a0cd-f6a674c6e465" 25 0 R /V Some("26 0 R")
+revisions: 5 -> 6
+catalog /NacreQA = Some(Reference(ObjectId { number: 34, generation: 0 }))
+object 33 0 R equals added dict: true
+object 34 0 R stream data: "hello DSS"
+exit 0
+$ cmp -n 46884 signed-lta-pyhanko.pdf signed-lta-pyhanko.plain.pdf
+identical prefix
+$ qpdf --check signed-lta-pyhanko.plain.pdf
+checking signed-lta-pyhanko.plain.pdf
+PDF Version: 1.7
+File is not encrypted
+File is not linearized
+No syntax or stream encoding errors found; the file may still contain
+errors that qpdf cannot detect
+qpdf exit 0
+=== signed-twice-pyhanko
+$ probe plain signed-twice-pyhanko.pdf signed-twice-pyhanko.plain.pdf
+added 34 0 R and 35 0 R; catalog /NacreQA -> 35 0 R
+prefix intact: true
+output: reparse ok, 51346 bytes, 3 revisions
+  revision 0: end=26384 startxref=116 xref=Stream
+  revision 1: end=50827 startxref=50491 xref=Stream
+  revision 2: end=51346 startxref=51081 xref=Stream
+  field "Sig1" 21 0 R /V Some("26 0 R")
+  field "Sig2" 22 0 R /V Some("18 0 R")
+revisions: 2 -> 3
+catalog /NacreQA = Some(Reference(ObjectId { number: 35, generation: 0 }))
+object 34 0 R equals added dict: true
+object 35 0 R stream data: "hello DSS"
+exit 0
+$ cmp -n 50827 signed-twice-pyhanko.pdf signed-twice-pyhanko.plain.pdf
+identical prefix
+$ qpdf --check signed-twice-pyhanko.plain.pdf
+checking signed-twice-pyhanko.plain.pdf
+PDF Version: 1.7
+File is not encrypted
+File is not linearized
+No syntax or stream encoding errors found; the file may still contain
+errors that qpdf cannot detect
+qpdf exit 0
+=== word-hybrid
+$ probe plain word-hybrid.pdf word-hybrid.plain.pdf
+added 115 0 R and 116 0 R; catalog /NacreQA -> 116 0 R
+prefix intact: true
+output: reparse ok, 95505 bytes, 5 revisions
+  revision 0: end=81959 startxref=79740 xref=Table
+  revision 1: end=82140 startxref=81959 xref=Hybrid
+  revision 2: end=90822 startxref=90625 xref=Hybrid
+  revision 3: end=94902 startxref=94618 xref=Table
+  revision 4: end=95505 startxref=95270 xref=Table
+revisions: 4 -> 5
+catalog /NacreQA = Some(Reference(ObjectId { number: 116, generation: 0 }))
+object 115 0 R equals added dict: true
+object 116 0 R stream data: "hello DSS"
+exit 0
+$ cmp -n 94902 word-hybrid.pdf word-hybrid.plain.pdf
+identical prefix
+$ qpdf --check word-hybrid.plain.pdf
+checking word-hybrid.plain.pdf
+PDF Version: 1.7
+File is not encrypted
+File is not linearized
+No syntax or stream encoding errors found; the file may still contain
+errors that qpdf cannot detect
+qpdf exit 0
+=== word-pdfmaker-linearized
+$ probe plain word-pdfmaker-linearized.pdf word-pdfmaker-linearized.plain.pdf
+added 136 0 R and 137 0 R; catalog /NacreQA -> 137 0 R
+prefix intact: true
+output: reparse ok, 67539 bytes, 3 revisions
+  revision 0: end=57615 startxref=116 xref=Stream
+  revision 1: end=66887 startxref=66474 xref=Stream
+  revision 2: end=67539 startxref=67270 xref=Stream
+revisions: 2 -> 3
+catalog /NacreQA = Some(Reference(ObjectId { number: 137, generation: 0 }))
+object 136 0 R equals added dict: true
+object 137 0 R stream data: "hello DSS"
+exit 0
+$ cmp -n 66887 word-pdfmaker-linearized.pdf word-pdfmaker-linearized.plain.pdf
+identical prefix
+$ qpdf --check word-pdfmaker-linearized.plain.pdf
+checking word-pdfmaker-linearized.plain.pdf
+PDF Version: 1.6
+File is not encrypted
+File is not linearized
+No syntax or stream encoding errors found; the file may still contain
+errors that qpdf cannot detect
+qpdf exit 0
+
+$ grep -ci warning (over every qpdf output above)
+0
+$ for f in *.plain.pdf; pdfinfo $f
+certified-dss.plain.pdf: exit 0
+chrome-print.plain.pdf: exit 0
+firefox-print.plain.pdf: exit 0
+form-xfa-irs-w9.plain.pdf: exit 0
+ghostscript-pdfa2.plain.pdf: exit 0
+libreoffice-pdfa3.plain.pdf: exit 0
+signed-lta-pyhanko.plain.pdf: exit 0
+signed-twice-pyhanko.plain.pdf: exit 0
+word-hybrid.plain.pdf: exit 0
+word-pdfmaker-linearized.plain.pdf: exit 0
