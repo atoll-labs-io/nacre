@@ -76,14 +76,14 @@ Quoted from `AGENTS.local.md`, never decided here.
 
 | Setting | Value |
 | --- | --- |
-| Package manager | — |
-| Install | — |
-| Test | — |
-| Typecheck | — |
+| Package manager | cargo |
+| Install | cargo fetch |
+| Test | cargo test --workspace |
+| Typecheck | cargo clippy --workspace --all-targets --all-features -- -D warnings |
 | E2E | — |
-| Build | — |
+| Build | cargo build --workspace --all-features |
 
-The settings hold no command yet, so no agent runs tests until they are set. Once s01 has created the workspace, the base will define: Package manager `cargo`, Install `cargo fetch`, Test `cargo test --workspace`, Typecheck `cargo clippy --workspace --all-targets --all-features -- -D warnings`, Build `cargo build --workspace --all-features`. `cargo test` filters by test target and name rather than by file path (`cargo test -p <crate> --test <file stem>`), which the `Test` setting's « accepts paths » rule does not fit. Edit these settings in `AGENTS.local.md` yourself; this command does not change them.
+`cargo test` filters by test target and name rather than by file path: a single task's tests run with `cargo test -p <crate> --test <file stem>`.
 
 ## Conventions
 The rules live in the « Conventions » section of `AGENTS.local.md`, which every agent loads through `AGENTS.md`. This file does not repeat them.
