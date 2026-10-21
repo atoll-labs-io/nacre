@@ -1,0 +1,134 @@
+Criterion 3 — broken xref, corrupted revision, missing object: each refused with an error naming the defect; and no repair (poppler's pdfinfo, which repairs, shown on the same inputs for contrast).
+Probe and working copy: as described at the top of c1-c2-real-corpus.txt (same binary, /tmp/qa-s04.9bHZId/target/release/probe).
+
+Inputs crafted in /tmp/qa-s04.9bHZId/scratch/inputs from copies of the corpus (python3 -I):
+- xref-keyword-broken.pdf: chrome-print.pdf with the 4 bytes 'xref' at its startxref offset 18032 replaced by 'xraf'.
+- catalog-entry-shifted.pdf: chrome-print.pdf with the xref entry of the catalog (33 0 R) moved from 4109 to 4112.
+- root-missing.pdf: chrome-print.pdf with '/Root 33 0 R' replaced by '/Root 99 0 R' (same width).
+- revision-prev-wrong.pdf: certified-dss.pdf (2 revisions) with the newest trailer's '/Prev 126665' changed to '/Prev 126672' (corrupted link to revision 0).
+- revision-xref-garbled.pdf: certified-dss.pdf with 10 bytes of revision 1's xref table (startxref 152262 + 30) overwritten with '@'.
+- hostile/*.pdf: the four refusal files of the story's corpus, unchanged.
+
+$ cd /tmp/qa-s04.9bHZId/scratch/inputs && /tmp/qa-s04.9bHZId/target/release/probe xref-keyword-broken.pdf
+stdin: none
+--- stdout
+file: xref-keyword-broken.pdf (18950 bytes)
+error: no cross-reference section at offset 18032
+debug: NotAnXrefSection { offset: 18032 }
+elapsed: 28.077µs
+peak memory: 2604 kB
+--- stderr
+--- exit code: 1
+
+$ cd /tmp/qa-s04.9bHZId/scratch/inputs && /tmp/qa-s04.9bHZId/target/release/probe catalog-entry-shifted.pdf
+stdin: none
+--- stdout
+file: catalog-entry-shifted.pdf (18950 bytes)
+error: the cross-reference entry of 33 0 R points at offset 4112, which does not hold it
+debug: ObjectMismatch { object: ObjectId { number: 33, generation: 0 }, offset: 4112 }
+elapsed: 41.277µs
+peak memory: 2584 kB
+--- stderr
+--- exit code: 1
+
+$ cd /tmp/qa-s04.9bHZId/scratch/inputs && /tmp/qa-s04.9bHZId/target/release/probe root-missing.pdf
+stdin: none
+--- stdout
+file: root-missing.pdf (18950 bytes)
+error: object 99 0 R not found
+debug: ObjectNotFound { object: ObjectId { number: 99, generation: 0 } }
+elapsed: 37.226µs
+peak memory: 2584 kB
+--- stderr
+--- exit code: 1
+
+$ cd /tmp/qa-s04.9bHZId/scratch/inputs && /tmp/qa-s04.9bHZId/target/release/probe revision-prev-wrong.pdf
+stdin: none
+--- stdout
+file: revision-prev-wrong.pdf (152955 bytes)
+error: no cross-reference section at offset 126672
+debug: NotAnXrefSection { offset: 126672 }
+elapsed: 34.991µs
+peak memory: 2748 kB
+--- stderr
+--- exit code: 1
+
+$ cd /tmp/qa-s04.9bHZId/scratch/inputs && /tmp/qa-s04.9bHZId/target/release/probe revision-xref-garbled.pdf
+stdin: none
+--- stdout
+file: revision-xref-garbled.pdf (152955 bytes)
+error: malformed cross-reference table at offset 152291: entry is not 20 bytes `nnnnnnnnnn ggggg n|f` and an end of line
+debug: XrefTable { offset: 152291, reason: "entry is not 20 bytes `nnnnnnnnnn ggggg n|f` and an end of line" }
+elapsed: 23.258µs
+peak memory: 2748 kB
+--- stderr
+--- exit code: 1
+
+$ cd /tmp/qa-s04.9bHZId/repo/crates/nacre-pdf/tests/corpus && /tmp/qa-s04.9bHZId/target/release/probe hostile/aes256.pdf
+stdin: none
+--- stdout
+file: hostile/aes256.pdf (1403 bytes)
+error: the document is encrypted
+debug: Encrypted
+elapsed: 48.75µs
+peak memory: 2620 kB
+--- stderr
+--- exit code: 1
+
+$ cd /tmp/qa-s04.9bHZId/repo/crates/nacre-pdf/tests/corpus && /tmp/qa-s04.9bHZId/target/release/probe hostile/circular-xref-chain.pdf
+stdin: none
+--- stdout
+file: hostile/circular-xref-chain.pdf (140 bytes)
+error: the /Prev chain loops back to offset 9
+debug: XrefLoop { offset: 9 }
+elapsed: 29.683µs
+peak memory: 2588 kB
+--- stderr
+--- exit code: 1
+
+$ cd /tmp/qa-s04.9bHZId/repo/crates/nacre-pdf/tests/corpus && /tmp/qa-s04.9bHZId/target/release/probe hostile/startxref-off-by-one.pdf
+stdin: none
+--- stdout
+file: hostile/startxref-off-by-one.pdf (739 bytes)
+error: no cross-reference section at offset 564
+debug: NotAnXrefSection { offset: 564 }
+elapsed: 20.394µs
+peak memory: 2592 kB
+--- stderr
+--- exit code: 1
+
+$ cd /tmp/qa-s04.9bHZId/repo/crates/nacre-pdf/tests/corpus && /tmp/qa-s04.9bHZId/target/release/probe hostile/xref-malformed-prev.pdf
+stdin: none
+--- stdout
+file: hostile/xref-malformed-prev.pdf (145 bytes)
+error: malformed cross-reference table at offset 66: /Prev is not an offset
+debug: XrefTable { offset: 66, reason: "/Prev is not an offset" }
+elapsed: 30.241µs
+peak memory: 2560 kB
+--- stderr
+--- exit code: 1
+
+=== Contrast: poppler pdfinfo on the same inputs (it reconstructs; Nacre refuses)
+$ pdfinfo /tmp/qa-s04.9bHZId/scratch/inputs/xref-keyword-broken.pdf | grep -E 'Error|Pages|Producer'
+Producer:        Skia/PDF m156
+Pages:           1
+$ pdfinfo /tmp/qa-s04.9bHZId/scratch/inputs/catalog-entry-shifted.pdf | grep -E 'Error|Pages|Producer'
+Internal Error: xref num 33 not found but needed, try to reconstruct
+Producer:        Skia/PDF m156
+Pages:           1
+$ pdfinfo /tmp/qa-s04.9bHZId/scratch/inputs/root-missing.pdf | grep -E 'Error|Pages|Producer'
+Internal Error: xref num 99 not found but needed, try to reconstruct
+Syntax Error: Invalid XRef entry 99
+Syntax Error: Invalid XRef entry 99
+Syntax Error: Catalog object is wrong type (null)
+Syntax Error: Invalid XRef entry 99
+Internal Error: xref num 99 not found but needed, try to reconstruct
+Syntax Error: Invalid XRef entry 99
+Syntax Error: Invalid XRef entry 99
+Syntax Error: Catalog object is wrong type (null)
+Syntax Error: Couldn't read page catalog
+$ pdfinfo /tmp/qa-s04.9bHZId/scratch/inputs/revision-prev-wrong.pdf | grep -E 'Error|Pages|Producer'
+Producer:        LibreOffice 5.2
+Pages:           1
+$ pdfinfo /tmp/qa-s04.9bHZId/repo/crates/nacre-pdf/tests/corpus/hostile/startxref-off-by-one.pdf | grep -E 'Error|Pages|Producer'
+Pages:           1

@@ -1,0 +1,172 @@
+Criterion 4 — hostile inputs: each one refused with an error, in bounded time and memory, never a panic.
+Probe and working copy: as described at the top of c1-c2-real-corpus.txt.
+Each run is wrapped as: bash -c 'ulimit -v 1048576; exec timeout 30 [env PROBE_OBJECT=3] <probe> <file>' (1 GiB address-space cap, 30 s wall cap; the transcript line below drops those quotes). Exit 124 would mean the time cap was hit, a SIGSEGV/abort the memory cap.
+Inputs built by /tmp/qa-s04.9bHZId/scratch/mk.py (classic-table PDFs with exact offsets) and one inline script for the flate bomb:
+```python
+import sys, zlib
+def build(objs, root=1, extra_trailer=b'', tail=b''):
+    out=bytearray(b'%PDF-1.7\n%\xe2\xe3\xcf\xd3\n'); offs={}
+    for n,body in objs:
+        offs[n]=len(out); out+=b'%d 0 obj\n'%n+body+b'\nendobj\n'
+    size=max(offs)+1; x=len(out)
+    out+=b'xref\n0 %d\n'%size+b'0000000000 65535 f \n'
+    for i in range(1,size):
+        out+=(b'%010d 00000 n \n'%offs[i]) if i in offs else b'0000000000 65535 f \n'
+    out+=b'trailer\n<< /Size %d /Root %d 0 R%s >>\nstartxref\n%d\n%%%%EOF\n'%(size,root,extra_trailer,x)
+    return bytes(out)+tail
+pages=(2,b'<< /Type /Pages /Kids [] /Count 0 >>')
+d=sys.argv[1]
+w=lambda n,b: open(f'{d}/{n}','wb').write(b)
+w('minimal-ok.pdf', build([(1,b'<< /Type /Catalog /Pages 2 0 R >>'),pages]))
+w('reference-loop.pdf', build([(1,b'<< /Type /Catalog /Pages 2 0 R /AcroForm 3 0 R >>'),pages,(3,b'4 0 R'),(4,b'3 0 R')]))
+w('root-self-loop.pdf', build([(1,b'1 0 R'),pages]))
+w('field-kids-loop.pdf', build([(1,b'<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [3 0 R] >> >>'),pages,(3,b'<< /T (a) /Kids [4 0 R] >>'),(4,b'<< /T (b) /Parent 3 0 R /Kids [3 0 R] >>')]))
+# AcroForm stored in a stream whose /Length is wrong (too short / past end / huge)
+for name,L in [('stream-length-short.pdf',5),('stream-length-past-end.pdf',100000),('stream-length-huge.pdf',9223372036854775807),('stream-length-negative.pdf',-1)]:
+    w(name, build([(1,b'<< /Type /Catalog /Pages 2 0 R /AcroForm 3 0 R >>'),pages,(3,b'<< /Length %d >>\nstream\n0123456789abcdef\nendstream'%L)]))
+w('deep-nesting.pdf', build([(1,b'<< /Type /Catalog /Pages 2 0 R /X '+b'['*1000000+b']'*1000000+b' >>'),pages]))
+w('deep-dict-nesting.pdf', build([(1,b'<< /Type /Catalog /Pages 2 0 R /X '+b'<< /A '*200000+b'>> '*200000+b'>>'),pages]))
+# zip bomb: xref stream decoding beyond budget is in tests; here a flate bomb as AcroForm stream (not decoded by reader?)
+base=build([(1,b'<< /Type /Catalog /Pages 2 0 R >>'),pages])
+w('over-50mb.pdf', base[:9]+b'%'+b' '*(50_000_001-len(base)-1)+base[9:])
+w('exactly-50mb.pdf', base[:9]+b'%'+b' '*(50_000_000-len(base)-1)+base[9:])
+# long /Prev chain of 5000 sections pointing at each other is covered; build many sections chain
+def padded(total):
+    for pad in range(total-400, total):
+        pass
+    lo = total - 400
+    b = build([(1,b'<< /Type /Catalog /Pages 2 0 R >>'),pages,(3,b'<< /Length %d >>\nstream\n'%lo + b'x'*lo + b'\nendstream')])
+    need = total - len(b)
+    pad = lo + need
+    # adjust: length digits may change; iterate
+    for _ in range(5):
+        b = build([(1,b'<< /Type /Catalog /Pages 2 0 R >>'),pages,(3,b'<< /Length %d >>\nstream\n'%pad + b'x'*pad + b'\nendstream')])
+        if len(b)==total: return b
+        pad += total-len(b)
+    raise SystemExit('no fit')
+w('over-50mb.pdf', padded(50_000_001))
+w('exactly-50mb.pdf', padded(50_000_000))
+```
+xref-stream-flate-bomb.pdf: a catalog, a page tree, and an xref stream (/FlateDecode, /W [1 4 2]) whose data is zlib.compress(b'\0' * 200 MiB, 9): 204,096 bytes on disk.
+
+$ cd /tmp/qa-s04.9bHZId/scratch/inputs && bash -c ulimit -v 1048576; exec timeout 30 env PROBE_OBJECT=3 /tmp/qa-s04.9bHZId/target/release/probe reference-loop.pdf
+stdin: none
+--- stdout
+file: reference-loop.pdf (337 bytes)
+error: reference loop through object 3 0 R
+debug: ReferenceLoop { object: ObjectId { number: 3, generation: 0 } }
+elapsed: 34.851µs
+peak memory: 2592 kB
+--- stderr
+--- exit code: 1
+
+$ cd /tmp/qa-s04.9bHZId/scratch/inputs && bash -c ulimit -v 1048576; exec timeout 30 env PROBE_OBJECT=3 /tmp/qa-s04.9bHZId/target/release/probe root-self-loop.pdf
+stdin: none
+--- stdout
+file: root-self-loop.pdf (210 bytes)
+error: reference loop through object 1 0 R
+debug: ReferenceLoop { object: ObjectId { number: 1, generation: 0 } }
+elapsed: 36.178µs
+peak memory: 2552 kB
+--- stderr
+--- exit code: 1
+
+$ cd /tmp/qa-s04.9bHZId/scratch/inputs && bash -c ulimit -v 1048576; exec timeout 30 env PROBE_OBJECT=3 /tmp/qa-s04.9bHZId/target/release/probe field-kids-loop.pdf
+stdin: none
+--- stdout
+file: field-kids-loop.pdf (409 bytes)
+error: the form field tree loops through object 3 0 R
+debug: FieldLoop { object: ObjectId { number: 3, generation: 0 } }
+elapsed: 37.715µs
+peak memory: 2604 kB
+--- stderr
+--- exit code: 1
+
+$ cd /tmp/qa-s04.9bHZId/scratch/inputs && bash -c ulimit -v 1048576; exec timeout 30 env PROBE_OBJECT=3 /tmp/qa-s04.9bHZId/target/release/probe stream-length-short.pdf
+stdin: none
+--- stdout
+file: stream-length-short.pdf (340 bytes)
+error: stream 3 0 R does not end where its /Length says
+debug: StreamLength { object: ObjectId { number: 3, generation: 0 } }
+elapsed: 40.998µs
+peak memory: 2580 kB
+--- stderr
+--- exit code: 1
+
+$ cd /tmp/qa-s04.9bHZId/scratch/inputs && bash -c ulimit -v 1048576; exec timeout 30 env PROBE_OBJECT=3 /tmp/qa-s04.9bHZId/target/release/probe stream-length-past-end.pdf
+stdin: none
+--- stdout
+file: stream-length-past-end.pdf (345 bytes)
+error: stream 3 0 R does not end where its /Length says
+debug: StreamLength { object: ObjectId { number: 3, generation: 0 } }
+elapsed: 36.807µs
+peak memory: 2596 kB
+--- stderr
+--- exit code: 1
+
+$ cd /tmp/qa-s04.9bHZId/scratch/inputs && bash -c ulimit -v 1048576; exec timeout 30 env PROBE_OBJECT=3 /tmp/qa-s04.9bHZId/target/release/probe stream-length-huge.pdf
+stdin: none
+--- stdout
+file: stream-length-huge.pdf (358 bytes)
+error: stream 3 0 R does not end where its /Length says
+debug: StreamLength { object: ObjectId { number: 3, generation: 0 } }
+elapsed: 33.384µs
+peak memory: 2592 kB
+--- stderr
+--- exit code: 1
+
+$ cd /tmp/qa-s04.9bHZId/scratch/inputs && bash -c ulimit -v 1048576; exec timeout 30 env PROBE_OBJECT=3 /tmp/qa-s04.9bHZId/target/release/probe stream-length-negative.pdf
+stdin: none
+--- stdout
+file: stream-length-negative.pdf (341 bytes)
+error: stream 3 0 R does not end where its /Length says
+debug: StreamLength { object: ObjectId { number: 3, generation: 0 } }
+elapsed: 37.295µs
+peak memory: 2600 kB
+--- stderr
+--- exit code: 1
+
+$ cd /tmp/qa-s04.9bHZId/scratch/inputs && bash -c ulimit -v 1048576; exec timeout 30 env PROBE_OBJECT=3 /tmp/qa-s04.9bHZId/target/release/probe deep-nesting.pdf
+stdin: none
+--- stdout
+file: deep-nesting.pdf (2000247 bytes)
+error: arrays and dictionaries nest too deep at offset 120
+debug: TooDeep { offset: 120 }
+elapsed: 40.09µs
+peak memory: 4564 kB
+--- stderr
+--- exit code: 1
+
+$ cd /tmp/qa-s04.9bHZId/scratch/inputs && bash -c ulimit -v 1048576; exec timeout 30 env PROBE_OBJECT=3 /tmp/qa-s04.9bHZId/target/release/probe deep-dict-nesting.pdf
+stdin: none
+--- stdout
+file: deep-dict-nesting.pdf (1800246 bytes)
+error: arrays and dictionaries nest too deep at offset 435
+debug: TooDeep { offset: 435 }
+elapsed: 61.462µs
+peak memory: 4388 kB
+--- stderr
+--- exit code: 1
+
+$ cd /tmp/qa-s04.9bHZId/scratch/inputs && bash -c ulimit -v 1048576; exec timeout 30 env PROBE_OBJECT=3 /tmp/qa-s04.9bHZId/target/release/probe xref-stream-flate-bomb.pdf
+stdin: none
+--- stdout
+file: xref-stream-flate-bomb.pdf (204096 bytes)
+error: stream 3 0 R decodes to more than 33554432 bytes
+debug: DecodedTooLarge { object: ObjectId { number: 3, generation: 0 }, max: 33554432 }
+elapsed: 14.123672ms
+peak memory: 37268 kB
+--- stderr
+--- exit code: 1
+
+$ cd /tmp/qa-s04.9bHZId/scratch/inputs && bash -c ulimit -v 1048576; exec timeout 30 env PROBE_OBJECT=3 /tmp/qa-s04.9bHZId/target/release/probe over-50mb.pdf
+stdin: none
+--- stdout
+file: over-50mb.pdf (50000001 bytes)
+error: the input is 50000001 bytes, more than the 50000000 accepted
+debug: TooLarge { len: 50000001, max: 50000000 }
+elapsed: 9.848µs
+peak memory: 51332 kB
+--- stderr
+--- exit code: 1
+
