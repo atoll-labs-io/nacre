@@ -1,0 +1,305 @@
+Criteria 1 and 2 — every real corpus file opened through the public interface of nacre-pdf (replayed run).
+Working copy: /tmp/qa-s04.9bHZId/repo (files of 'git ls-files' on story/s04-pdf-read), after 'cargo fetch' then 'cargo build --workspace --all-features' (both exit 0).
+Probe: a scratch binary crate at /tmp/qa-s04.9bHZId/scratch/probe depending on nacre-pdf by path; it calls only the public interface (Document::parse, revisions, trailer, catalog_id, catalog, signature_fields, object). It prints 'error: <Display>' and 'debug: <Debug>' on Err (exit 1), 'PANIC' and exit 101 if parse panics. PROBE_OBJECT=N also calls Document::object(N 0 R). Peak memory is VmHWM of the process (includes the file read into memory).
+Cargo.toml:
+[package]
+name = "probe"
+version = "0.0.0"
+edition = "2024"
+
+[workspace]
+
+[dependencies]
+nacre-pdf = { path = "/tmp/qa-s04.9bHZId/repo/crates/nacre-pdf" }
+src/main.rs:
+```rust
+use std::time::Instant;
+
+fn keys(d: &nacre_pdf::Dictionary) -> String {
+    d.iter().map(|(k, _)| format!("/{}", String::from_utf8_lossy(k))).collect::<Vec<_>>().join(" ")
+}
+
+fn main() {
+    let path = match std::env::args().nth(1) {
+        Some(p) => p,
+        None => { eprintln!("usage: probe <file.pdf>"); std::process::exit(2) }
+    };
+    let bytes = match std::fs::read(&path) {
+        Ok(b) => b,
+        Err(e) => { eprintln!("cannot read {path}: {e}"); std::process::exit(2) }
+    };
+    println!("file: {path} ({} bytes)", bytes.len());
+    let start = Instant::now();
+    let result = std::panic::catch_unwind(|| match nacre_pdf::Document::parse(&bytes) {
+        Ok(doc) => {
+            for (i, r) in doc.revisions().iter().enumerate() {
+                println!("revision {i}: end={} startxref={} xref={:?}", r.end, r.startxref, r.xref);
+            }
+            println!("trailer: {}", keys(doc.trailer()));
+            println!("catalog {}: {}", doc.catalog_id(), keys(doc.catalog()));
+            println!("signature fields: {}", doc.signature_fields().len());
+            for f in doc.signature_fields() {
+                let v = f.value.map(|v| v.to_string()).unwrap_or_else(|| "empty".into());
+                println!("  field {:?} {} /V {}", f.name, f.id, v);
+            }
+            if let Ok(n) = std::env::var("PROBE_OBJECT") {
+                let id = nacre_pdf::ObjectId::new(n.parse().unwrap_or(0), 0);
+                match doc.object(id) {
+                    Ok(o) => println!("object {id}: {}", format!("{o:?}").chars().take(160).collect::<String>()),
+                    Err(e) => { println!("object {id}: error: {e}"); return 1; }
+                }
+            }
+            0
+        }
+        Err(e) => { println!("error: {e}"); println!("debug: {e:?}"); 1 }
+    });
+    println!("elapsed: {:?}", start.elapsed());
+    if let Ok(s) = std::fs::read_to_string("/proc/self/status") { for l in s.lines().filter(|l| l.starts_with("VmHWM")) { println!("peak memory: {}", l.trim_start_matches("VmHWM:").trim()); } }
+    match result {
+        Ok(code) => std::process::exit(code),
+        Err(_) => { println!("PANIC"); std::process::exit(101) }
+    }
+}
+```
+Built: cd /tmp/qa-s04.9bHZId/scratch/probe && CARGO_TARGET_DIR=/tmp/qa-s04.9bHZId/target cargo build --release
+
+$ cd /tmp/qa-s04.9bHZId/repo/crates/nacre-pdf/tests/corpus && /tmp/qa-s04.9bHZId/target/release/probe real/certified-dss.pdf
+stdin: none
+--- stdout
+file: real/certified-dss.pdf (152955 bytes)
+revision 0: end=127672 startxref=126665 xref=Table
+revision 1: end=152955 startxref=152262 xref=Table
+trailer: /Size /Root /Info /ID /AdditionalStreams /Prev
+catalog 1 0 R: /Type /Pages /PageMode /OpenAction /Lang /AcroForm /Perms
+signature fields: 2
+  field "signature-test" 8 0 R /V 40 0 R
+  field "signature-test2" 9 0 R /V empty
+elapsed: 66.141µs
+peak memory: 2744 kB
+--- stderr
+--- exit code: 0
+
+$ cd /tmp/qa-s04.9bHZId/repo/crates/nacre-pdf/tests/corpus && /tmp/qa-s04.9bHZId/target/release/probe real/chrome-print.pdf
+stdin: none
+--- stdout
+file: real/chrome-print.pdf (18950 bytes)
+revision 0: end=18950 startxref=18032 xref=Table
+trailer: /Size /Root /Info
+catalog 33 0 R: /Type /Pages /MarkInfo /StructTreeRoot /ViewerPreferences /Lang
+signature fields: 0
+elapsed: 35.759µs
+peak memory: 2620 kB
+--- stderr
+--- exit code: 0
+
+$ cd /tmp/qa-s04.9bHZId/repo/crates/nacre-pdf/tests/corpus && /tmp/qa-s04.9bHZId/target/release/probe real/firefox-print.pdf
+stdin: none
+--- stdout
+file: real/firefox-print.pdf (25050 bytes)
+revision 0: end=25050 startxref=24472 xref=Table
+trailer: /Size /Root /Info
+catalog 12 0 R: /Type /Pages /ViewerPreferences
+signature fields: 0
+elapsed: 37.156µs
+peak memory: 2624 kB
+--- stderr
+--- exit code: 0
+
+$ cd /tmp/qa-s04.9bHZId/repo/crates/nacre-pdf/tests/corpus && /tmp/qa-s04.9bHZId/target/release/probe real/form-xfa-irs-w9.pdf
+stdin: none
+--- stdout
+file: real/form-xfa-irs-w9.pdf (140815 bytes)
+revision 0: end=126744 startxref=116 xref=Stream
+revision 1: end=140815 startxref=140462 xref=Stream
+trailer: /Length /Type /Root /Info /ID /Size /Prev /Index /W /DecodeParms /Filter
+catalog 1032 0 R: /AcroForm /Extensions /Lang /MarkInfo /Metadata /Names /Pages /StructTreeRoot /Type /ViewerPreferences /Perms
+signature fields: 0
+elapsed: 347.746µs
+peak memory: 2868 kB
+--- stderr
+--- exit code: 0
+
+$ cd /tmp/qa-s04.9bHZId/repo/crates/nacre-pdf/tests/corpus && /tmp/qa-s04.9bHZId/target/release/probe real/ghostscript-pdfa2.pdf
+stdin: none
+--- stdout
+file: real/ghostscript-pdfa2.pdf (15883 bytes)
+revision 0: end=15883 startxref=15530 xref=Stream
+trailer: /Type /Size /Root /Info /ID /Index /W /Filter /Length
+catalog 1 0 R: /Type /Pages /Metadata
+signature fields: 0
+elapsed: 61.601µs
+peak memory: 2616 kB
+--- stderr
+--- exit code: 0
+
+$ cd /tmp/qa-s04.9bHZId/repo/crates/nacre-pdf/tests/corpus && /tmp/qa-s04.9bHZId/target/release/probe real/libreoffice-pdfa3.pdf
+stdin: none
+--- stdout
+file: real/libreoffice-pdfa3.pdf (206397 bytes)
+revision 0: end=206397 startxref=186328 xref=Table
+trailer: /Size /Root /Info /ID /DocChecksum
+catalog 991 0 R: /Type /Pages /OpenAction /StructTreeRoot /Lang /MarkInfo /OutputIntents /Metadata
+signature fields: 0
+elapsed: 140.174µs
+peak memory: 2864 kB
+--- stderr
+--- exit code: 0
+
+$ cd /tmp/qa-s04.9bHZId/repo/crates/nacre-pdf/tests/corpus && /tmp/qa-s04.9bHZId/target/release/probe real/signed-lta-pyhanko.pdf
+stdin: none
+--- stdout
+file: real/signed-lta-pyhanko.pdf (46884 bytes)
+revision 0: end=739 startxref=565 xref=Table
+revision 1: end=1393 startxref=1129 xref=Table
+revision 2: end=25853 startxref=25590 xref=Table
+revision 3: end=46212 startxref=45662 xref=Table
+revision 4: end=46884 startxref=46578 xref=Table
+trailer: /Root /Size /ID /Prev
+catalog 1 0 R: /Type /Pages /AcroForm /Extensions /DSS
+signature fields: 2
+  field "Sig1" 7 0 R /V 10 0 R
+  field "Timestamp-977301ad-bec9-4cae-a0cd-f6a674c6e465" 25 0 R /V 26 0 R
+elapsed: 71.658µs
+peak memory: 2600 kB
+--- stderr
+--- exit code: 0
+
+$ cd /tmp/qa-s04.9bHZId/repo/crates/nacre-pdf/tests/corpus && /tmp/qa-s04.9bHZId/target/release/probe real/signed-twice-pyhanko.pdf
+stdin: none
+--- stdout
+file: real/signed-twice-pyhanko.pdf (50827 bytes)
+revision 0: end=26384 startxref=116 xref=Stream
+revision 1: end=50827 startxref=50491 xref=Stream
+trailer: /DecodeParms /Filter /ID /Index /Info /Length /Prev /Root /Size /Type /W
+catalog 10 0 R: /AcroForm /Metadata /Pages /Type
+signature fields: 2
+  field "Sig1" 21 0 R /V 26 0 R
+  field "Sig2" 22 0 R /V 18 0 R
+elapsed: 168.67µs
+peak memory: 2668 kB
+--- stderr
+--- exit code: 0
+
+$ cd /tmp/qa-s04.9bHZId/repo/crates/nacre-pdf/tests/corpus && /tmp/qa-s04.9bHZId/target/release/probe real/word-hybrid.pdf
+stdin: none
+--- stdout
+file: real/word-hybrid.pdf (94902 bytes)
+revision 0: end=81959 startxref=79740 xref=Table
+revision 1: end=82140 startxref=81959 xref=Hybrid
+revision 2: end=90822 startxref=90625 xref=Hybrid
+revision 3: end=94902 startxref=94618 xref=Table
+trailer: /Size /Root /Info /ID /Prev
+catalog 1 0 R: /AcroForm /Lang /MarkInfo /Metadata /Outlines /Pages /StructTreeRoot /Type /ViewerPreferences
+signature fields: 0
+elapsed: 117.964µs
+peak memory: 2712 kB
+--- stderr
+--- exit code: 0
+
+$ cd /tmp/qa-s04.9bHZId/repo/crates/nacre-pdf/tests/corpus && /tmp/qa-s04.9bHZId/target/release/probe real/word-pdfmaker-linearized.pdf
+stdin: none
+--- stdout
+file: real/word-pdfmaker-linearized.pdf (66887 bytes)
+revision 0: end=57615 startxref=116 xref=Stream
+revision 1: end=66887 startxref=66474 xref=Stream
+trailer: /DecodeParms /Filter /ID /Index /Info /Length /Prev /Root /Size /Type /W
+catalog 97 0 R: /AcroForm /Lang /MarkInfo /Metadata /Outlines /PageLayout /Pages /StructTreeRoot /Type
+signature fields: 0
+elapsed: 99.246µs
+peak memory: 2692 kB
+--- stderr
+--- exit code: 0
+
+=== Independent cross-check 1: every %%EOF in each file (end offset including its EOL), python3 -I eofs.py:
+```python
+import sys, re
+for p in sys.argv[1:]:
+    b = open(p, 'rb').read()
+    ends = []
+    for m in re.finditer(rb'%%EOF', b):
+        e = m.end()
+        if b[e:e+2] == b'
+': e += 2
+        elif b[e:e+1] in (b'', b'
+'): e += 1
+        ends.append(e)
+    print(p.split('/')[-1], len(b), ends)
+```
+$ cd /tmp/qa-s04.9bHZId/repo/crates/nacre-pdf/tests/corpus && python3 -I /tmp/qa-s04.9bHZId/scratch/eofs.py real/*.pdf
+certified-dss.pdf 152955 [127672, 152955]
+chrome-print.pdf 18950 [18950]
+firefox-print.pdf 25050 [25050]
+form-xfa-irs-w9.pdf 140815 [503, 126744, 140815]
+ghostscript-pdfa2.pdf 15883 [15883]
+libreoffice-pdfa3.pdf 206397 [206397]
+signed-lta-pyhanko.pdf 46884 [739, 1393, 25853, 46212, 46884]
+signed-twice-pyhanko.pdf 50827 [451, 26384, 50827]
+word-hybrid.pdf 94902 [81959, 82140, 90822, 94902]
+word-pdfmaker-linearized.pdf 66887 [489, 57615, 66887]
+--- exit code: 0
+Reading: the linearized files (form-xfa-irs-w9, signed-twice-pyhanko, word-pdfmaker-linearized) hold one more %%EOF (first-page trailer, 'startxref 0') than Nacre reports revisions; every other %%EOF end equals a reported revision end.
+
+=== Independent cross-check 2: signed ranges reported by poppler pdfsig; each must end at a revision end Nacre reports:
+$ cd /tmp/qa-s04.9bHZId/repo/crates/nacre-pdf/tests/corpus && pdfsig -nocert real/signed-lta-pyhanko.pdf | grep -E 'Signature #|Signed Ranges'
+Signature #1:
+  - Signed Ranges: [0 - 2905], [25421 - 25853]
+Signature #2:
+  - Signed Ranges: [0 - 34074], [45532 - 46212]
+$ cd /tmp/qa-s04.9bHZId/repo/crates/nacre-pdf/tests/corpus && pdfsig -nocert real/signed-twice-pyhanko.pdf | grep -E 'Signature #|Signed Ranges'
+Signature #1:
+  - Signed Ranges: [0 - 29541], [48279 - 50827]
+Signature #2:
+  - Signed Ranges: [0 - 3485], [22223 - 26384]
+$ cd /tmp/qa-s04.9bHZId/repo/crates/nacre-pdf/tests/corpus && pdfsig -nocert real/certified-dss.pdf | grep -E 'Signature #|Signed Ranges'
+Signature #1:
+  - Signed Ranges: [0 - 128489], [147435 - 152955]
+Signature #2:
+Reading: ends 25853, 46212 / 50827, 26384 / 152955 are all revision ends in the probe output above.
+
+=== Producers (poppler pdfinfo):
+-- real/certified-dss.pdf
+Creator:         Writer
+Producer:        LibreOffice 5.2
+Form:            AcroForm
+PDF version:     1.4
+-- real/chrome-print.pdf
+Creator:         Chromium
+Producer:        Skia/PDF m156
+Form:            none
+PDF version:     1.4
+-- real/firefox-print.pdf
+Creator:         Firefox
+Producer:        Skia/PDF m149
+Form:            none
+PDF version:     1.4
+-- real/form-xfa-irs-w9.pdf
+Title:           Form W-9 (Rev. March 2024)
+Creator:         Designer 6.5
+Producer:        Designer 6.5
+Form:            XFA
+PDF version:     1.7
+-- real/ghostscript-pdfa2.pdf
+Creator:         Chromium
+Producer:        GPL Ghostscript 10.08.0
+Form:            none
+PDF version:     1.7
+-- real/libreoffice-pdfa3.pdf
+Creator:         Writer
+Producer:        LibreOffice 7.3
+Form:            none
+PDF version:     1.6
+-- real/signed-lta-pyhanko.pdf
+Form:            AcroForm
+PDF version:     1.7
+-- real/signed-twice-pyhanko.pdf
+Form:            AcroForm
+PDF version:     1.7
+-- real/word-hybrid.pdf
+Creator:         Microsoft Word
+Form:            AcroForm
+PDF version:     1.7
+-- real/word-pdfmaker-linearized.pdf
+Creator:         Acrobat PDFMaker 9.0 for Word
+Producer:        Adobe PDF Library 9.0
+Form:            AcroForm
+PDF version:     1.6

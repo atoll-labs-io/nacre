@@ -1,0 +1,69 @@
+Finding 1 — a broken xref entry outside the catalog/AcroForm path is not refused at open.
+Probe and working copy: as described at the top of c1-c2-real-corpus.txt.
+Input: xref-entry-shifted.pdf = real/chrome-print.pdf with the xref entry of object 1 0 R (the /Info dictionary, which holds /Title) changed from '0000000015 00000 n ' to '0000000001 00000 n ' (byte 18062). Bytes at 18032 before / after:
+  before: xref
+0 42
+0000000000 65535 f 
+0000000015 00000 n 
+...
+  after:  xref
+0 42
+0000000000 65535 f 
+0000000001 00000 n 
+...
+
+$ cd /tmp/qa-s04.9bHZId/scratch/inputs && /tmp/qa-s04.9bHZId/target/release/probe xref-entry-shifted.pdf
+stdin: none
+--- stdout
+file: xref-entry-shifted.pdf (18950 bytes)
+revision 0: end=18950 startxref=18032 xref=Table
+trailer: /Size /Root /Info
+catalog 33 0 R: /Type /Pages /MarkInfo /StructTreeRoot /ViewerPreferences /Lang
+signature fields: 0
+elapsed: 46.166µs
+peak memory: 2608 kB
+--- stderr
+--- exit code: 0
+
+$ cd /tmp/qa-s04.9bHZId/scratch/inputs && env PROBE_OBJECT=1 /tmp/qa-s04.9bHZId/target/release/probe xref-entry-shifted.pdf
+stdin: none
+--- stdout
+file: xref-entry-shifted.pdf (18950 bytes)
+revision 0: end=18950 startxref=18032 xref=Table
+trailer: /Size /Root /Info
+catalog 33 0 R: /Type /Pages /MarkInfo /StructTreeRoot /ViewerPreferences /Lang
+signature fields: 0
+object 1 0 R: error: the cross-reference entry of 1 0 R points at offset 1, which does not hold it
+elapsed: 41.138µs
+peak memory: 2604 kB
+--- stderr
+--- exit code: 1
+
+=== replay
+$ cd /tmp/qa-s04.9bHZId/scratch/inputs && /tmp/qa-s04.9bHZId/target/release/probe xref-entry-shifted.pdf
+stdin: none
+--- stdout
+file: xref-entry-shifted.pdf (18950 bytes)
+revision 0: end=18950 startxref=18032 xref=Table
+trailer: /Size /Root /Info
+catalog 33 0 R: /Type /Pages /MarkInfo /StructTreeRoot /ViewerPreferences /Lang
+signature fields: 0
+elapsed: 32.686µs
+peak memory: 2608 kB
+--- stderr
+--- exit code: 0
+
+$ cd /tmp/qa-s04.9bHZId/scratch/inputs && env PROBE_OBJECT=1 /tmp/qa-s04.9bHZId/target/release/probe xref-entry-shifted.pdf
+stdin: none
+--- stdout
+file: xref-entry-shifted.pdf (18950 bytes)
+revision 0: end=18950 startxref=18032 xref=Table
+trailer: /Size /Root /Info
+catalog 33 0 R: /Type /Pages /MarkInfo /StructTreeRoot /ViewerPreferences /Lang
+signature fields: 0
+object 1 0 R: error: the cross-reference entry of 1 0 R points at offset 1, which does not hold it
+elapsed: 35.829µs
+peak memory: 2612 kB
+--- stderr
+--- exit code: 1
+

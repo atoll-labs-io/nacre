@@ -1,0 +1,108 @@
+Criteria 1 and 2 — invalid inputs a developer could plausibly hand to Document::parse: no file (probe usage), an empty file, a text file named .pdf, the first 10,000 bytes of chrome-print.pdf.
+Working copy: /tmp/qa-s04.9bHZId/repo (files of 'git ls-files' on story/s04-pdf-read), after 'cargo fetch' then 'cargo build --workspace --all-features' (both exit 0).
+Probe: a scratch binary crate at /tmp/qa-s04.9bHZId/scratch/probe depending on nacre-pdf by path; it calls only the public interface (Document::parse, revisions, trailer, catalog_id, catalog, signature_fields, object). It prints 'error: <Display>' and 'debug: <Debug>' on Err (exit 1), 'PANIC' and exit 101 if parse panics. PROBE_OBJECT=N also calls Document::object(N 0 R). Peak memory is VmHWM of the process (includes the file read into memory).
+Cargo.toml:
+[package]
+name = "probe"
+version = "0.0.0"
+edition = "2024"
+
+[workspace]
+
+[dependencies]
+nacre-pdf = { path = "/tmp/qa-s04.9bHZId/repo/crates/nacre-pdf" }
+src/main.rs:
+```rust
+use std::time::Instant;
+
+fn keys(d: &nacre_pdf::Dictionary) -> String {
+    d.iter().map(|(k, _)| format!("/{}", String::from_utf8_lossy(k))).collect::<Vec<_>>().join(" ")
+}
+
+fn main() {
+    let path = match std::env::args().nth(1) {
+        Some(p) => p,
+        None => { eprintln!("usage: probe <file.pdf>"); std::process::exit(2) }
+    };
+    let bytes = match std::fs::read(&path) {
+        Ok(b) => b,
+        Err(e) => { eprintln!("cannot read {path}: {e}"); std::process::exit(2) }
+    };
+    println!("file: {path} ({} bytes)", bytes.len());
+    let start = Instant::now();
+    let result = std::panic::catch_unwind(|| match nacre_pdf::Document::parse(&bytes) {
+        Ok(doc) => {
+            for (i, r) in doc.revisions().iter().enumerate() {
+                println!("revision {i}: end={} startxref={} xref={:?}", r.end, r.startxref, r.xref);
+            }
+            println!("trailer: {}", keys(doc.trailer()));
+            println!("catalog {}: {}", doc.catalog_id(), keys(doc.catalog()));
+            println!("signature fields: {}", doc.signature_fields().len());
+            for f in doc.signature_fields() {
+                let v = f.value.map(|v| v.to_string()).unwrap_or_else(|| "empty".into());
+                println!("  field {:?} {} /V {}", f.name, f.id, v);
+            }
+            if let Ok(n) = std::env::var("PROBE_OBJECT") {
+                let id = nacre_pdf::ObjectId::new(n.parse().unwrap_or(0), 0);
+                match doc.object(id) {
+                    Ok(o) => println!("object {id}: {}", format!("{o:?}").chars().take(160).collect::<String>()),
+                    Err(e) => { println!("object {id}: error: {e}"); return 1; }
+                }
+            }
+            0
+        }
+        Err(e) => { println!("error: {e}"); println!("debug: {e:?}"); 1 }
+    });
+    println!("elapsed: {:?}", start.elapsed());
+    if let Ok(s) = std::fs::read_to_string("/proc/self/status") { for l in s.lines().filter(|l| l.starts_with("VmHWM")) { println!("peak memory: {}", l.trim_start_matches("VmHWM:").trim()); } }
+    match result {
+        Ok(code) => std::process::exit(code),
+        Err(_) => { println!("PANIC"); std::process::exit(101) }
+    }
+}
+```
+Built: cd /tmp/qa-s04.9bHZId/scratch/probe && CARGO_TARGET_DIR=/tmp/qa-s04.9bHZId/target cargo build --release
+
+Inputs: empty.pdf (0 bytes); notes.pdf = 'Hello, this is not a PDF
+'; truncated.pdf = head -c 10000 real/chrome-print.pdf.
+
+$ cd /tmp/qa-s04.9bHZId/scratch/inputs && /tmp/qa-s04.9bHZId/target/release/probe
+stdin: none
+--- stdout
+--- stderr
+usage: probe <file.pdf>
+--- exit code: 2
+
+$ cd /tmp/qa-s04.9bHZId/scratch/inputs && /tmp/qa-s04.9bHZId/target/release/probe empty.pdf
+stdin: none
+--- stdout
+file: empty.pdf (0 bytes)
+error: the input does not start with %PDF-
+debug: MissingHeader
+elapsed: 5.308µs
+peak memory: 2504 kB
+--- stderr
+--- exit code: 1
+
+$ cd /tmp/qa-s04.9bHZId/scratch/inputs && /tmp/qa-s04.9bHZId/target/release/probe notes.pdf
+stdin: none
+--- stdout
+file: notes.pdf (25 bytes)
+error: the input does not start with %PDF-
+debug: MissingHeader
+elapsed: 4.33µs
+peak memory: 2508 kB
+--- stderr
+--- exit code: 1
+
+$ cd /tmp/qa-s04.9bHZId/scratch/inputs && /tmp/qa-s04.9bHZId/target/release/probe truncated.pdf
+stdin: none
+--- stdout
+file: truncated.pdf (10000 bytes)
+error: no startxref statement in the last 1024 bytes
+debug: MissingStartxref
+elapsed: 4.82µs
+peak memory: 2512 kB
+--- stderr
+--- exit code: 1
+

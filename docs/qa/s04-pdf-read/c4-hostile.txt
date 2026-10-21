@@ -1,0 +1,32 @@
+Criterion 4 — nominal counterpart: the same builder's well-formed file, and a valid file of exactly MAX_INPUT_LEN (50,000,000 bytes; one byte more is refused in c4-hostile-error.txt), open under the same caps.
+Each run is wrapped as: bash -c 'ulimit -v 1048576; exec timeout 30 [env PROBE_OBJECT=3] <probe> <file>' (1 GiB address-space cap, 30 s wall cap; the transcript line below drops those quotes). Exit 124 would mean the time cap was hit, a SIGSEGV/abort the memory cap.
+Builder: see c4-hostile-error.txt.
+
+$ cd /tmp/qa-s04.9bHZId/scratch/inputs && bash -c ulimit -v 1048576; exec timeout 30 env PROBE_OBJECT=3 /tmp/qa-s04.9bHZId/target/release/probe minimal-ok.pdf
+stdin: none
+--- stdout
+file: minimal-ok.pdf (239 bytes)
+revision 0: end=239 startxref=116 xref=Table
+trailer: /Size /Root
+catalog 1 0 R: /Type /Pages
+signature fields: 0
+object 3 0 R: error: object 3 0 R not found
+elapsed: 41.487µs
+peak memory: 2580 kB
+--- stderr
+--- exit code: 1
+
+$ cd /tmp/qa-s04.9bHZId/scratch/inputs && bash -c ulimit -v 1048576; exec timeout 30 env PROBE_OBJECT=3 /tmp/qa-s04.9bHZId/target/release/probe exactly-50mb.pdf
+stdin: none
+--- stdout
+file: exactly-50mb.pdf (50000000 bytes)
+revision 0: end=50000000 startxref=49999852 xref=Table
+trailer: /Size /Root
+catalog 1 0 R: /Type /Pages
+signature fields: 0
+object 3 0 R: Stream(Stream { dict: Dictionary { entries: [([76, 101, 110, 103, 116, 104], Integer(49999680))] }, data: 154..49999834 })
+elapsed: 75.29µs
+peak memory: 51404 kB
+--- stderr
+--- exit code: 0
+

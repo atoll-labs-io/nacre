@@ -1,0 +1,32 @@
+Criterion 3 — nominal counterpart: the two untouched files the broken inputs of c3-refusals-error.txt are derived from open without error.
+Probe and working copy: as described at the top of c1-c2-real-corpus.txt (same binary, /tmp/qa-s04.9bHZId/target/release/probe).
+
+$ cd /tmp/qa-s04.9bHZId/scratch/inputs && /tmp/qa-s04.9bHZId/target/release/probe chrome-print.pdf
+stdin: none
+--- stdout
+file: chrome-print.pdf (18950 bytes)
+revision 0: end=18950 startxref=18032 xref=Table
+trailer: /Size /Root /Info
+catalog 33 0 R: /Type /Pages /MarkInfo /StructTreeRoot /ViewerPreferences /Lang
+signature fields: 0
+elapsed: 40.579µs
+peak memory: 2620 kB
+--- stderr
+--- exit code: 0
+
+$ cd /tmp/qa-s04.9bHZId/repo/crates/nacre-pdf/tests/corpus && /tmp/qa-s04.9bHZId/target/release/probe real/certified-dss.pdf
+stdin: none
+--- stdout
+file: real/certified-dss.pdf (152955 bytes)
+revision 0: end=127672 startxref=126665 xref=Table
+revision 1: end=152955 startxref=152262 xref=Table
+trailer: /Size /Root /Info /ID /AdditionalStreams /Prev
+catalog 1 0 R: /Type /Pages /PageMode /OpenAction /Lang /AcroForm /Perms
+signature fields: 2
+  field "signature-test" 8 0 R /V 40 0 R
+  field "signature-test2" 9 0 R /V empty
+elapsed: 71.309µs
+peak memory: 2720 kB
+--- stderr
+--- exit code: 0
+
