@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Polype's pre-commit hook (core.hooksPath=.polype/hooks). Remove with: git config --unset core.hooksPath
+set -euo pipefail
+exec "$(dirname "$0")/po-gate.sh" pre-commit
