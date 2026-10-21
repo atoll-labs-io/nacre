@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Without an argument, rustup installs the toolchain pinned by rust-toolchain.toml.
+      - run: rustup toolchain install
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - run: cargo test --workspace
+
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: find
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          dirs=(crates/*/fuzz)
+          echo "dirs=${dirs[*]}" >> "$GITHUB_OUTPUT"
+          if [ ${#dirs[@]} -eq 0 ]; then
+            echo "no fuzz targets"
+          fi
+      - if: steps.find.outputs.dirs != ''
+        run: rustup toolchain install nightly --profile minimal
+      - if: steps.find.outputs.dirs != ''
+        run: cargo +nightly install cargo-fuzz --locked
+      - if: steps.find.outputs.dirs != ''
+        shell: bash
+        env:
+          FUZZ_DIRS: ${{ steps.find.outputs.dirs }}
+        run: |
+          set -euo pipefail
+          for dir in $FUZZ_DIRS; do
+            crate="$(dirname "$dir")"
+            targets="$(cd "$crate" && cargo +nightly fuzz list)"
+            for target in $targets; do
+              echo "fuzzing $crate $target for 60 s"
+              (cd "$crate" && cargo +nightly fuzz run "$target" -- -max_total_time=60)
+            done
+          done

@@ -1,0 +1,14 @@
+cwd: /tmp/qa-s01.ILi2LP/copy
+command: head -1 crates/nacre-core/src/lib.rs; grep -n "Cargo.lock" .gitignore; git -C /home/lecrabe/dev/atoll/nacre/.worktrees/s01-workspace-contract check-ignore -v Cargo.lock target; echo "[check-ignore exit $?]"; grep -rnE "std::(fs|net)|SystemTime|println|eprintln|unsafe" crates/nacre-core/src; cargo tree -p nacre-core -e normal --depth 1
+stdin: none
+--- stdout
+#![forbid(unsafe_code)]
+4:Cargo.lock
+.gitignore:4:Cargo.lock	Cargo.lock
+.gitignore:3:/target	target
+[check-ignore exit 0]
+crates/nacre-core/src/lib.rs:1:#![forbid(unsafe_code)]
+nacre-core v0.1.0 (/tmp/qa-s01.ILi2LP/copy/crates/nacre-core)
+└── thiserror v2.0.21
+--- stderr
+--- exit code: 0

@@ -1,0 +1,103 @@
+=== script: /tmp/qa-s01.ILi2LP/scratch/consumer/Cargo.toml
+[package]
+name = "consumer"
+version = "0.0.0"
+edition = "2024"
+
+[workspace]
+
+[dependencies]
+nacre-core = { path = "/tmp/qa-s01.ILi2LP/copy/crates/nacre-core", features = ["test-signer"] }
+p256 = { version = "0.14", features = ["ecdsa"] }
+sha2 = "0.11"
+x509-cert = "0.3"
+der = "0.8"
+=== script: /tmp/qa-s01.ILi2LP/scratch/consumer/src/main.rs
+use nacre_core::{
+    DigestAlgorithm, Error, Indication, RevocationData, RevocationSource, SignatureAlgorithm,
+    SignatureForm, SignatureLevel, SignatureProfile, Signer, SubIndication, TestSigner,
+    TimestampAuthority, ValidationReport,
+};
+use p256::ecdsa::signature::hazmat::PrehashVerifier;
+use p256::ecdsa::{Signature, VerifyingKey};
+use sha2::{Digest, Sha256};
+use der::Decode;
+
+struct MyTsa;
+impl TimestampAuthority for MyTsa {
+    fn timestamp(&self, algorithm: DigestAlgorithm, imprint: &[u8]) -> Result<Vec<u8>, Error> {
+        if imprint.len() != algorithm.output_len() {
+            return Err(Error::DigestLength { expected: algorithm.output_len(), actual: imprint.len() });
+        }
+        Err(Error::Timestamp(Box::new(std::io::Error::other("tsa unreachable"))))
+    }
+}
+struct MyRevocation;
+impl RevocationSource for MyRevocation {
+    fn revocation(&self, _certificate: &[u8], _issuer: &[u8]) -> Result<RevocationData, Error> {
+        Ok(RevocationData::Crl(vec![0x30, 0x00]))
+    }
+}
+
+fn main() {
+    // Criterion 2: the three traits, used as trait objects, synchronous.
+    let signer = TestSigner::from_secret(&[7u8; 32]).expect("signer");
+    let s: &dyn Signer = &signer;
+    let tsa: &dyn TimestampAuthority = &MyTsa;
+    let rev: &dyn RevocationSource = &MyRevocation;
+    println!("algorithm = {:?}, digest = {:?}", s.algorithm(), s.algorithm().digest());
+    println!("chain length = {}, first cert {} bytes", s.certificate_chain().len(), s.certificate_chain()[0].len());
+    let digest = Sha256::digest(b"hello nacre");
+    match tsa.timestamp(DigestAlgorithm::Sha256, &digest) {
+        Err(e) => println!("tsa error: {e}; source: {:?}", std::error::Error::source(&e).map(|s| s.to_string())),
+        Ok(_) => println!("tsa ok"),
+    }
+    println!("revocation = {:?}", rev.revocation(&s.certificate_chain()[0], &s.certificate_chain()[0]));
+
+    // Criterion 3: the report.
+    let lvl = SignatureLevel { form: SignatureForm::PAdES, profile: SignatureProfile::BaselineB };
+    for r in [
+        ValidationReport::passed(Some(lvl)),
+        ValidationReport::failed(SubIndication::HashFailure, None),
+        ValidationReport::indeterminate(SubIndication::TryLater, Some(lvl)),
+    ] {
+        println!("report: {} {} sub={:?} level={:?}", r.indication().as_str(), r.indication().urn(),
+            r.sub_indication().map(|x| (x.as_str(), x.urn())), r.level());
+    }
+    println!("sub-indications: {}", SubIndication::ALL.len());
+    for x in SubIndication::ALL { print!("{} ", x.as_str()); }
+    println!();
+    let _ = Indication::Indeterminate;
+
+    // Criterion 4: sign and verify with p256.
+    let sig = s.sign_digest(&digest).expect("sign");
+    let cert = x509_cert::Certificate::from_der(&s.certificate_chain()[0]).expect("cert");
+    let spki = cert.tbs_certificate().subject_public_key_info().subject_public_key.raw_bytes();
+    let vk = VerifyingKey::from_sec1_bytes(spki).expect("vk");
+    let parsed = Signature::from_der(&sig).expect("der sig");
+    println!("signature {} bytes DER, verify = {:?}", sig.len(), vk.verify_prehash(&digest, &parsed).is_ok());
+    let mut other = digest;
+    other[0] ^= 1;
+    println!("verify on altered digest = {:?}", vk.verify_prehash(&other, &parsed).is_ok());
+    println!("cert subject = {}", cert.tbs_certificate().subject());
+    let _ = SignatureAlgorithm::RsaPkcs1v15Sha256;
+}
+=== run
+cwd: /tmp/qa-s01.ILi2LP/scratch/consumer
+command: cargo run -q
+stdin: none
+--- stdout
+algorithm = EcdsaP256Sha256, digest = Sha256
+chain length = 1, first cert 468 bytes
+tsa error: the timestamp authority failed; source: Some("tsa unreachable")
+revocation = Ok(Crl([48, 0]))
+report: TOTAL_PASSED urn:etsi:019102:mainindication:total-passed sub=None level=Some(SignatureLevel { form: PAdES, profile: BaselineB })
+report: TOTAL_FAILED urn:etsi:019102:mainindication:total-failed sub=Some(("HASH_FAILURE", "urn:etsi:019102:subindication:HASH_FAILURE")) level=None
+report: INDETERMINATE urn:etsi:019102:mainindication:indeterminate sub=Some(("TRY_LATER", "urn:etsi:019102:subindication:TRY_LATER")) level=Some(SignatureLevel { form: PAdES, profile: BaselineB })
+sub-indications: 25
+FORMAT_FAILURE HASH_FAILURE SIG_CRYPTO_FAILURE REVOKED EXPIRED NOT_YET_VALID SIG_CONSTRAINTS_FAILURE CHAIN_CONSTRAINTS_FAILURE CERTIFICATE_CHAIN_GENERAL_FAILURE CRYPTO_CONSTRAINTS_FAILURE POLICY_PROCESSING_ERROR SIGNATURE_POLICY_NOT_AVAILABLE TIMESTAMP_ORDER_FAILURE NO_SIGNING_CERTIFICATE_FOUND NO_CERTIFICATE_CHAIN_FOUND NO_CERTIFICATE_CHAIN_FOUND_NO_POE REVOKED_NO_POE REVOKED_CA_NO_POE OUT_OF_BOUNDS_NOT_REVOKED OUT_OF_BOUNDS_NO_POE REVOCATION_OUT_OF_BOUNDS_NO_POE CRYPTO_CONSTRAINTS_FAILURE_NO_POE NO_POE TRY_LATER SIGNED_DATA_NOT_FOUND 
+signature 70 bytes DER, verify = true
+verify on altered digest = false
+cert subject = CN=Nacre test signer,O=Nacre tests,C=FR
+--- stderr
+--- exit code: 0

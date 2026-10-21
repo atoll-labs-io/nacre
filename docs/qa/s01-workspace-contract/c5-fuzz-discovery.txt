@@ -1,0 +1,25 @@
+=== the find step, extracted from .github/workflows/ci.yml into /tmp/qa-s01.ILi2LP/scratch/find-step.sh
+set -euo pipefail
+shopt -s nullglob
+dirs=(crates/*/fuzz)
+echo "dirs=${dirs[*]}" >> "$GITHUB_OUTPUT"
+if [ ${#dirs[@]} -eq 0 ]; then
+  echo "no fuzz targets"
+fi
+=== case 1: no crates/*/fuzz folder (the tree as it is)
+cwd: /tmp/qa-s01.ILi2LP/scratch/fuzzsim/empty
+command: GITHUB_OUTPUT=/tmp/qa-s01.ILi2LP/scratch/fuzzsim/empty.out bash /tmp/qa-s01.ILi2LP/scratch/find-step.sh; echo "[GITHUB_OUTPUT] $(cat /tmp/qa-s01.ILi2LP/scratch/fuzzsim/empty.out)"
+stdin: none
+--- stdout
+no fuzz targets
+[GITHUB_OUTPUT] dirs=
+--- stderr
+--- exit code: 0
+=== case 2: two empty crates/nacre-a/fuzz and crates/nacre-b/fuzz folders added to a copy
+cwd: /tmp/qa-s01.ILi2LP/scratch/fuzzsim/two
+command: GITHUB_OUTPUT=/tmp/qa-s01.ILi2LP/scratch/fuzzsim/two.out bash /tmp/qa-s01.ILi2LP/scratch/find-step.sh; echo "[GITHUB_OUTPUT] $(cat /tmp/qa-s01.ILi2LP/scratch/fuzzsim/two.out)"
+stdin: none
+--- stdout
+[GITHUB_OUTPUT] dirs=crates/nacre-a/fuzz crates/nacre-b/fuzz
+--- stderr
+--- exit code: 0

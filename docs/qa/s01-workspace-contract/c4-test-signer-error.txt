@@ -1,0 +1,50 @@
+=== script: /tmp/qa-s01.ILi2LP/scratch/errors/Cargo.toml
+[package]
+name = "errors"
+version = "0.0.0"
+edition = "2024"
+
+[workspace]
+
+[dependencies]
+nacre-core = { path = "/tmp/qa-s01.ILi2LP/copy/crates/nacre-core", features = ["test-signer"] }
+p256 = { version = "0.14", features = ["ecdsa"] }
+sha2 = "0.11"
+x509-cert = "0.3"
+der = "0.8"
+=== script: /tmp/qa-s01.ILi2LP/scratch/errors/src/main.rs
+use nacre_core::{Signer, TestSigner};
+
+fn show(label: &str, r: Result<Vec<u8>, nacre_core::Error>) {
+    match r {
+        Ok(v) => println!("{label}: Ok({} bytes)", v.len()),
+        Err(e) => println!("{label}: Err(Display = \"{e}\", Debug = {e:?}, source = {:?})",
+            std::error::Error::source(&e).map(|s| s.to_string())),
+    }
+}
+
+fn main() {
+    let signer = TestSigner::from_secret(&[7u8; 32]).expect("signer");
+    show("20-byte digest (SHA-1 length)", signer.sign_digest(&[0u8; 20]));
+    show("empty digest", signer.sign_digest(&[]));
+    show("48-byte digest (SHA-384 length)", signer.sign_digest(&[0u8; 48]));
+    for (label, secret) in [("all-zero secret", [0u8; 32]), ("all-0xFF secret (above the curve order)", [0xFFu8; 32])] {
+        match TestSigner::from_secret(&secret) {
+            Ok(_) => println!("{label}: Ok(signer built)"),
+            Err(e) => println!("{label}: Err(Display = \"{e}\", source = {:?})",
+                std::error::Error::source(&e).map(|s| s.to_string())),
+        }
+    }
+}
+=== run
+cwd: /tmp/qa-s01.ILi2LP/scratch/errors
+command: cargo run -q
+stdin: none
+--- stdout
+20-byte digest (SHA-1 length): Err(Display = "digest length is 20 bytes, the signature algorithm expects 32", Debug = DigestLength { expected: 32, actual: 20 }, source = None)
+empty digest: Err(Display = "digest length is 0 bytes, the signature algorithm expects 32", Debug = DigestLength { expected: 32, actual: 0 }, source = None)
+48-byte digest (SHA-384 length): Err(Display = "digest length is 48 bytes, the signature algorithm expects 32", Debug = DigestLength { expected: 32, actual: 48 }, source = None)
+all-zero secret: Err(Display = "the signer failed", source = Some("signature error"))
+all-0xFF secret (above the curve order): Err(Display = "the signer failed", source = Some("signature error"))
+--- stderr
+--- exit code: 0

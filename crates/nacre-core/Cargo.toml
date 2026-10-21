@@ -1,0 +1,28 @@
+[package]
+name = "nacre-core"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+license = "MIT OR Apache-2.0"
+description = "The contract shared by every Nacre signature family: signer, timestamp authority, revocation source and validation report."
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror = "2"
+p256 = { version = "0.14", features = ["ecdsa", "pkcs8"], optional = true }
+x509-cert = { version = "0.3", features = ["builder"], optional = true }
+# The certificate builder needs the OID of SHA-256, which no p256 feature enables.
+sha2 = { version = "0.11", default-features = false, features = ["oid"], optional = true }
+
+[features]
+default = []
+test-signer = ["dep:p256", "dep:x509-cert", "dep:sha2"]
+
+[dev-dependencies]
+nacre-core = { path = ".", features = ["test-signer"] }
+p256 = { version = "0.14", features = ["ecdsa", "pkcs8"] }
+sha2 = "0.11"
+x509-cert = "0.3"
+der = "0.8"
