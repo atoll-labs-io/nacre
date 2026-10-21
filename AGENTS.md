@@ -249,4 +249,25 @@ Agents run these exactly as written. `—` means the project has no such command
 
 ## Conventions
 
-<< layout, stack, patterns, naming, commit style >>
+No code exists yet (ADR-0002): these rules come from the ADRs and the stories, and story s01 makes the base show them. Each rule names its source.
+
+- Layout: one crate per family at `crates/nacre-<family>/`, the facade at `crates/nacre-sig/` imported as `nacre`; the root `Cargo.toml` (`members = ["crates/*"]`) is never edited after s01 (ADR-0003).
+- Each crate declares its own dependency versions; never add `[workspace.dependencies]` outside a contract story (ADR-0003).
+- `Cargo.lock` stays out of git (ADR-0003).
+- Edition 2024, `rust-version = "1.97"` in every crate (ADR-0003).
+- Every crate starts with `#![forbid(unsafe_code)]`; only `nacre-pkcs11` may relax it, and only for a call `cryptoki` cannot make safely (ADR-0005, brief Security & abuse).
+- Parsing code never panics on input: `clippy::unwrap_used`, `clippy::expect_used`, `clippy::panic` and `clippy::indexing_slicing` are denied outside `#[cfg(test)]`; every length, depth and size read from input is bounded (brief, Security & abuse).
+- Errors are one `thiserror` enum per crate, returned, never logged; no crate writes to stdout, stderr or a logger.
+- A secret (PIN, token, key handle) is held in a `zeroize` type and never derives or implements `Debug` or `Display` with its value.
+- No judging code reads the system clock: the control date is a parameter (s09, s16, s17).
+- No crate opens a network connection outside the implementations behind its `http` feature; the core goes through the `Signer`, `TimestampAuthority` and `RevocationSource` traits of `nacre-core` (ADR-0006, s01).
+- Primitives, DER, certificates, CRLs and OCSP structures come from RustCrypto (`der`, `spki`, `x509-cert`, `x509-ocsp`); every signature format is written in Nacre; never add the `cms` or `x509-tsp` crates (ADR-0001, ADR-0004).
+- Encodings come from `miniz_oxide`, `roxmltree`, `serde_json`, `ciborium` and `zip` (ADR-0009).
+- Each parser has a cargo-fuzz target in `crates/<crate>/fuzz/`; each crash found becomes a corpus file before its fix (ADR-0008).
+- Test data lives in `crates/<crate>/tests/corpus/` and is fictitious or public, its source noted in a `README.md` next to it; real documents never enter the repository (brief, Security & abuse).
+- Each format keeps its known attacks in `docs/security/attacks/<format>.md`, one corpus case and one rejecting test per attack (brief, pre-mortem finding 4).
+- Conformance tests that need DSS or SoftHSM are `#[ignore]`d with the reason `"conformance"` and run by `.github/workflows/conformance.yml` (`cargo test -- --ignored`) against `conformance/compose.yaml` (ADR-0007).
+- A conformance test asserts the exact level DSS reports, never the indication alone (brief, premise 4).
+- A family written for the exercise says "experimental" at the top of its crate documentation until it is fuzzed and cross-checked against its reference crate (brief, Security & abuse).
+- Code, comments, rustdoc, `README.md` and `CHANGELOG.md` are in English; framing documents under `docs/` are in French.
+- Commit messages follow the repository's style: `<type>: <summary>` (`docs:`, `chore:`), and `<id>: <story title>` for a story's landing.
