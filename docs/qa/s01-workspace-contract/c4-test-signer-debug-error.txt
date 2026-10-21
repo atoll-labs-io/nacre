@@ -1,0 +1,37 @@
+=== script: /tmp/qa-s01.ILi2LP/scratch/debug/Cargo.toml
+[package]
+name = "debug"
+version = "0.0.0"
+edition = "2024"
+
+[workspace]
+
+[dependencies]
+nacre-core = { path = "/tmp/qa-s01.ILi2LP/copy/crates/nacre-core", features = ["test-signer"] }
+p256 = { version = "0.14", features = ["ecdsa"] }
+sha2 = "0.11"
+x509-cert = "0.3"
+der = "0.8"
+=== script: /tmp/qa-s01.ILi2LP/scratch/debug/src/main.rs
+// A caller tries to print the test signer, which holds a private key.
+fn main() {
+    let s = nacre_core::TestSigner::from_secret(&[7u8; 32]).unwrap();
+    println!("{s:?}");
+}
+=== run
+cwd: /tmp/qa-s01.ILi2LP/scratch/debug
+command: cargo build -q
+stdin: none
+--- stdout
+--- stderr
+error[E0277]: `TestSigner` doesn't implement `Debug`
+ --> src/main.rs:4:15
+  |
+4 |     println!("{s:?}");
+  |               ^^^^^ `TestSigner` cannot be formatted using `{:?}` because it doesn't implement `Debug`
+  |
+  = help: the trait `Debug` is not implemented for `TestSigner`
+
+For more information about this error, try `rustc --explain E0277`.
+error: could not compile `debug` (bin "debug") due to 1 previous error
+--- exit code: 101

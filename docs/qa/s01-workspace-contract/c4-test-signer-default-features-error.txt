@@ -1,0 +1,38 @@
+=== script: /tmp/qa-s01.ILi2LP/scratch/nofeature/Cargo.toml
+[package]
+name = "nofeature"
+version = "0.0.0"
+edition = "2024"
+
+[workspace]
+
+[dependencies]
+nacre-core = { path = "/tmp/qa-s01.ILi2LP/copy/crates/nacre-core" }
+=== script: /tmp/qa-s01.ILi2LP/scratch/nofeature/src/main.rs
+// A caller depending on nacre-core with default features reaches for the test signer.
+fn main() {
+    let _ = nacre_core::TestSigner::from_secret(&[7u8; 32]);
+}
+=== run
+cwd: /tmp/qa-s01.ILi2LP/scratch/nofeature
+command: cargo build -q
+stdin: none
+--- stdout
+--- stderr
+error[E0433]: cannot find `TestSigner` in `nacre_core`
+  --> src/main.rs:3:25
+   |
+ 3 |     let _ = nacre_core::TestSigner::from_secret(&[7u8; 32]);
+   |                         ^^^^^^^^^^ could not find `TestSigner` in `nacre_core`
+   |
+note: found an item that was configured out
+  --> /tmp/qa-s01.ILi2LP/copy/crates/nacre-core/src/lib.rs:33:22
+   |
+32 | #[cfg(feature = "test-signer")]
+   |       ----------------------- the item is gated behind the `test-signer` feature
+33 | pub use test_signer::TestSigner;
+   |                      ^^^^^^^^^^
+
+For more information about this error, try `rustc --explain E0433`.
+error: could not compile `nofeature` (bin "nofeature") due to 1 previous error
+--- exit code: 101
