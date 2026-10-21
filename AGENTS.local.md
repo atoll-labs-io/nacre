@@ -73,12 +73,12 @@ Project CLAUDE file: absorbed
 ## Commands
 
 ```
-Package manager:   —
-Install:           —
-Test:              —
-Typecheck:         —
+Package manager:   cargo
+Install:           cargo fetch
+Test:              cargo test --workspace
+Typecheck:         cargo clippy --workspace --all-targets --all-features -- -D warnings
 E2E:               —
-Build:             —
+Build:             cargo build --workspace --all-features
 Dev:               —
 ```
 
