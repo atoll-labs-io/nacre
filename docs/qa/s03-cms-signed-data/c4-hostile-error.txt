@@ -1,0 +1,177 @@
+=== script: /tmp/qa-s03.JYEfH5/scratch/consumer/src/bin/c4_hostile.rs
+// Criterion 4: hostile DER returns an error, never a panic.
+use nacre_cms::SignedData;
+use std::time::Instant;
+
+fn run(label: &str, bytes: &[u8], content: Option<&[u8]>) {
+    let start = Instant::now();
+    let r = std::panic::catch_unwind(|| match SignedData::from_der(bytes) {
+        Err(e) => format!("from_der Err -> \"{e}\""),
+        Ok(sd) => match sd.verify(content) { Err(e) => format!("from_der Ok, verify Err -> \"{e}\""), Ok(_) => "VERIFIED".into() },
+    });
+    match r {
+        Ok(s) => println!("{label}: {s} ({:?})", start.elapsed()),
+        Err(_) => println!("{label}: PANIC"),
+    }
+}
+
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let good = std::fs::read(&args[1]).expect("fixture");
+    let content = std::fs::read(&args[2]).expect("content");
+    run("empty input", &[], Some(&content));
+    run("one byte 0x30", &[0x30], Some(&content));
+    run("text, not DER", b"-----BEGIN PKCS7-----\nMIIB\n-----END PKCS7-----\n", Some(&content));
+    let mut errs = 0; let mut oks = 0;
+    for n in 0..good.len() {
+        let r = std::panic::catch_unwind(|| SignedData::from_der(&good[..n]).and_then(|s| s.verify(Some(&content)).map(|_| ())));
+        match r { Ok(Err(_)) => errs += 1, Ok(Ok(())) => oks += 1, Err(_) => { println!("prefix {n}: PANIC"); } }
+    }
+    println!("every strict prefix (0..{}): {errs} Err, {oks} Ok, no panic printed above", good.len());
+    let mut l = good.clone(); l[1] = 0x84; l.splice(2..2, [0x7f, 0xff, 0xff, 0xff]);
+    run("outer length claims 2 GiB", &l, Some(&content));
+    let mut l2 = good.clone(); l2[1] = 0x89; 
+    run("outer length of 9 octets", &l2, Some(&content));
+    let mut trailing = good.clone(); trailing.extend_from_slice(&[0, 0]);
+    run("valid file + 2 trailing bytes", &trailing, Some(&content));
+    let mut deep = Vec::new();
+    for _ in 0..100_000 { deep.extend_from_slice(&[0x30, 0x80]); }
+    run("100000 nested indefinite-length SEQUENCEs", &deep, Some(&content));
+    let mut deep2: Vec<u8> = vec![0x05, 0x00];
+    for _ in 0..20_000 { let len = deep2.len() as u32; let mut h = vec![0xa0, 0x84]; h.extend_from_slice(&len.to_be_bytes()); h.extend_from_slice(&deep2); deep2 = h; }
+    let mut ci = vec![0x30, 0x84]; let body_len = (deep2.len() + 11) as u32; ci.extend_from_slice(&body_len.to_be_bytes());
+    ci.extend_from_slice(&[0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x07, 0x02]); ci.extend_from_slice(&deep2);
+    run("signedData OID then 20000 nested [0] definite", &ci, Some(&content));
+    let mut big = vec![0u8; 64 * 1024 * 1024]; big[0] = 0x30; big[1] = 0x84; big[2..6].copy_from_slice(&((64*1024*1024 - 6) as u32).to_be_bytes());
+    run("64 MiB SEQUENCE of zeros", &big, Some(&content));
+}
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c3
+=== stdin: (none)
+$ /tmp/qa-s03.JYEfH5/scratch/consumer/target/debug/c4_hostile qa-ec-detached.der qa-content.txt
+--- stdout
+empty input: from_der Err -> "invalid DER: ASN.1 DER message is incomplete: expected 1, actual 0 at DER byte 0" (27.029µs)
+one byte 0x30: from_der Err -> "invalid DER: ASN.1 DER message is incomplete: expected 2, actual 1 at DER byte 1" (4.679µs)
+text, not DER: from_der Err -> "invalid DER: unknown/unsupported ASN.1 DER tag: 0x2d at DER byte 1" (2.793µs)
+every strict prefix (0..1099): 1099 Err, 0 Ok, no panic printed above
+outer length claims 2 GiB: from_der Err -> "invalid DER: ASN.1 DER message is incomplete: expected 2147483653, actual 1103 at DER byte 6" (3.352µs)
+outer length of 9 octets: from_der Err -> "invalid DER: incorrect length for SEQUENCE at DER byte 2" (2.794µs)
+valid file + 2 trailing bytes: from_der Err -> "invalid DER: trailing data at end of DER message: decoded 1099 bytes, 2 bytes remaining at DER byte 1099" (17.251µs)
+100000 nested indefinite-length SEQUENCEs: from_der Err -> "invalid DER: indefinite length disallowed/malformed at DER byte 2" (4.819µs)
+signedData OID then 20000 nested [0] definite: from_der Err -> "invalid DER: incorrect length for SEQUENCE at DER byte 6" (31.918µs)
+64 MiB SEQUENCE of zeros: from_der Err -> "invalid DER: unknown/unsupported ASN.1 DER tag: 0x00 at DER byte 1" (8.451µs)
+--- stderr
+--- exit code: 0
+
+=== script: /tmp/qa-s03.JYEfH5/deep.py
+# deep.py <out> <depth> <tag hex>: ContentInfo{id-signedData, [0] EXPLICIT <tag>{<tag>{...NULL}}} with minimal DER lengths
+import sys
+def L(n):
+    if n < 128: return bytes([n])
+    b = n.to_bytes((n.bit_length() + 7) // 8, 'big'); return bytes([0x80 | len(b)]) + b
+def tlv(t, v): return bytes([t]) + L(len(v)) + v
+inner = b'\x05\x00'; t = int(sys.argv[3], 16)
+for _ in range(int(sys.argv[2])): inner = tlv(t, inner)
+oid = bytes.fromhex('06092a864886f70d010702')
+open(sys.argv[1], 'wb').write(tlv(0x30, oid + tlv(0xa0, inner))); print("written", len(open(sys.argv[1],'rb').read()), "bytes")
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c3
+=== stdin: (none)
+$ python3 -I /tmp/qa-s03.JYEfH5/deep.py deep-seq.der 50000 30 && /tmp/qa-s03.JYEfH5/scratch/consumer/target/debug/c3_verify deep-seq.der qa-content.txt
+--- stdout
+written 233428 bytes
+from_der: Err(Der(Error { kind: TagUnexpected { expected: Some(Tag(0x02: INTEGER)), actual: Tag(0x10: SEQUENCE) }, position: None })) -> "invalid DER: unexpected ASN.1 DER tag: expected INTEGER, got SEQUENCE"
+--- stderr
+--- exit code: 2
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c3
+=== stdin: (none)
+$ python3 -I /tmp/qa-s03.JYEfH5/deep.py deep-ctx.der 50000 a0 && /tmp/qa-s03.JYEfH5/scratch/consumer/target/debug/c3_verify deep-ctx.der qa-content.txt
+--- stdout
+written 233428 bytes
+from_der: Err(Der(Error { kind: TagUnexpected { expected: Some(Tag(0x10: SEQUENCE)), actual: Tag(0x00: CONTEXT-SPECIFIC [0] (constructed)) }, position: None })) -> "invalid DER: unexpected ASN.1 DER tag: expected SEQUENCE, got CONTEXT-SPECIFIC [0] (constructed)"
+--- stderr
+--- exit code: 2
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c3
+=== stdin: (none)
+$ python3 -I /tmp/qa-s03.JYEfH5/deep.py deep-set.der 50000 31 && /tmp/qa-s03.JYEfH5/scratch/consumer/target/debug/c3_verify deep-set.der qa-content.txt
+--- stdout
+written 233428 bytes
+from_der: Err(Der(Error { kind: TagUnexpected { expected: Some(Tag(0x10: SEQUENCE)), actual: Tag(0x11: SET) }, position: None })) -> "invalid DER: unexpected ASN.1 DER tag: expected SEQUENCE, got SET"
+--- stderr
+--- exit code: 2
+
+=== script: /tmp/qa-s03.JYEfH5/scratch/consumer/src/bin/c4_deep_attr.rs
+// Criterion 4: deep nesting where the schema is open (an attribute value, a certificate, an unsigned attribute).
+use der::{Any, Decode};
+use nacre_cms::{Attribute, Profile, SignedAttributes, SignedData, oid, sign_detached};
+use nacre_core::TestSigner;
+use sha2::{Digest, Sha256};
+
+fn deep(depth: usize) -> Vec<u8> {
+    fn len(n: usize) -> Vec<u8> {
+        if n < 128 { return vec![n as u8]; }
+        let b = n.to_be_bytes(); let b: Vec<u8> = b.iter().copied().skip_while(|x| *x == 0).collect();
+        let mut v = vec![0x80 | b.len() as u8]; v.extend(b); v
+    }
+    let mut inner = vec![0x05, 0x00];
+    for _ in 0..depth { let mut h = vec![0x30]; h.extend(len(inner.len())); h.extend(inner); inner = h; }
+    inner
+}
+
+fn report(label: &str, r: std::thread::Result<String>) {
+    match r { Ok(s) => println!("{label}: {s}"), Err(_) => println!("{label}: PANIC") }
+}
+
+fn main() {
+    let content = b"QA s03 deep nesting".to_vec();
+    let signer = TestSigner::from_secret(&[0x42; 32]).expect("signer");
+    let good = sign_detached(&Sha256::digest(&content), &signer, &Profile::CMS, None).expect("sign");
+    let blob = deep(50_000);
+    println!("nested blob: {} bytes, depth 50000", blob.len());
+
+    report("Any::from_der of the blob (der itself)", std::panic::catch_unwind(|| format!("{:?}", Any::from_der(&blob).map(|a| a.value().len()).map_err(|e| e.to_string()))));
+
+    // 1. the blob as the value of an extra signed attribute
+    let r = std::panic::catch_unwind(|| {
+        let mut sd = SignedData::from_der(&good).expect("decode");
+        let mut attrs = sd.signer_infos[0].signed_attrs.as_ref().expect("a").attributes().expect("a");
+        attrs.push(Attribute { oid: oid::SIGNING_TIME, values: vec![Any::from_der(&blob).expect("any")] });
+        sd.signer_infos[0].signed_attrs = Some(SignedAttributes::from_attributes(attrs).expect("attrs"));
+        let der = sd.to_der().expect("to_der");
+        match SignedData::from_der(&der) { Err(e) => format!("from_der Err -> \"{e}\""), Ok(sd) => match sd.verify(Some(&content)) { Ok(_) => "VERIFIED".into(), Err(e) => format!("verify Err -> \"{e}\"") } }
+    });
+    report("blob as a signed attribute value", r);
+
+    // 2. the blob in place of the certificate
+    let r = std::panic::catch_unwind(|| {
+        let mut sd = SignedData::from_der(&good).expect("decode");
+        sd.certificates = vec![blob.clone()];
+        let der = sd.to_der().expect("to_der");
+        match SignedData::from_der(&der) { Err(e) => format!("from_der Err -> \"{e}\""), Ok(sd) => match sd.verify(Some(&content)) { Ok(_) => "VERIFIED".into(), Err(e) => format!("verify Err -> \"{e}\"") } }
+    });
+    report("blob as the certificate", r);
+
+    // 3. the blob as an unsigned attribute: the signature still holds, by design
+    let r = std::panic::catch_unwind(|| {
+        let mut sd = SignedData::from_der(&good).expect("decode");
+        sd.signer_infos[0].push_unsigned_attribute(Attribute { oid: oid::SIGNING_TIME, values: vec![Any::from_der(&blob).expect("any")] });
+        let der = sd.to_der().expect("to_der");
+        match SignedData::from_der(&der) { Err(e) => format!("from_der Err -> \"{e}\""), Ok(sd) => match sd.verify(Some(&content)) { Ok(_) => format!("from_der Ok ({} unsigned attr), verify Ok", sd.signer_infos[0].unsigned_attrs.len()), Err(e) => format!("verify Err -> \"{e}\"") } }
+    });
+    report("blob as an unsigned attribute value", r);
+}
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c3
+=== stdin: (none)
+$ /tmp/qa-s03.JYEfH5/scratch/consumer/target/debug/c4_deep_attr
+--- stdout
+nested blob: 233407 bytes, depth 50000
+Any::from_der of the blob (der itself): Ok(233402)
+blob as a signed attribute value: verify Err -> "the signature is invalid"
+blob as the certificate: verify Err -> "invalid certificate: unexpected ASN.1 DER tag: expected INTEGER, got SEQUENCE"
+blob as an unsigned attribute value: from_der Ok (1 unsigned attr), verify Ok
+--- stderr
+--- exit code: 0
+

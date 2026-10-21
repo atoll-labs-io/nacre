@@ -1,0 +1,27 @@
+[package]
+name = "nacre-cms"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+license = "MIT OR Apache-2.0"
+description = "CMS SignedData (RFC 5652) written for Nacre: signing a digest with a Nacre signer, reading and verifying detached and encapsulated signatures."
+
+[lints]
+workspace = true
+
+[dependencies]
+nacre-core = { path = "../nacre-core", version = "0.1.0" }
+der = { version = "0.8", features = ["alloc", "derive", "oid"] }
+spki = { version = "0.8", features = ["alloc"] }
+x509-cert = "0.3"
+sha2 = "0.11"
+p256 = { version = "0.14", features = ["ecdsa"] }
+# Pinned: a release candidate, and no lock file is committed.
+rsa = "=0.10.0-rc.19"
+thiserror = "2"
+
+[dev-dependencies]
+nacre-core = { path = "../nacre-core", features = ["test-signer"] }
+p256 = { version = "0.14", features = ["ecdsa", "pkcs8"] }
+x509-cert = { version = "0.3", features = ["builder"] }
+der = { version = "0.8", features = ["alloc", "derive", "oid", "pem"] }

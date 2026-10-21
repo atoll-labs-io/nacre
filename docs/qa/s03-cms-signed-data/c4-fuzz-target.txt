@@ -1,0 +1,93 @@
+=== script: /tmp/qa-s03.JYEfH5/copy/crates/nacre-cms/fuzz/Cargo.toml
+[package]
+name = "nacre-cms-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+rust-version = "1.97"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+nacre-cms = { path = ".." }
+
+# Its own workspace: the root manifest is frozen and must not list this crate.
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "signed_data"
+path = "fuzz_targets/signed_data.rs"
+test = false
+doc = false
+bench = false
+
+=== script: /tmp/qa-s03.JYEfH5/copy/crates/nacre-cms/fuzz/fuzz_targets/signed_data.rs
+#![no_main]
+
+use libfuzzer_sys::fuzz_target;
+use nacre_cms::SignedData;
+
+fuzz_target!(|data: &[u8]| {
+    if let Ok(signed) = SignedData::from_der(data) {
+        let _ = signed.to_der();
+        let _ = signed.verify(Some(data));
+        let _ = signed.verify(None);
+    }
+});
+
+=== cwd: /tmp/qa-s03.JYEfH5/copy/crates/nacre-cms
+=== stdin: (none)
+$ ls fuzz fuzz/fuzz_targets
+--- stdout
+fuzz:
+Cargo.toml
+fuzz_targets
+
+fuzz/fuzz_targets:
+signed_data.rs
+--- stderr
+--- exit code: 0
+
+=== cwd: /tmp/qa-s03.JYEfH5/copy/crates/nacre-cms
+=== stdin: (none)
+$ cargo +nightly fuzz list
+--- stdout
+signed_data
+--- stderr
+--- exit code: 0
+
+=== cwd: /tmp/qa-s03.JYEfH5/copy/crates/nacre-cms
+=== stdin: (none)
+$ mkdir -p fuzz/corpus/signed_data && cp tests/corpus/openssl/*.der tests/corpus/attacks/*.der fuzz/corpus/signed_data/ && cargo +nightly fuzz run signed_data -- -max_total_time=60 2>&1 | grep -vE '^#[0-9]+\s+(NEW|REDUCE|pulse)' | tail -25
+--- stdout
+"*\206H\206\367\015\001\011\020" # Uses: 831
+"\313Gq\373b\014@N6\263\322\235\010\262H}c[}^\251\010\001-\354\315\217F\255\335\346\250" # Uses: 846
+"\377\377\377\377\377\377\377\005" # Uses: 850
+"\201\000\000\000" # Uses: 862
+"\000\000\000\002" # Uses: 893
+"\000\003" # Uses: 818
+"\000&" # Uses: 812
+"C\000" # Uses: 765
+"\325\001\000\000" # Uses: 734
+"\350\004" # Uses: 755
+"\000\000\000\000\377\377\377\377" # Uses: 744
+"\000\002" # Uses: 739
+"*\206H\206\367\377\377\377\001" # Uses: 732
+"*\206\010\206\367\015\001\011\020" # Uses: 746
+"\001\000\002\267\231\340\024\372" # Uses: 710
+"\377\377\377~" # Uses: 550
+"\015\000" # Uses: 513
+"\012\206H\206\367\353\376\011\005" # Uses: 471
+"\216\000" # Uses: 426
+"\000\000\000\000\000\000\000\016" # Uses: 320
+"\027\000\000\000" # Uses: 329
+"\001\000\000\000\000\000\000\001" # Uses: 297
+"\000\001" # Uses: 109
+###### End of recommended dictionary. ######
+Done 804046 runs in 61 second(s)
+--- stderr
+--- exit code: 0
+

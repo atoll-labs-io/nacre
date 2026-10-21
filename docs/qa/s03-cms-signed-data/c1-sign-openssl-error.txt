@@ -1,0 +1,44 @@
+=== script: /tmp/qa-s03.JYEfH5/scratch/consumer/src/bin/c1_sign_error.rs
+// Criterion 1, invalid input: a digest of the wrong length, and an empty digest.
+use nacre_cms::{Profile, sign_detached};
+use nacre_core::TestSigner;
+use sha2::{Digest, Sha256};
+
+fn main() {
+    let signer = TestSigner::from_secret(&[0x42; 32]).expect("signer");
+    let raw = b"not a digest, the raw content".to_vec();
+    let sha1_len = [0u8; 20];
+    let sha512_len = [0u8; 64];
+    let ok = Sha256::digest(b"x");
+    for (label, d) in [("raw content (29 bytes)", &raw[..]), ("20 bytes", &sha1_len[..]), ("64 bytes", &sha512_len[..]), ("empty", &[][..]), ("32 bytes (control)", &ok[..])] {
+        match sign_detached(d, &signer, &Profile::CMS, None) {
+            Ok(v) => println!("{label}: Ok({} bytes)", v.len()),
+            Err(e) => println!("{label}: Err(Display = {e:?} -> \"{e}\")"),
+        }
+    }
+}
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c1
+=== stdin: (none)
+$ /tmp/qa-s03.JYEfH5/scratch/consumer/target/debug/c1_sign_error
+--- stdout
+raw content (29 bytes): Err(Display = DigestLength { expected: 32, actual: 29 } -> "digest length is 29 bytes, the algorithm produces 32")
+20 bytes: Err(Display = DigestLength { expected: 32, actual: 20 } -> "digest length is 20 bytes, the algorithm produces 32")
+64 bytes: Err(Display = DigestLength { expected: 32, actual: 64 } -> "digest length is 64 bytes, the algorithm produces 32")
+empty: Err(Display = DigestLength { expected: 32, actual: 0 } -> "digest length is 0 bytes, the algorithm produces 32")
+32 bytes (control): Ok(840 bytes)
+--- stderr
+--- exit code: 0
+
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c1
+=== stdin: (none)
+$ printf 'Fictitious contract, QA s03, 2026-10-22.
+Second line!
+' > altered.txt && openssl cms -verify -binary -inform DER -in sig.der -content altered.txt -CAfile cert.pem -purpose any -cades -out /dev/null
+--- stdout
+--- stderr
+CAdES Verification failure
+4004DD3BC97F0000:error:1700009E:CMS routines:CMS_SignerInfo_verify_content:verification failure:crypto/cms/cms_sd.c:1083:
+4004DD3BC97F0000:error:1700006D:CMS routines:CMS_verify:content verify error:crypto/cms/cms_smime.c:501:
+--- exit code: 4
+

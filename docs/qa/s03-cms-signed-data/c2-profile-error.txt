@@ -1,0 +1,10 @@
+(same script as c2-profile.txt, src/bin/c2_profile.rs; the invalid requests are the lines that ask for an attribute the profile forbids)
+=== cwd: /tmp/qa-s03.JYEfH5/scratch/c2
+=== stdin: (none)
+$ /tmp/qa-s03.JYEfH5/scratch/consumer/target/debug/c2_profile | grep Err
+--- stdout
+PADES, time asked: Err(ForbiddenAttribute(ObjectIdentifier(1.2.840.113549.1.9.5))) -> "the profile forbids attribute 1.2.840.113549.1.9.5"
+custom profile forbidding signing-certificate-v2: Err(ForbiddenAttribute(ObjectIdentifier(1.2.840.113549.1.9.16.2.47))) -> "the profile forbids attribute 1.2.840.113549.1.9.16.2.47"
+--- stderr
+--- exit code: 0
+
