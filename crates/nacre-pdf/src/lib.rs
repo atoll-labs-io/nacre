@@ -10,7 +10,13 @@
 //! [`Error`] naming the defect, never repaired. Every count, length and depth read from
 //! the input is bounded, so hostile input fails in bounded time and memory.
 //!
-//! Out of scope: rendering, text, pages, content streams, editing, and repair of any kind.
+//! It also appends one incremental revision through [`Document::update`]: new objects and
+//! catalog entries, and optionally an invisible signature field whose `/Contents` slot is
+//! filled once the signature over [`PreparedSignature::signed_parts`] is made. The original
+//! bytes are always kept as an exact prefix.
+//!
+//! Out of scope: rendering, text, content streams, any other editing (removing or
+//! compacting objects, rewriting earlier revisions), and repair of any kind.
 
 mod acroform;
 mod document;
@@ -19,6 +25,8 @@ mod filter;
 mod limits;
 mod object;
 mod parse;
+mod revision;
+mod write;
 mod xref;
 
 pub use acroform::SignatureField;
@@ -26,4 +34,5 @@ pub use document::Document;
 pub use error::Error;
 pub use limits::MAX_INPUT_LEN;
 pub use object::{Dictionary, Object, ObjectId, Stream};
+pub use revision::{PreparedSignature, SignatureSpec, Update};
 pub use xref::{Revision, XrefKind};

@@ -1,0 +1,559 @@
+Criteria 2, 3 and 4 — a signature slot added to each of the 10 real corpus files, its ranges signed by an independent tool, the DER embedded, and the result judged by Document::parse, qpdf --check and poppler pdfsig.
+Working copy: /tmp/qa-s05.nOrhFm/repo (files of 'git ls-files' on story/s05-pdf-revision), after 'cargo fetch' then 'cargo build --workspace --all-features' (both exit 0).
+Tools: qpdf 12.4.2 (/tmp/s05-qpdf/bin/qpdf, conda-forge), poppler pdfsig/pdfinfo 26.08.0, OpenSSL 3.6.5. Outputs written under /tmp/qa-s05.nOrhFm/scratch/out, never in the worktree.
+Probe: see c1-c4-c5-plain-revision.txt. The signer is a throwaway self-signed RSA key made in the temp dir for this QA (CN=Nacre QA fictitious signer); openssl's -cades adds the signing-certificate-v2 attribute that ETSI.CAdES.detached requires. 'Certificate issuer isn't Trusted' is expected for that certificate. Signer names and signing times are filtered out of pdfsig's output.
+
+=== certified-dss
+$ probe prepare certified-dss.pdf certified-dss.tbs   (env FIELD=Nacre1 SUBFILTER=ETSI.CAdES.detached LEN=8192; writes signed_parts()[0] ++ signed_parts()[1] to certified-dss.tbs)
+byte_range: [0, 153091, 169477, 679]; total length 170156; signed bytes 153770
+exit 0
+$ openssl cms -sign -cades -binary -md sha256 -outform DER -in certified-dss.tbs -signer cert.pem -inkey key.pem -out certified-dss.der   (throwaway self-signed key made in the temp dir)
+exit 0 (1591 bytes of DER)
+$ probe embed certified-dss.pdf certified-dss.signed.pdf certified-dss.der
+byte_range: [0, 153091, 169477, 679]; output length 170156
+prefix intact: true
+out[a]='<' out[b-1]='>'
+byte_range covers whole file: true
+slot hex digits: 16384, DER hex at start: true, rest zeros: true
+output: reparse ok, 170156 bytes, 3 revisions
+  revision 0: end=127672 startxref=126665 xref=Table
+  revision 1: end=152955 startxref=152262 xref=Table
+  revision 2: end=170156 startxref=169903 xref=Table
+  field "signature-test" 8 0 R /V Some("40 0 R")
+  field "signature-test2" 9 0 R /V None
+  field "Nacre1" 57 0 R /V Some("56 0 R")
+field dict: Dictionary(Dictionary { entries: [([70, 84], Name([83, 105, 103])), ([84], String([78, 97, 99, 114, 101, 49])), ([86], Reference(ObjectId { number: 56, generation: 0 })), ([84, 121, 112, 101], Name([65, 110, 110, 111, 116])), ([83, 117, 98, 116, 121, 112, 101], Name([87, 105, 100, 103, 101, 116])), ([82, 101, 99, 116], Array([Integer(0), Integer(0), Integer(0), Integer(0)])), ([70], Integer(132)),
+  /Sig /Type = Name([83, 105, 103])
+  /Sig /Filter = Name([65, 100, 111, 98, 101, 46, 80, 80, 75, 76, 105, 116, 101])
+  /Sig /SubFilter = Name([69, 84, 83, 73, 46, 67, 65, 100, 69, 83, 46, 100, 101, 116, 97, 99, 104, 101, 100])
+  /Sig /ByteRange = Array([Integer(0), Integer(153091), Integer(169477), Integer(679)])
+  /Sig /Contents = string of 8192 bytes
+exit 0
+$ cmp -n 152955 certified-dss.pdf certified-dss.signed.pdf
+identical prefix (152955 bytes)
+$ qpdf --check certified-dss.signed.pdf
+checking certified-dss.signed.pdf
+PDF Version: 1.4
+File is not encrypted
+File is not linearized
+No syntax or stream encoding errors found; the file may still contain
+errors that qpdf cannot detect
+qpdf exit 0
+$ pdfsig certified-dss.signed.pdf
+Digital Signature Info of: certified-dss.signed.pdf
+Signature #1:
+  - Signature Field Name: signature-test
+  - Signing Hash Algorithm: SHA-256
+  - Signature Type: ETSI.CAdES.detached
+  - Signed Ranges: [0 - 128489], [147435 - 152955]
+  - Not total document signed
+  - Signature Validation: Signature is Valid.
+  - Certificate Validation: Certificate has Expired
+Signature #2:
+  - Signature Field Name: signature-test2
+  The signature form field is not signed.
+Signature #3:
+  - Signature Field Name: Nacre1
+  - Signing Hash Algorithm: SHA-256
+  - Signature Type: ETSI.CAdES.detached
+  - Signed Ranges: [0 - 153091], [169477 - 170156]
+  - Total document signed
+  - Signature Validation: Signature is Valid.
+  - Certificate Validation: Certificate issuer isn't Trusted.
+pdfsig exit 0
+=== chrome-print
+$ probe prepare chrome-print.pdf chrome-print.tbs   (env FIELD=Nacre1 SUBFILTER=ETSI.CAdES.detached LEN=8192; writes signed_parts()[0] ++ signed_parts()[1] to chrome-print.tbs)
+byte_range: [0, 19086, 35472, 861]; total length 36333; signed bytes 19947
+exit 0
+$ openssl cms -sign -cades -binary -md sha256 -outform DER -in chrome-print.tbs -signer cert.pem -inkey key.pem -out chrome-print.der   (throwaway self-signed key made in the temp dir)
+exit 0 (1591 bytes of DER)
+$ probe embed chrome-print.pdf chrome-print.signed.pdf chrome-print.der
+byte_range: [0, 19086, 35472, 861]; output length 36333
+prefix intact: true
+out[a]='<' out[b-1]='>'
+byte_range covers whole file: true
+slot hex digits: 16384, DER hex at start: true, rest zeros: true
+output: reparse ok, 36333 bytes, 2 revisions
+  revision 0: end=18950 startxref=18032 xref=Table
+  revision 1: end=36333 startxref=36132 xref=Table
+  field "Nacre1" 43 0 R /V Some("42 0 R")
+field dict: Dictionary(Dictionary { entries: [([70, 84], Name([83, 105, 103])), ([84], String([78, 97, 99, 114, 101, 49])), ([86], Reference(ObjectId { number: 42, generation: 0 })), ([84, 121, 112, 101], Name([65, 110, 110, 111, 116])), ([83, 117, 98, 116, 121, 112, 101], Name([87, 105, 100, 103, 101, 116])), ([82, 101, 99, 116], Array([Integer(0), Integer(0), Integer(0), Integer(0)])), ([70], Integer(132)),
+  /Sig /Type = Name([83, 105, 103])
+  /Sig /Filter = Name([65, 100, 111, 98, 101, 46, 80, 80, 75, 76, 105, 116, 101])
+  /Sig /SubFilter = Name([69, 84, 83, 73, 46, 67, 65, 100, 69, 83, 46, 100, 101, 116, 97, 99, 104, 101, 100])
+  /Sig /ByteRange = Array([Integer(0), Integer(19086), Integer(35472), Integer(861)])
+  /Sig /Contents = string of 8192 bytes
+exit 0
+$ cmp -n 18950 chrome-print.pdf chrome-print.signed.pdf
+identical prefix (18950 bytes)
+$ qpdf --check chrome-print.signed.pdf
+checking chrome-print.signed.pdf
+PDF Version: 1.4
+File is not encrypted
+File is not linearized
+No syntax or stream encoding errors found; the file may still contain
+errors that qpdf cannot detect
+qpdf exit 0
+$ pdfsig chrome-print.signed.pdf
+Digital Signature Info of: chrome-print.signed.pdf
+Signature #1:
+  - Signature Field Name: Nacre1
+  - Signing Hash Algorithm: SHA-256
+  - Signature Type: ETSI.CAdES.detached
+  - Signed Ranges: [0 - 19086], [35472 - 36333]
+  - Total document signed
+  - Signature Validation: Signature is Valid.
+  - Certificate Validation: Certificate issuer isn't Trusted.
+pdfsig exit 0
+=== firefox-print
+$ probe prepare firefox-print.pdf firefox-print.tbs   (env FIELD=Nacre1 SUBFILTER=ETSI.CAdES.detached LEN=8192; writes signed_parts()[0] ++ signed_parts()[1] to firefox-print.tbs)
+byte_range: [0, 25186, 41572, 793]; total length 42365; signed bytes 25979
+exit 0
+$ openssl cms -sign -cades -binary -md sha256 -outform DER -in firefox-print.tbs -signer cert.pem -inkey key.pem -out firefox-print.der   (throwaway self-signed key made in the temp dir)
+exit 0 (1591 bytes of DER)
+$ probe embed firefox-print.pdf firefox-print.signed.pdf firefox-print.der
+byte_range: [0, 25186, 41572, 793]; output length 42365
+prefix intact: true
+out[a]='<' out[b-1]='>'
+byte_range covers whole file: true
+slot hex digits: 16384, DER hex at start: true, rest zeros: true
+output: reparse ok, 42365 bytes, 2 revisions
+  revision 0: end=25050 startxref=24472 xref=Table
+  revision 1: end=42365 startxref=42164 xref=Table
+  field "Nacre1" 26 0 R /V Some("25 0 R")
+field dict: Dictionary(Dictionary { entries: [([70, 84], Name([83, 105, 103])), ([84], String([78, 97, 99, 114, 101, 49])), ([86], Reference(ObjectId { number: 25, generation: 0 })), ([84, 121, 112, 101], Name([65, 110, 110, 111, 116])), ([83, 117, 98, 116, 121, 112, 101], Name([87, 105, 100, 103, 101, 116])), ([82, 101, 99, 116], Array([Integer(0), Integer(0), Integer(0), Integer(0)])), ([70], Integer(132)),
+  /Sig /Type = Name([83, 105, 103])
+  /Sig /Filter = Name([65, 100, 111, 98, 101, 46, 80, 80, 75, 76, 105, 116, 101])
+  /Sig /SubFilter = Name([69, 84, 83, 73, 46, 67, 65, 100, 69, 83, 46, 100, 101, 116, 97, 99, 104, 101, 100])
+  /Sig /ByteRange = Array([Integer(0), Integer(25186), Integer(41572), Integer(793)])
+  /Sig /Contents = string of 8192 bytes
+exit 0
+$ cmp -n 25050 firefox-print.pdf firefox-print.signed.pdf
+identical prefix (25050 bytes)
+$ qpdf --check firefox-print.signed.pdf
+checking firefox-print.signed.pdf
+PDF Version: 1.4
+File is not encrypted
+File is not linearized
+No syntax or stream encoding errors found; the file may still contain
+errors that qpdf cannot detect
+qpdf exit 0
+$ pdfsig firefox-print.signed.pdf
+Digital Signature Info of: firefox-print.signed.pdf
+Signature #1:
+  - Signature Field Name: Nacre1
+  - Signing Hash Algorithm: SHA-256
+  - Signature Type: ETSI.CAdES.detached
+  - Signed Ranges: [0 - 25186], [41572 - 42365]
+  - Total document signed
+  - Signature Validation: Signature is Valid.
+  - Certificate Validation: Certificate issuer isn't Trusted.
+pdfsig exit 0
+=== form-xfa-irs-w9
+$ probe prepare form-xfa-irs-w9.pdf form-xfa-irs-w9.tbs   (env FIELD=Nacre1 SUBFILTER=ETSI.CAdES.detached LEN=8192; writes signed_parts()[0] ++ signed_parts()[1] to form-xfa-irs-w9.tbs)
+byte_range: [0, 140953, 157339, 1027]; total length 158366; signed bytes 141980
+exit 0
+$ openssl cms -sign -cades -binary -md sha256 -outform DER -in form-xfa-irs-w9.tbs -signer cert.pem -inkey key.pem -out form-xfa-irs-w9.der   (throwaway self-signed key made in the temp dir)
+exit 0 (1591 bytes of DER)
+$ probe embed form-xfa-irs-w9.pdf form-xfa-irs-w9.signed.pdf form-xfa-irs-w9.der
+byte_range: [0, 140953, 157339, 1027]; output length 158366
+prefix intact: true
+out[a]='<' out[b-1]='>'
+byte_range covers whole file: true
+slot hex digits: 16384, DER hex at start: true, rest zeros: true
+output: reparse ok, 158366 bytes, 3 revisions
+  revision 0: end=126744 startxref=116 xref=Stream
+  revision 1: end=140815 startxref=140462 xref=Stream
+  revision 2: end=158366 startxref=158072 xref=Stream
+  field "Nacre1" 1082 0 R /V Some("1081 0 R")
+field dict: Dictionary(Dictionary { entries: [([70, 84], Name([83, 105, 103])), ([84], String([78, 97, 99, 114, 101, 49])), ([86], Reference(ObjectId { number: 1081, generation: 0 })), ([84, 121, 112, 101], Name([65, 110, 110, 111, 116])), ([83, 117, 98, 116, 121, 112, 101], Name([87, 105, 100, 103, 101, 116])), ([82, 101, 99, 116], Array([Integer(0), Integer(0), Integer(0), Integer(0)])), ([70], Integer(132)
+  /Sig /Type = Name([83, 105, 103])
+  /Sig /Filter = Name([65, 100, 111, 98, 101, 46, 80, 80, 75, 76, 105, 116, 101])
+  /Sig /SubFilter = Name([69, 84, 83, 73, 46, 67, 65, 100, 69, 83, 46, 100, 101, 116, 97, 99, 104, 101, 100])
+  /Sig /ByteRange = Array([Integer(0), Integer(140953), Integer(157339), Integer(1027)])
+  /Sig /Contents = string of 8192 bytes
+exit 0
+$ cmp -n 140815 form-xfa-irs-w9.pdf form-xfa-irs-w9.signed.pdf
+identical prefix (140815 bytes)
+$ qpdf --check form-xfa-irs-w9.signed.pdf
+checking form-xfa-irs-w9.signed.pdf
+PDF Version: 1.7 extension level 11
+File is not encrypted
+File is not linearized
+No syntax or stream encoding errors found; the file may still contain
+errors that qpdf cannot detect
+qpdf exit 0
+$ pdfsig form-xfa-irs-w9.signed.pdf
+Digital Signature Info of: form-xfa-irs-w9.signed.pdf
+Signature #1:
+  - Signature Field Name: Nacre1
+  - Signing Hash Algorithm: SHA-256
+  - Signature Type: ETSI.CAdES.detached
+  - Signed Ranges: [0 - 140953], [157339 - 158366]
+  - Total document signed
+  - Signature Validation: Signature is Valid.
+  - Certificate Validation: Certificate issuer isn't Trusted.
+pdfsig exit 0
+=== ghostscript-pdfa2
+$ probe prepare ghostscript-pdfa2.pdf ghostscript-pdfa2.tbs   (env FIELD=Nacre1 SUBFILTER=ETSI.CAdES.detached LEN=8192; writes signed_parts()[0] ++ signed_parts()[1] to ghostscript-pdfa2.tbs)
+byte_range: [0, 16019, 32405, 739]; total length 33144; signed bytes 16758
+exit 0
+$ openssl cms -sign -cades -binary -md sha256 -outform DER -in ghostscript-pdfa2.tbs -signer cert.pem -inkey key.pem -out ghostscript-pdfa2.der   (throwaway self-signed key made in the temp dir)
+exit 0 (1591 bytes of DER)
+$ probe embed ghostscript-pdfa2.pdf ghostscript-pdfa2.signed.pdf ghostscript-pdfa2.der
+byte_range: [0, 16019, 32405, 739]; output length 33144
+prefix intact: true
+out[a]='<' out[b-1]='>'
+byte_range covers whole file: true
+slot hex digits: 16384, DER hex at start: true, rest zeros: true
+output: reparse ok, 33144 bytes, 2 revisions
+  revision 0: end=15883 startxref=15530 xref=Stream
+  revision 1: end=33144 startxref=32863 xref=Stream
+  field "Nacre1" 40 0 R /V Some("39 0 R")
+field dict: Dictionary(Dictionary { entries: [([70, 84], Name([83, 105, 103])), ([84], String([78, 97, 99, 114, 101, 49])), ([86], Reference(ObjectId { number: 39, generation: 0 })), ([84, 121, 112, 101], Name([65, 110, 110, 111, 116])), ([83, 117, 98, 116, 121, 112, 101], Name([87, 105, 100, 103, 101, 116])), ([82, 101, 99, 116], Array([Integer(0), Integer(0), Integer(0), Integer(0)])), ([70], Integer(132)),
+  /Sig /Type = Name([83, 105, 103])
+  /Sig /Filter = Name([65, 100, 111, 98, 101, 46, 80, 80, 75, 76, 105, 116, 101])
+  /Sig /SubFilter = Name([69, 84, 83, 73, 46, 67, 65, 100, 69, 83, 46, 100, 101, 116, 97, 99, 104, 101, 100])
+  /Sig /ByteRange = Array([Integer(0), Integer(16019), Integer(32405), Integer(739)])
+  /Sig /Contents = string of 8192 bytes
+exit 0
+$ cmp -n 15883 ghostscript-pdfa2.pdf ghostscript-pdfa2.signed.pdf
+identical prefix (15883 bytes)
+$ qpdf --check ghostscript-pdfa2.signed.pdf
+checking ghostscript-pdfa2.signed.pdf
+PDF Version: 1.7
+File is not encrypted
+File is not linearized
+No syntax or stream encoding errors found; the file may still contain
+errors that qpdf cannot detect
+qpdf exit 0
+$ pdfsig ghostscript-pdfa2.signed.pdf
+Digital Signature Info of: ghostscript-pdfa2.signed.pdf
+Signature #1:
+  - Signature Field Name: Nacre1
+  - Signing Hash Algorithm: SHA-256
+  - Signature Type: ETSI.CAdES.detached
+  - Signed Ranges: [0 - 16019], [32405 - 33144]
+  - Total document signed
+  - Signature Validation: Signature is Valid.
+  - Certificate Validation: Certificate issuer isn't Trusted.
+pdfsig exit 0
+=== libreoffice-pdfa3
+$ probe prepare libreoffice-pdfa3.pdf libreoffice-pdfa3.tbs   (env FIELD=Nacre1 SUBFILTER=ETSI.CAdES.detached LEN=8192; writes signed_parts()[0] ++ signed_parts()[1] to libreoffice-pdfa3.tbs)
+byte_range: [0, 206534, 222920, 941]; total length 223861; signed bytes 207475
+exit 0
+$ openssl cms -sign -cades -binary -md sha256 -outform DER -in libreoffice-pdfa3.tbs -signer cert.pem -inkey key.pem -out libreoffice-pdfa3.der   (throwaway self-signed key made in the temp dir)
+exit 0 (1591 bytes of DER)
+$ probe embed libreoffice-pdfa3.pdf libreoffice-pdfa3.signed.pdf libreoffice-pdfa3.der
+byte_range: [0, 206534, 222920, 941]; output length 223861
+prefix intact: true
+out[a]='<' out[b-1]='>'
+byte_range covers whole file: true
+slot hex digits: 16384, DER hex at start: true, rest zeros: true
+output: reparse ok, 223861 bytes, 2 revisions
+  revision 0: end=206397 startxref=186328 xref=Table
+  revision 1: end=223861 startxref=223576 xref=Table
+  field "Nacre1" 994 0 R /V Some("993 0 R")
+field dict: Dictionary(Dictionary { entries: [([70, 84], Name([83, 105, 103])), ([84], String([78, 97, 99, 114, 101, 49])), ([86], Reference(ObjectId { number: 993, generation: 0 })), ([84, 121, 112, 101], Name([65, 110, 110, 111, 116])), ([83, 117, 98, 116, 121, 112, 101], Name([87, 105, 100, 103, 101, 116])), ([82, 101, 99, 116], Array([Integer(0), Integer(0), Integer(0), Integer(0)])), ([70], Integer(132))
+  /Sig /Type = Name([83, 105, 103])
+  /Sig /Filter = Name([65, 100, 111, 98, 101, 46, 80, 80, 75, 76, 105, 116, 101])
+  /Sig /SubFilter = Name([69, 84, 83, 73, 46, 67, 65, 100, 69, 83, 46, 100, 101, 116, 97, 99, 104, 101, 100])
+  /Sig /ByteRange = Array([Integer(0), Integer(206534), Integer(222920), Integer(941)])
+  /Sig /Contents = string of 8192 bytes
+exit 0
+$ cmp -n 206397 libreoffice-pdfa3.pdf libreoffice-pdfa3.signed.pdf
+identical prefix (206397 bytes)
+$ qpdf --check libreoffice-pdfa3.signed.pdf
+checking libreoffice-pdfa3.signed.pdf
+PDF Version: 1.6
+File is not encrypted
+File is not linearized
+No syntax or stream encoding errors found; the file may still contain
+errors that qpdf cannot detect
+qpdf exit 0
+$ pdfsig libreoffice-pdfa3.signed.pdf
+Digital Signature Info of: libreoffice-pdfa3.signed.pdf
+Signature #1:
+  - Signature Field Name: Nacre1
+  - Signing Hash Algorithm: SHA-256
+  - Signature Type: ETSI.CAdES.detached
+  - Signed Ranges: [0 - 206534], [222920 - 223861]
+  - Total document signed
+  - Signature Validation: Signature is Valid.
+  - Certificate Validation: Certificate issuer isn't Trusted.
+pdfsig exit 0
+=== signed-lta-pyhanko
+$ probe prepare signed-lta-pyhanko.pdf signed-lta-pyhanko.tbs   (env FIELD=Nacre1 SUBFILTER=ETSI.CAdES.detached LEN=8192; writes signed_parts()[0] ++ signed_parts()[1] to signed-lta-pyhanko.tbs)
+byte_range: [0, 47020, 63406, 621]; total length 64027; signed bytes 47641
+exit 0
+$ openssl cms -sign -cades -binary -md sha256 -outform DER -in signed-lta-pyhanko.tbs -signer cert.pem -inkey key.pem -out signed-lta-pyhanko.der   (throwaway self-signed key made in the temp dir)
+exit 0 (1591 bytes of DER)
+$ probe embed signed-lta-pyhanko.pdf signed-lta-pyhanko.signed.pdf signed-lta-pyhanko.der
+byte_range: [0, 47020, 63406, 621]; output length 64027
+prefix intact: true
+out[a]='<' out[b-1]='>'
+byte_range covers whole file: true
+slot hex digits: 16384, DER hex at start: true, rest zeros: true
+output: reparse ok, 64027 bytes, 6 revisions
+  revision 0: end=739 startxref=565 xref=Table
+  revision 1: end=1393 startxref=1129 xref=Table
+  revision 2: end=25853 startxref=25590 xref=Table
+  revision 3: end=46212 startxref=45662 xref=Table
+  revision 4: end=46884 startxref=46578 xref=Table
+  revision 5: end=64027 startxref=63784 xref=Table
+  field "Sig1" 7 0 R /V Some("10 0 R")
+  field "Timestamp-977301ad-bec9-4cae-a0cd-f6a674c6e465" 25 0 R /V Some("26 0 R")
+  field "Nacre1" 34 0 R /V Some("33 0 R")
+field dict: Dictionary(Dictionary { entries: [([70, 84], Name([83, 105, 103])), ([84], String([78, 97, 99, 114, 101, 49])), ([86], Reference(ObjectId { number: 33, generation: 0 })), ([84, 121, 112, 101], Name([65, 110, 110, 111, 116])), ([83, 117, 98, 116, 121, 112, 101], Name([87, 105, 100, 103, 101, 116])), ([82, 101, 99, 116], Array([Integer(0), Integer(0), Integer(0), Integer(0)])), ([70], Integer(132)),
+  /Sig /Type = Name([83, 105, 103])
+  /Sig /Filter = Name([65, 100, 111, 98, 101, 46, 80, 80, 75, 76, 105, 116, 101])
+  /Sig /SubFilter = Name([69, 84, 83, 73, 46, 67, 65, 100, 69, 83, 46, 100, 101, 116, 97, 99, 104, 101, 100])
+  /Sig /ByteRange = Array([Integer(0), Integer(47020), Integer(63406), Integer(621)])
+  /Sig /Contents = string of 8192 bytes
+exit 0
+$ cmp -n 46884 signed-lta-pyhanko.pdf signed-lta-pyhanko.signed.pdf
+identical prefix (46884 bytes)
+$ qpdf --check signed-lta-pyhanko.signed.pdf
+checking signed-lta-pyhanko.signed.pdf
+PDF Version: 1.7
+File is not encrypted
+File is not linearized
+No syntax or stream encoding errors found; the file may still contain
+errors that qpdf cannot detect
+qpdf exit 0
+$ pdfsig signed-lta-pyhanko.signed.pdf
+Digital Signature Info of: signed-lta-pyhanko.signed.pdf
+Signature #1:
+  - Signature Field Name: Sig1
+  - Signing Hash Algorithm: SHA-256
+  - Signature Type: ETSI.CAdES.detached
+  - Signed Ranges: [0 - 2905], [25421 - 25853]
+  - Not total document signed
+  - Signature Validation: Signature is Valid.
+  - Certificate Validation: Certificate has Expired
+Signature #2:
+  - Signature Field Name: Timestamp-977301ad-bec9-4cae-a0cd-f6a674c6e465
+  - Signing Hash Algorithm: unknown
+  - Signature Type: unknown
+  - Signed Ranges: [0 - 34074], [45532 - 46212]
+  - Not total document signed
+  - Signature Validation: Signature has not yet been verified.
+Signature #3:
+  - Signature Field Name: Nacre1
+  - Signing Hash Algorithm: SHA-256
+  - Signature Type: ETSI.CAdES.detached
+  - Signed Ranges: [0 - 47020], [63406 - 64027]
+  - Total document signed
+  - Signature Validation: Signature is Valid.
+  - Certificate Validation: Certificate issuer isn't Trusted.
+pdfsig exit 0
+=== signed-twice-pyhanko
+$ probe prepare signed-twice-pyhanko.pdf signed-twice-pyhanko.tbs   (env FIELD=Nacre1 SUBFILTER=ETSI.CAdES.detached LEN=8192; writes signed_parts()[0] ++ signed_parts()[1] to signed-twice-pyhanko.tbs)
+byte_range: [0, 50963, 67349, 841]; total length 68190; signed bytes 51804
+exit 0
+$ openssl cms -sign -cades -binary -md sha256 -outform DER -in signed-twice-pyhanko.tbs -signer cert.pem -inkey key.pem -out signed-twice-pyhanko.der   (throwaway self-signed key made in the temp dir)
+exit 0 (1591 bytes of DER)
+$ probe embed signed-twice-pyhanko.pdf signed-twice-pyhanko.signed.pdf signed-twice-pyhanko.der
+byte_range: [0, 50963, 67349, 841]; output length 68190
+prefix intact: true
+out[a]='<' out[b-1]='>'
+byte_range covers whole file: true
+slot hex digits: 16384, DER hex at start: true, rest zeros: true
+output: reparse ok, 68190 bytes, 3 revisions
+  revision 0: end=26384 startxref=116 xref=Stream
+  revision 1: end=50827 startxref=50491 xref=Stream
+  revision 2: end=68190 startxref=67913 xref=Stream
+  field "Sig1" 21 0 R /V Some("26 0 R")
+  field "Sig2" 22 0 R /V Some("18 0 R")
+  field "Nacre1" 35 0 R /V Some("34 0 R")
+field dict: Dictionary(Dictionary { entries: [([70, 84], Name([83, 105, 103])), ([84], String([78, 97, 99, 114, 101, 49])), ([86], Reference(ObjectId { number: 34, generation: 0 })), ([84, 121, 112, 101], Name([65, 110, 110, 111, 116])), ([83, 117, 98, 116, 121, 112, 101], Name([87, 105, 100, 103, 101, 116])), ([82, 101, 99, 116], Array([Integer(0), Integer(0), Integer(0), Integer(0)])), ([70], Integer(132)),
+  /Sig /Type = Name([83, 105, 103])
+  /Sig /Filter = Name([65, 100, 111, 98, 101, 46, 80, 80, 75, 76, 105, 116, 101])
+  /Sig /SubFilter = Name([69, 84, 83, 73, 46, 67, 65, 100, 69, 83, 46, 100, 101, 116, 97, 99, 104, 101, 100])
+  /Sig /ByteRange = Array([Integer(0), Integer(50963), Integer(67349), Integer(841)])
+  /Sig /Contents = string of 8192 bytes
+exit 0
+$ cmp -n 50827 signed-twice-pyhanko.pdf signed-twice-pyhanko.signed.pdf
+identical prefix (50827 bytes)
+$ qpdf --check signed-twice-pyhanko.signed.pdf
+checking signed-twice-pyhanko.signed.pdf
+PDF Version: 1.7
+File is not encrypted
+File is not linearized
+No syntax or stream encoding errors found; the file may still contain
+errors that qpdf cannot detect
+qpdf exit 0
+$ pdfsig signed-twice-pyhanko.signed.pdf
+Digital Signature Info of: signed-twice-pyhanko.signed.pdf
+Signature #1:
+  - Signature Field Name: Sig1
+  - Signing Hash Algorithm: SHA-256
+  - Signature Type: adbe.pkcs7.detached
+  - Signed Ranges: [0 - 29541], [48279 - 50827]
+  - Not total document signed
+  - Signature Validation: Signature is Valid.
+  - Certificate Validation: Certificate issuer is unknown.
+Signature #2:
+  - Signature Field Name: Sig2
+  - Signing Hash Algorithm: SHA-256
+  - Signature Type: adbe.pkcs7.detached
+  - Signed Ranges: [0 - 3485], [22223 - 26384]
+  - Not total document signed
+  - Signature Validation: Signature is Valid.
+  - Certificate Validation: Certificate issuer is unknown.
+Signature #3:
+  - Signature Field Name: Nacre1
+  - Signing Hash Algorithm: SHA-256
+  - Signature Type: ETSI.CAdES.detached
+  - Signed Ranges: [0 - 50963], [67349 - 68190]
+  - Total document signed
+  - Signature Validation: Signature is Valid.
+  - Certificate Validation: Certificate issuer isn't Trusted.
+pdfsig exit 0
+=== word-hybrid
+$ probe prepare word-hybrid.pdf word-hybrid.tbs   (env FIELD=Nacre1 SUBFILTER=ETSI.CAdES.detached LEN=8192; writes signed_parts()[0] ++ signed_parts()[1] to word-hybrid.tbs)
+byte_range: [0, 95039, 111425, 945]; total length 112370; signed bytes 95984
+exit 0
+$ openssl cms -sign -cades -binary -md sha256 -outform DER -in word-hybrid.tbs -signer cert.pem -inkey key.pem -out word-hybrid.der   (throwaway self-signed key made in the temp dir)
+exit 0 (1591 bytes of DER)
+$ probe embed word-hybrid.pdf word-hybrid.signed.pdf word-hybrid.der
+byte_range: [0, 95039, 111425, 945]; output length 112370
+prefix intact: true
+out[a]='<' out[b-1]='>'
+byte_range covers whole file: true
+slot hex digits: 16384, DER hex at start: true, rest zeros: true
+output: reparse ok, 112370 bytes, 5 revisions
+  revision 0: end=81959 startxref=79740 xref=Table
+  revision 1: end=82140 startxref=81959 xref=Hybrid
+  revision 2: end=90822 startxref=90625 xref=Hybrid
+  revision 3: end=94902 startxref=94618 xref=Table
+  revision 4: end=112370 startxref=112108 xref=Table
+  field "Nacre1" 116 0 R /V Some("115 0 R")
+field dict: Dictionary(Dictionary { entries: [([70, 84], Name([83, 105, 103])), ([84], String([78, 97, 99, 114, 101, 49])), ([86], Reference(ObjectId { number: 115, generation: 0 })), ([84, 121, 112, 101], Name([65, 110, 110, 111, 116])), ([83, 117, 98, 116, 121, 112, 101], Name([87, 105, 100, 103, 101, 116])), ([82, 101, 99, 116], Array([Integer(0), Integer(0), Integer(0), Integer(0)])), ([70], Integer(132))
+  /Sig /Type = Name([83, 105, 103])
+  /Sig /Filter = Name([65, 100, 111, 98, 101, 46, 80, 80, 75, 76, 105, 116, 101])
+  /Sig /SubFilter = Name([69, 84, 83, 73, 46, 67, 65, 100, 69, 83, 46, 100, 101, 116, 97, 99, 104, 101, 100])
+  /Sig /ByteRange = Array([Integer(0), Integer(95039), Integer(111425), Integer(945)])
+  /Sig /Contents = string of 8192 bytes
+exit 0
+$ cmp -n 94902 word-hybrid.pdf word-hybrid.signed.pdf
+identical prefix (94902 bytes)
+$ qpdf --check word-hybrid.signed.pdf
+checking word-hybrid.signed.pdf
+PDF Version: 1.7
+File is not encrypted
+File is not linearized
+No syntax or stream encoding errors found; the file may still contain
+errors that qpdf cannot detect
+qpdf exit 0
+$ pdfsig word-hybrid.signed.pdf
+Digital Signature Info of: word-hybrid.signed.pdf
+Signature #1:
+  - Signature Field Name: Nacre1
+  - Signing Hash Algorithm: SHA-256
+  - Signature Type: ETSI.CAdES.detached
+  - Signed Ranges: [0 - 95039], [111425 - 112370]
+  - Total document signed
+  - Signature Validation: Signature is Valid.
+  - Certificate Validation: Certificate issuer isn't Trusted.
+pdfsig exit 0
+=== word-pdfmaker-linearized
+$ probe prepare word-pdfmaker-linearized.pdf word-pdfmaker-linearized.tbs   (env FIELD=Nacre1 SUBFILTER=ETSI.CAdES.detached LEN=8192; writes signed_parts()[0] ++ signed_parts()[1] to word-pdfmaker-linearized.tbs)
+byte_range: [0, 67024, 83410, 906]; total length 84316; signed bytes 67930
+exit 0
+$ openssl cms -sign -cades -binary -md sha256 -outform DER -in word-pdfmaker-linearized.tbs -signer cert.pem -inkey key.pem -out word-pdfmaker-linearized.der   (throwaway self-signed key made in the temp dir)
+exit 0 (1591 bytes of DER)
+$ probe embed word-pdfmaker-linearized.pdf word-pdfmaker-linearized.signed.pdf word-pdfmaker-linearized.der
+byte_range: [0, 67024, 83410, 906]; output length 84316
+prefix intact: true
+out[a]='<' out[b-1]='>'
+byte_range covers whole file: true
+slot hex digits: 16384, DER hex at start: true, rest zeros: true
+output: reparse ok, 84316 bytes, 3 revisions
+  revision 0: end=57615 startxref=116 xref=Stream
+  revision 1: end=66887 startxref=66474 xref=Stream
+  revision 2: end=84316 startxref=84034 xref=Stream
+  field "Nacre1" 137 0 R /V Some("136 0 R")
+field dict: Dictionary(Dictionary { entries: [([70, 84], Name([83, 105, 103])), ([84], String([78, 97, 99, 114, 101, 49])), ([86], Reference(ObjectId { number: 136, generation: 0 })), ([84, 121, 112, 101], Name([65, 110, 110, 111, 116])), ([83, 117, 98, 116, 121, 112, 101], Name([87, 105, 100, 103, 101, 116])), ([82, 101, 99, 116], Array([Integer(0), Integer(0), Integer(0), Integer(0)])), ([70], Integer(132))
+  /Sig /Type = Name([83, 105, 103])
+  /Sig /Filter = Name([65, 100, 111, 98, 101, 46, 80, 80, 75, 76, 105, 116, 101])
+  /Sig /SubFilter = Name([69, 84, 83, 73, 46, 67, 65, 100, 69, 83, 46, 100, 101, 116, 97, 99, 104, 101, 100])
+  /Sig /ByteRange = Array([Integer(0), Integer(67024), Integer(83410), Integer(906)])
+  /Sig /Contents = string of 8192 bytes
+exit 0
+$ cmp -n 66887 word-pdfmaker-linearized.pdf word-pdfmaker-linearized.signed.pdf
+identical prefix (66887 bytes)
+$ qpdf --check word-pdfmaker-linearized.signed.pdf
+checking word-pdfmaker-linearized.signed.pdf
+PDF Version: 1.6
+File is not encrypted
+File is not linearized
+No syntax or stream encoding errors found; the file may still contain
+errors that qpdf cannot detect
+qpdf exit 0
+$ pdfsig word-pdfmaker-linearized.signed.pdf
+Digital Signature Info of: word-pdfmaker-linearized.signed.pdf
+Signature #1:
+  - Signature Field Name: Nacre1
+  - Signing Hash Algorithm: SHA-256
+  - Signature Type: ETSI.CAdES.detached
+  - Signed Ranges: [0 - 67024], [83410 - 84316]
+  - Total document signed
+  - Signature Validation: Signature is Valid.
+  - Certificate Validation: Certificate issuer isn't Trusted.
+pdfsig exit 0
+
+$ grep -ci warning (over every qpdf output above)
+0
+
+## A second Nacre signature over chrome-print.signed.pdf (the first stays valid, the second covers the whole file)
+$ FIELD=Nacre2 probe prepare chrome-print.signed.pdf n2.tbs
+byte_range: [0, 36469, 52855, 631]; total length 53486; signed bytes 37100
+exit 0
+$ openssl cms -sign -cades -binary -md sha256 -outform DER -in n2.tbs -signer cert.pem -inkey key.pem -out n2.der
+exit 0
+$ FIELD=Nacre2 probe embed chrome-print.signed.pdf n2.pdf n2.der
+byte_range: [0, 36469, 52855, 631]; output length 53486
+prefix intact: true
+out[a]='<' out[b-1]='>'
+byte_range covers whole file: true
+slot hex digits: 16384, DER hex at start: true, rest zeros: true
+output: reparse ok, 53486 bytes, 3 revisions
+  revision 0: end=18950 startxref=18032 xref=Table
+  revision 1: end=36333 startxref=36132 xref=Table
+  revision 2: end=53486 startxref=53310 xref=Table
+  field "Nacre1" 43 0 R /V Some("42 0 R")
+  field "Nacre2" 46 0 R /V Some("45 0 R")
+  /Sig /Type = Name([83, 105, 103])
+  /Sig /Filter = Name([65, 100, 111, 98, 101, 46, 80, 80, 75, 76, 105, 116, 101])
+  /Sig /SubFilter = Name([69, 84, 83, 73, 46, 67, 65, 100, 69, 83, 46, 100, 101, 116, 97, 99, 104, 101, 100])
+  /Sig /ByteRange = Array([Integer(0), Integer(36469), Integer(52855), Integer(631)])
+  /Sig /Contents = string of 8192 bytes
+exit 0
+$ qpdf --check n2.pdf
+checking n2.pdf
+PDF Version: 1.4
+File is not encrypted
+File is not linearized
+No syntax or stream encoding errors found; the file may still contain
+errors that qpdf cannot detect
+exit 0
+$ pdfsig n2.pdf
+Digital Signature Info of: n2.pdf
+Signature #1:
+  - Signature Field Name: Nacre1
+  - Signing Hash Algorithm: SHA-256
+  - Signature Type: ETSI.CAdES.detached
+  - Signed Ranges: [0 - 19086], [35472 - 36333]
+  - Not total document signed
+  - Signature Validation: Signature is Valid.
+  - Certificate Validation: Certificate issuer isn't Trusted.
+Signature #2:
+  - Signature Field Name: Nacre2
+  - Signing Hash Algorithm: SHA-256
+  - Signature Type: ETSI.CAdES.detached
+  - Signed Ranges: [0 - 36469], [52855 - 53486]
+  - Total document signed
+  - Signature Validation: Signature is Valid.
+  - Certificate Validation: Certificate issuer isn't Trusted.
+exit 0

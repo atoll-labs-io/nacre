@@ -52,8 +52,21 @@ impl Dictionary {
         entries: Vec::new(),
     };
 
+    pub fn new() -> Self {
+        Self::default()
+    }
+
     pub(crate) fn from_entries(entries: Vec<(Vec<u8>, Object)>) -> Self {
         Self { entries }
+    }
+
+    /// Sets `key`, a name given without its slash: an existing entry keeps its place and
+    /// takes the new value, a new one goes last.
+    pub fn insert(&mut self, key: &[u8], value: Object) {
+        match self.entries.iter_mut().find(|(k, _)| k == key) {
+            Some((_, slot)) => *slot = value,
+            None => self.entries.push((key.to_vec(), value)),
+        }
     }
 
     /// The value of `key`, a name given without its slash.

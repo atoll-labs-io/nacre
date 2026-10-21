@@ -3,6 +3,7 @@ name = "nacre-pdf-fuzz"
 version = "0.0.0"
 publish = false
 edition = "2024"
+rust-version = "1.97"
 
 [package.metadata]
 cargo-fuzz = true
@@ -14,6 +15,13 @@ nacre-pdf = { path = ".." }
 [[bin]]
 name = "parse"
 path = "fuzz_targets/parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "revision"
+path = "fuzz_targets/revision.rs"
 test = false
 doc = false
 bench = false

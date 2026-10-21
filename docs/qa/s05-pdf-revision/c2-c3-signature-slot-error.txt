@@ -1,0 +1,180 @@
+Criteria 2 and 3, and the DocMDP note — invalid input a caller could plausibly give, the slot's boundaries, and certified documents.
+Working copy: /tmp/qa-s05.nOrhFm/repo (files of 'git ls-files' on story/s05-pdf-revision), after 'cargo fetch' then 'cargo build --workspace --all-features' (both exit 0).
+Tools: qpdf 12.4.2 (/tmp/s05-qpdf/bin/qpdf, conda-forge), poppler pdfsig/pdfinfo 26.08.0, OpenSSL 3.6.5. Outputs written under /tmp/qa-s05.nOrhFm/scratch/out, never in the worktree.
+Probe: see c1-c4-c5-plain-revision.txt. d64.der and d65.der are 64 and 65 random bytes, oversize.der 300; only their length matters here. docmdp-p1.pdf and docmdp-p2.pdf are one-page PDFs crafted for this QA by a Python script (catalog /Perms /DocMDP -> /Reference [/TransformMethod /DocMDP /TransformParams -> /P 1 or 2]). They carry no /Resources, so qpdf prints a 'Resources is missing' warning about the crafted page itself on them, original or appended. Lines repeating the revision list and the field dictionary are filtered out.
+
+### C3 error: DER larger than the slot (LEN=64, 65 bytes)
+$ LEN=64 /tmp/qa-s05.nOrhFm/scratch/target/debug/probe embed /tmp/qa-s05.nOrhFm/repo/crates/nacre-pdf/tests/corpus/real/chrome-print.pdf e65.pdf /tmp/qa-s05.nOrhFm/scratch/craft/d65.der
+embed error: the signature is 65 bytes, more than the 64 reserved
+debug: SignatureTooLarge { len: 65, capacity: 64 }
+byte_range after error: [0, 19086, 19216, 861]
+exit 1
+
+ls: impossible d'accéder à 'e65.pdf': Aucun fichier ou dossier de ce nom
+### C3 boundary: DER of exactly the slot (LEN=64, 64 bytes)
+$ LEN=64 /tmp/qa-s05.nOrhFm/scratch/target/debug/probe embed /tmp/qa-s05.nOrhFm/repo/crates/nacre-pdf/tests/corpus/real/chrome-print.pdf e64.pdf /tmp/qa-s05.nOrhFm/scratch/craft/d64.der
+byte_range: [0, 19086, 19216, 861]; output length 20077
+prefix intact: true
+out[a]='<' out[b-1]='>'
+byte_range covers whole file: true
+slot hex digits: 128, DER hex at start: true, rest zeros: true
+output: reparse ok, 20077 bytes, 2 revisions
+  field "Nacre1" 43 0 R /V Some("42 0 R")
+exit 0
+
+### C3 boundary: DER of 300 bytes into 8192
+$ /tmp/qa-s05.nOrhFm/scratch/target/debug/probe embed /tmp/qa-s05.nOrhFm/repo/crates/nacre-pdf/tests/corpus/real/chrome-print.pdf e300.pdf /tmp/qa-s05.nOrhFm/scratch/craft/oversize.der
+byte_range: [0, 19086, 35472, 861]; output length 36333
+prefix intact: true
+out[a]='<' out[b-1]='>'
+byte_range covers whole file: true
+slot hex digits: 16384, DER hex at start: true, rest zeros: true
+output: reparse ok, 36333 bytes, 2 revisions
+  field "Nacre1" 43 0 R /V Some("42 0 R")
+exit 0
+
+### C2 error: /Contents given by the caller
+$ /tmp/qa-s05.nOrhFm/scratch/target/debug/probe prepare /tmp/qa-s05.nOrhFm/repo/crates/nacre-pdf/tests/corpus/real/chrome-print.pdf x.tbs Contents=foo
+sign error: the signature dictionary entry /Contents is set by the writer
+debug: ReservedEntry { key: "Contents" }
+exit 1
+
+### C2 error: /ByteRange given by the caller
+$ /tmp/qa-s05.nOrhFm/scratch/target/debug/probe prepare /tmp/qa-s05.nOrhFm/repo/crates/nacre-pdf/tests/corpus/real/chrome-print.pdf x.tbs ByteRange=foo
+sign error: the signature dictionary entry /ByteRange is set by the writer
+debug: ReservedEntry { key: "ByteRange" }
+exit 1
+
+### C2 error: empty slot
+$ LEN=0 /tmp/qa-s05.nOrhFm/scratch/target/debug/probe prepare /tmp/qa-s05.nOrhFm/repo/crates/nacre-pdf/tests/corpus/real/chrome-print.pdf x.tbs
+sign error: the signature slot must hold at least one byte
+debug: EmptySignatureSlot
+exit 1
+
+### C2 error: slot larger than the input bound
+$ LEN=18446744073709551615 /tmp/qa-s05.nOrhFm/scratch/target/debug/probe prepare /tmp/qa-s05.nOrhFm/repo/crates/nacre-pdf/tests/corpus/real/chrome-print.pdf x.tbs
+sign error: the input is 18446744073709551615 bytes, more than the 50000000 accepted
+debug: TooLarge { len: 18446744073709551615, max: 50000000 }
+exit 1
+
+### C2 error: field name already taken by a signature field
+$ FIELD=signature-test2 /tmp/qa-s05.nOrhFm/scratch/target/debug/probe prepare /tmp/qa-s05.nOrhFm/repo/crates/nacre-pdf/tests/corpus/real/certified-dss.pdf x.tbs
+sign error: a signature field named signature-test2 already exists
+debug: DuplicateField { name: "signature-test2" }
+exit 1
+
+### C2 error: empty /SubFilter
+$ SUBFILTER= /tmp/qa-s05.nOrhFm/scratch/target/debug/probe embed /tmp/qa-s05.nOrhFm/repo/crates/nacre-pdf/tests/corpus/real/chrome-print.pdf sf-empty.pdf /tmp/qa-s05.nOrhFm/scratch/craft/d64.der
+byte_range: [0, 19067, 35453, 861]; output length 36314
+prefix intact: true
+out[a]='<' out[b-1]='>'
+byte_range covers whole file: true
+slot hex digits: 16384, DER hex at start: true, rest zeros: true
+output: reparse ok, 36314 bytes, 2 revisions
+  field "Nacre1" 43 0 R /V Some("42 0 R")
+exit 0
+
+### C2 error: /SubFilter given with its slash
+$ SUBFILTER=/ETSI.CAdES.detached /tmp/qa-s05.nOrhFm/scratch/target/debug/probe embed /tmp/qa-s05.nOrhFm/repo/crates/nacre-pdf/tests/corpus/real/chrome-print.pdf sf-slash.pdf /tmp/qa-s05.nOrhFm/scratch/craft/d64.der
+byte_range: [0, 19089, 35475, 861]; output length 36336
+prefix intact: true
+out[a]='<' out[b-1]='>'
+byte_range covers whole file: true
+slot hex digits: 16384, DER hex at start: true, rest zeros: true
+output: reparse ok, 36336 bytes, 2 revisions
+  field "Nacre1" 43 0 R /V Some("42 0 R")
+exit 0
+
+### Note: DocMDP /P 1 refuses an approval signature
+$ /tmp/qa-s05.nOrhFm/scratch/target/debug/probe prepare /tmp/qa-s05.nOrhFm/scratch/craft/docmdp-p1.pdf x.tbs
+sign error: the document is certified with no changes allowed (DocMDP /P 1)
+debug: CertifiedNoChanges
+exit 1
+
+### Note: DocMDP /P 1 still takes a document timestamp
+$ SUBFILTER=ETSI.RFC3161 /tmp/qa-s05.nOrhFm/scratch/target/debug/probe embed /tmp/qa-s05.nOrhFm/scratch/craft/docmdp-p1.pdf p1-ts.pdf /tmp/qa-s05.nOrhFm/scratch/craft/d64.der Type=DocTimeStamp
+byte_range: [0, 726, 17112, 541]; output length 17653
+prefix intact: true
+out[a]='<' out[b-1]='>'
+byte_range covers whole file: true
+slot hex digits: 16384, DER hex at start: true, rest zeros: true
+output: reparse ok, 17653 bytes, 2 revisions
+  field "Nacre1" 7 0 R /V Some("6 0 R")
+exit 0
+
+### Note: DocMDP /P 1 still takes a plain revision (C5)
+$ /tmp/qa-s05.nOrhFm/scratch/target/debug/probe plain /tmp/qa-s05.nOrhFm/scratch/craft/docmdp-p1.pdf p1-plain.pdf
+added 6 0 R and 7 0 R; catalog /NacreQA -> 7 0 R
+prefix intact: true
+output: reparse ok, 970 bytes, 2 revisions
+revisions: 1 -> 2
+catalog /NacreQA = Some(Reference(ObjectId { number: 7, generation: 0 }))
+object 6 0 R equals added dict: true
+object 7 0 R stream data: "hello DSS"
+exit 0
+
+### Note: DocMDP /P 2 takes an approval signature
+$ /tmp/qa-s05.nOrhFm/scratch/target/debug/probe embed /tmp/qa-s05.nOrhFm/scratch/craft/docmdp-p2.pdf p2.pdf /tmp/qa-s05.nOrhFm/scratch/craft/d64.der
+byte_range: [0, 724, 17110, 541]; output length 17651
+prefix intact: true
+out[a]='<' out[b-1]='>'
+byte_range covers whole file: true
+slot hex digits: 16384, DER hex at start: true, rest zeros: true
+output: reparse ok, 17651 bytes, 2 revisions
+  field "Nacre1" 7 0 R /V Some("6 0 R")
+exit 0
+
+### Input that is not a PDF
+$ /tmp/qa-s05.nOrhFm/scratch/target/debug/probe plain /tmp/qa-s05.nOrhFm/scratch/craft/text.txt x.pdf
+parse error: the input does not start with %PDF-
+exit 1
+
+## qpdf on the outputs above
+$ qpdf --check e64.pdf
+checking e64.pdf
+PDF Version: 1.4
+File is not encrypted
+File is not linearized
+No syntax or stream encoding errors found; the file may still contain
+errors that qpdf cannot detect
+exit 0
+$ qpdf --check e300.pdf
+checking e300.pdf
+PDF Version: 1.4
+File is not encrypted
+File is not linearized
+No syntax or stream encoding errors found; the file may still contain
+errors that qpdf cannot detect
+exit 0
+$ qpdf --check p1-ts.pdf
+checking p1-ts.pdf
+PDF Version: 1.7
+File is not encrypted
+File is not linearized
+WARNING: p1-ts.pdf, object 3 0 at offset 17301: kid 0 (from 0) Resources is missing or invalid; repairing
+qpdf: operation succeeded with warnings
+exit 3
+$ qpdf --check p1-plain.pdf
+checking p1-plain.pdf
+PDF Version: 1.7
+File is not encrypted
+File is not linearized
+WARNING: p1-plain.pdf, object 3 0 at offset 152: kid 0 (from 0) Resources is missing or invalid; repairing
+qpdf: operation succeeded with warnings
+exit 3
+$ qpdf --check p2.pdf
+checking p2.pdf
+PDF Version: 1.7
+File is not encrypted
+File is not linearized
+WARNING: p2.pdf, object 3 0 at offset 17299: kid 0 (from 0) Resources is missing or invalid; repairing
+qpdf: operation succeeded with warnings
+exit 3
+$ qpdf --check docmdp-p1.pdf   (the crafted original, before any revision)
+checking /tmp/qa-s05.nOrhFm/scratch/craft/docmdp-p1.pdf
+PDF Version: 1.7
+File is not encrypted
+File is not linearized
+WARNING: /tmp/qa-s05.nOrhFm/scratch/craft/docmdp-p1.pdf, object 3 0 at offset 152: kid 0 (from 0) Resources is missing or invalid; repairing
+qpdf: operation succeeded with warnings
+exit 3
