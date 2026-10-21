@@ -1,0 +1,26 @@
+Finding 1 — a slot too large is refused with an error that misstates the input's size (run, then replay).
+Working copy: /tmp/qa-s05.nOrhFm/repo (files of 'git ls-files' on story/s05-pdf-revision). Probe: see c1-c4-c5-plain-revision.txt. chrome-print.pdf is 18950 bytes.
+## run
+input size: 18950 bytes
+$ LEN=30000000 /tmp/qa-s05.nOrhFm/scratch/target/debug/probe prepare /tmp/qa-s05.nOrhFm/repo/crates/nacre-pdf/tests/corpus/real/chrome-print.pdf x.tbs
+sign error: the input is 60018950 bytes, more than the 50000000 accepted
+debug: TooLarge { len: 60018950, max: 50000000 }
+exit 1
+
+$ LEN=18446744073709551615 /tmp/qa-s05.nOrhFm/scratch/target/debug/probe prepare /tmp/qa-s05.nOrhFm/repo/crates/nacre-pdf/tests/corpus/real/chrome-print.pdf x.tbs
+sign error: the input is 18446744073709551615 bytes, more than the 50000000 accepted
+debug: TooLarge { len: 18446744073709551615, max: 50000000 }
+exit 1
+
+## replay
+input size: 18950 bytes
+$ LEN=30000000 /tmp/qa-s05.nOrhFm/scratch/target/debug/probe prepare /tmp/qa-s05.nOrhFm/repo/crates/nacre-pdf/tests/corpus/real/chrome-print.pdf x.tbs
+sign error: the input is 60018950 bytes, more than the 50000000 accepted
+debug: TooLarge { len: 60018950, max: 50000000 }
+exit 1
+
+$ LEN=18446744073709551615 /tmp/qa-s05.nOrhFm/scratch/target/debug/probe prepare /tmp/qa-s05.nOrhFm/repo/crates/nacre-pdf/tests/corpus/real/chrome-print.pdf x.tbs
+sign error: the input is 18446744073709551615 bytes, more than the 50000000 accepted
+debug: TooLarge { len: 18446744073709551615, max: 50000000 }
+exit 1
+

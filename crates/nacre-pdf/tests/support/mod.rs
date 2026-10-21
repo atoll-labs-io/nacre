@@ -26,6 +26,7 @@ pub struct Pdf {
     xref: Xref,
     xref_stream_extra_bytes: usize,
     shift: Option<(u32, i64)>,
+    shift_onto: Option<(u32, u32)>,
     after_eof: Vec<u8>,
 }
 
@@ -42,6 +43,7 @@ impl Pdf {
             xref,
             xref_stream_extra_bytes: 0,
             shift: None,
+            shift_onto: None,
             after_eof: Vec::new(),
         }
     }
@@ -98,6 +100,12 @@ impl Pdf {
         self
     }
 
+    /// Writes the xref offset of object `other` as the offset of `number`.
+    pub fn shift_onto(mut self, number: u32, other: u32) -> Self {
+        self.shift_onto = Some((number, other));
+        self
+    }
+
     /// Appends bytes to the xref stream's decoded data, so it no longer matches `/W`.
     pub fn xref_stream_extra_bytes(mut self, n: usize) -> Self {
         self.xref_stream_extra_bytes = n;
@@ -150,8 +158,12 @@ impl Pdf {
             .max()
             .copied()
             .unwrap_or(0);
-        let offset_of = |number: u32, offset: usize| match self.shift {
-            Some((n, delta)) if n == number => (offset as i64 + delta) as usize,
+        let onto = self
+            .shift_onto
+            .and_then(|(n, other)| in_use.get(&other).map(|&at| (n, at)));
+        let offset_of = |number: u32, offset: usize| match (self.shift, onto) {
+            (Some((n, delta)), _) if n == number => (offset as i64 + delta) as usize,
+            (_, Some((n, at))) if n == number => at,
             _ => offset,
         };
         let xref_at = out.len();
@@ -261,6 +273,10 @@ pub mod refusals {
         minimal(Xref::Table).shift(1, 3).build()
     }
 
+    pub fn xref_entry_pointing_at_another_object() -> Vec<u8> {
+        minimal(Xref::Table).shift_onto(1, 2).build()
+    }
+
     pub fn missing_catalog() -> Vec<u8> {
         minimal(Xref::Table).root(9).build()
     }
@@ -297,6 +313,10 @@ pub mod refusals {
             (
                 "xref_entry_pointing_elsewhere",
                 xref_entry_pointing_elsewhere(),
+            ),
+            (
+                "xref_entry_pointing_at_another_object",
+                xref_entry_pointing_at_another_object(),
             ),
             ("missing_catalog", missing_catalog()),
             ("object_stream_index_past_n", object_stream_index_past_n()),
@@ -391,5 +411,61 @@ pub mod hostile {
                 xref_stream_wrong_decoded_length(),
             ),
         ]
+    }
+}
+
+/// The writer cases of `revision.rs`, each with one page (object 3).
+pub mod revision {
+    use super::*;
+
+    pub const ONE_PAGE: &str = "<< /Type /Pages /Kids [3 0 R] /Count 1 >>";
+    pub const PAGE: &str = "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>";
+
+    fn one_page(catalog: &str) -> Pdf {
+        Pdf::new(Xref::Table)
+            .object(1, catalog)
+            .object(2, ONE_PAGE)
+            .object(3, PAGE)
+    }
+
+    pub fn certified_no_changes() -> Vec<u8> {
+        one_page("<< /Type /Catalog /Pages 2 0 R /Perms << /DocMDP 5 0 R >> >>")
+            .object(
+                5,
+                "<< /Type /Sig /Reference [<< /Type /SigRef /TransformMethod /DocMDP /TransformParams 6 0 R >>] >>",
+            )
+            .object(6, "<< /Type /TransformParams /P 1 /V /1.2 >>")
+            .build()
+    }
+
+    pub fn direct_acroform() -> Vec<u8> {
+        one_page("<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [] /DA (/Helv 0 Tf) >> >>")
+            .build()
+    }
+
+    pub fn indirect_fields() -> Vec<u8> {
+        one_page("<< /Type /Catalog /Pages 2 0 R /AcroForm 4 0 R >>")
+            .object(4, "<< /Fields 5 0 R /SigFlags 1 >>")
+            .object(5, "[]")
+            .build()
+    }
+
+    pub fn indirect_annots() -> Vec<u8> {
+        Pdf::new(Xref::Table)
+            .object(1, "<< /Type /Catalog /Pages 2 0 R >>")
+            .object(2, ONE_PAGE)
+            .object(
+                3,
+                "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Annots 6 0 R >>",
+            )
+            .object(6, "[]")
+            .build()
+    }
+
+    pub fn page_tree_loop() -> Vec<u8> {
+        Pdf::new(Xref::Table)
+            .object(1, "<< /Type /Catalog /Pages 2 0 R >>")
+            .object(2, "<< /Type /Pages /Kids [2 0 R] /Count 1 >>")
+            .build()
     }
 }

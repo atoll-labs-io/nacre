@@ -48,6 +48,15 @@ fn xref_entry_pointing_elsewhere_is_refused() {
 }
 
 #[test]
+fn xref_entry_pointing_at_another_object_is_refused() {
+    let err = refuse(&refusals::xref_entry_pointing_at_another_object());
+    assert!(
+        matches!(err, Error::ObjectMismatch { object, .. } if object == ObjectId::new(1, 0)),
+        "{err:?}"
+    );
+}
+
+#[test]
 fn missing_catalog_is_refused() {
     let err = refuse(&refusals::missing_catalog());
     assert!(

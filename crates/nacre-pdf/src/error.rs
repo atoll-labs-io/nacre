@@ -92,4 +92,22 @@ pub enum Error {
     /// not tied to a position.
     #[error("{what} exceeds its limit at offset {offset}")]
     Limit { what: &'static str, offset: usize },
+    /// An object the writer cannot write where it was given.
+    #[error("cannot write {what}")]
+    Unwritable { what: &'static str },
+    /// The caller's signature dictionary entries hold a key the writer sets itself.
+    #[error("the signature dictionary entry /{key} is set by the writer")]
+    ReservedEntry { key: String },
+    /// The signature slot was asked with no room for a signature.
+    #[error("the signature slot must hold at least one byte")]
+    EmptySignatureSlot,
+    /// A signature field with this full name already exists.
+    #[error("a signature field named {name} already exists")]
+    DuplicateField { name: String },
+    /// The document is certified with DocMDP `/P 1`: no approval signature may be added.
+    #[error("the document is certified with no changes allowed (DocMDP /P 1)")]
+    CertifiedNoChanges,
+    /// The DER signature is longer than the slot reserved for it.
+    #[error("the signature is {len} bytes, more than the {capacity} reserved")]
+    SignatureTooLarge { len: usize, capacity: usize },
 }
