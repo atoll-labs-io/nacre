@@ -1,0 +1,23 @@
+[package]
+name = "nacre-pdf-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+nacre-pdf = { path = ".." }
+
+[[bin]]
+name = "parse"
+path = "fuzz_targets/parse.rs"
+test = false
+doc = false
+bench = false
+
+# Not a member of the root workspace, which only lists crates/*.
+[workspace]
+members = ["."]

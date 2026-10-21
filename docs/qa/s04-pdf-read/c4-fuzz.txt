@@ -1,0 +1,64 @@
+Criterion 4 — 'a fuzzing target exists': listed by cargo-fuzz 0.13.2 and run for 120 s on nightly, seeded with copies of the 14 corpus files, in the working copy /tmp/qa-s04.9bHZId/repo (not the worktree).
+Target source, crates/nacre-pdf/fuzz/fuzz_targets/parse.rs:
+```rust
+#![no_main]
+#![forbid(unsafe_code)]
+
+use libfuzzer_sys::fuzz_target;
+
+fuzz_target!(|data: &[u8]| {
+    if let Ok(doc) = nacre_pdf::Document::parse(data) {
+        let _ = doc.revisions();
+        let _ = doc.trailer();
+        let _ = doc.signature_fields();
+        let _ = doc.object(doc.catalog_id());
+    }
+});
+```
+
+$ cd /tmp/qa-s04.9bHZId/repo/crates/nacre-pdf && cargo fuzz list
+stdin: none
+--- stdout
+parse
+--- stderr
+--- exit code: 0
+
+$ cd /tmp/qa-s04.9bHZId/repo/crates/nacre-pdf && cargo +nightly fuzz run parse /tmp/qa-s04.9bHZId/scratch/fuzzcorpus -- -max_total_time=120 -rss_limit_mb=1024 -timeout=10 -artifact_prefix=/tmp/qa-s04.9bHZId/scratch/
+stdin: none
+--- stdout
+--- stderr
+[cargo build lines omitted]
+INFO: Seed: 1105838794
+INFO: Loaded 1 modules   (7857 inline 8-bit counters): 7857 [0x55b36b4d3460, 0x55b36b4d5311), 
+INFO: Loaded 1 PC tables (7857 PCs): 7857 [0x55b36b4d5318,0x55b36b4f3e28), 
+INFO:       14 files found in /tmp/qa-s04.9bHZId/scratch/fuzzcorpus
+INFO: -max_len is not provided; libFuzzer will not generate inputs larger than 206397 bytes
+INFO: seed corpus: files: 14 min: 140b max: 206397b total: 821977b rss: 47Mb
+#15	INITED cov: 1578 ft: 4573 corp: 14/802Kb exec/s: 0 rss: 56Mb
+#16	NEW    cov: 1580 ft: 4578 corp: 15/920Kb lim: 206397 exec/s: 0 rss: 57Mb L: 121030/206397 MS: 1 EraseBytes-
+#17	NEW    cov: 1580 ft: 4579 corp: 16/922Kb lim: 206397 exec/s: 0 rss: 57Mb L: 1403/206397 MS: 1 ShuffleBytes-
+#20	NEW    cov: 1581 ft: 4581 corp: 17/1071Kb lim: 206397 exec/s: 0 rss: 58Mb L: 152967/206397 MS: 3 CMP-ChangeBinInt-CMP- DE: "\201\000\000\000\000\000\000\025"-"\362\377\377\377"-
+#25	NEW    cov: 1583 ft: 4586 corp: 18/1072Kb lim: 206397 exec/s: 0 rss: 58Mb L: 635/206397 MS: 5 ChangeByte-InsertByte-InsertRepeatedBytes-PersAutoDict-EraseBytes- DE: "\201\000\000\000\000\000\000\025"-
+#26	NEW    cov: 1584 ft: 4593 corp: 19/1072Kb lim: 206397 exec/s: 0 rss: 58Mb L: 140/206397 MS: 1 ChangeByte-
+#27	NEW    cov: 1585 ft: 4594 corp: 20/1072Kb lim: 206397 exec/s: 0 rss: 58Mb L: 145/206397 MS: 1 PersAutoDict- DE: "\201\000\000\000\000\000\000\025"-
+#33	NEW    cov: 1586 ft: 4597 corp: 21/1230Kb lim: 206397 exec/s: 0 rss: 59Mb L: 162097/206397 MS: 1 CopyPart-
+#36	NEW    cov: 1587 ft: 4598 corp: 22/1231Kb lim: 206397 exec/s: 0 rss: 59Mb L: 192/206397 MS: 3 ChangeBit-EraseBytes-InsertRepeatedBytes-
+#37	NEW    cov: 1588 ft: 4601 corp: 23/1414Kb lim: 206397 exec/s: 0 rss: 60Mb L: 187936/206397 MS: 1 CrossOver-
+#44	NEW    cov: 1590 ft: 4606 corp: 24/1414Kb lim: 206397 exec/s: 0 rss: 60Mb L: 141/206397 MS: 2 ChangeASCIIInt-InsertByte-
+#52	REDUCE cov: 1590 ft: 4606 corp: 24/1270Kb lim: 206397 exec/s: 0 rss: 61Mb L: 39932/206397 MS: 3 CopyPart-CMP-CrossOver- DE: "Size"-
+#54	NEW    cov: 1592 ft: 4612 corp: 25/1319Kb lim: 206397 exec/s: 0 rss: 62Mb L: 50827/206397 MS: 2 ShuffleBytes-ChangeBinInt-
+#55	NEW    cov: 1594 ft: 4614 corp: 26/1365Kb lim: 206397 exec/s: 0 rss: 62Mb L: 46884/206397 MS: 1 ChangeBinInt-
+#61	NEW    cov: 1594 ft: 4615 corp: 27/1390Kb lim: 206397 exec/s: 0 rss: 63Mb L: 25050/206397 MS: 1 CopyPart-
+#75	NEW    cov: 1594 ft: 4616 corp: 28/1559Kb lim: 206397 exec/s: 0 rss: 65Mb L: 173546/206397 MS: 4 ShuffleBytes-CopyPart-PersAutoDict-CopyPart- DE: "Size"-
+	NEW_FUNC[1/1]: 0x55b36b2f1a60  (/tmp/qa-s04.9bHZId/repo/crates/nacre-pdf/fuzz/target/x86_64-unknown-linux-gnu/release/parse+0x1a2a60) (BuildId: 7327681f2a7c9c325be43ebf3fe061edbe735d5c)
+#83	NEW    cov: 1617 ft: 4693 corp: 29/1560Kb lim: 206397 exec/s: 0 rss: 65Mb L: 1406/206397 MS: 3 PersAutoDict-ChangeBinInt-InsertRepeatedBytes- DE: "Size"-
+#84	REDUCE cov: 1617 ft: 4693 corp: 29/1552Kb lim: 206397 exec/s: 0 rss: 65Mb L: 30940/206397 MS: 1 EraseBytes-
+#100	NEW    cov: 1617 ft: 4696 corp: 30/1601Kb lim: 206397 exec/s: 0 rss: 67Mb L: 50828/206397 MS: 1 InsertByte-
+[... 4,000+ libFuzzer progress lines omitted; none reports a crash, a timeout, an OOM or a panic: grep -E 'crash|deadly|panicked|timeout|out-of-memory|ERROR' over the full output finds nothing ...]
+#414148	DONE   cov: 2255 ft: 8458 corp: 1098/33Mb lim: 206397 exec/s: 3422 rss: 498Mb
+[recommended dictionary omitted]
+--- exit code: 0
+
+
+$ ls /tmp/qa-s04.9bHZId/scratch | grep -E 'crash|leak|timeout|oom'
+--- exit code: 1 (no artifact written; libFuzzer writes one per crash under -artifact_prefix)
