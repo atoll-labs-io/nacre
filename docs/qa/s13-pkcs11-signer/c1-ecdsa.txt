@@ -1,0 +1,28 @@
+## Scenario 1a — ECDSA P-256 key found by label, digest signed, checked by OpenSSL
+cwd: scratch folder run; env SOFTHSM2_CONF=<throwaway token conf>, QA_PIN=<redacted, from env>
+token qa-token (SoftHSM 2.7.0): qa-ec (P-256, id 01) + qa-ec-cert, imported with softhsm2-util/p11tool
+probe source: docs/qa/s13-pkcs11-signer/probe.rs
+$ probe /usr/lib/softhsm/libsofthsm2.so qa-token label:qa-ec <sha256(msg)=43386c8eb9f31e73720d83adf3572821fffc6c9d9d19746a62e4d31a0a36efef> sig.der 3
+open: ok; algorithm EcdsaP256Sha256; chain length 1
+sign 0: ok, 72 bytes -> sig.der
+sign 1: ok, 71 bytes -> sig.der.1
+sign 2: ok, 71 bytes -> sig.der.2
+exit: 0
+
+$ openssl asn1parse -inform DER -in sig.der
+    0:d=0  hl=2 l=  70 cons: SEQUENCE          
+    2:d=1  hl=2 l=  33 prim: INTEGER           :EBB1750932AD07520254DE43212ECE3BB2AE54FCBA830F09F01375D41DC91AC2
+   37:d=1  hl=2 l=  33 prim: INTEGER           :CD3D54BBA5933B8521B2440F2C8C6B3EAE035E37B1C605DC2233F41D57556851
+exit: 0
+$ openssl dgst -sha256 -verify ec.pub -signature sig.der msg
+Verified OK
+exit: 0
+$ openssl dgst -sha256 -verify ec.pub -signature sig.der.1 msg
+Verified OK
+exit: 0
+$ openssl dgst -sha256 -verify ec.pub -signature sig.der.2 msg
+Verified OK
+exit: 0
+$ cmp sig.der.chain0.der <(openssl x509 -in ec.crt -outform DER)
+chain[0] is the token certificate
+exit: 0

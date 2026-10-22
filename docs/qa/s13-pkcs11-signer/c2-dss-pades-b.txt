@@ -1,0 +1,19 @@
+## Criterion 2 — a PDF signed by a SoftHSM key, judged by the bench's DSS 6.5.1
+cwd: scratch folder run; bench nacre-conformance started from the scratch copy (fresh PKI, check.sh: bench ready); env SOFTHSM2_CONF=<throwaway token conf>, CARGO_TARGET_DIR=<copy>/target
+token qa-token: bench signer key (P-256) and signer.cert.pem imported with id 0b; in.pdf = conformance/reference/unsigned.pdf
+$ printf '%s\n' "$QA_PIN" | sign_pdf /usr/lib/softhsm/libsofthsm2.so 0b <pki>/intermediate.cert.pem in.pdf out.pdf   # crates/nacre-pkcs11/examples/sign_pdf.rs
+signed: out.pdf
+indication: TotalPassed, sub-indication: None, format: PAdES-BASELINE-B
+report: <copy>/target/conformance/s13-yubikey-b.xml
+exit: 0
+
+$ grep -o -E '<ns2:MainIndication>[^<]*' <copy>/target/conformance/s13-yubikey-b.xml | sort | uniq -c
+     16 <ns2:MainIndication>urn:etsi:019102:mainindication:passed
+      1 <ns2:MainIndication>urn:etsi:019102:mainindication:total-passed
+
+$ grep -o -E '"(SignatureFormat|Indication|SubIndication)" : [^,]*' <copy>/target/conformance/s13-yubikey-b.json | sort | uniq -c
+      1 "Indication" : "FAILED"
+     50 "Indication" : "PASSED"
+      2 "Indication" : "TOTAL_PASSED"
+      2 "SignatureFormat" : "PAdES-BASELINE-B"
+     53 "SubIndication" : null

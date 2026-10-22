@@ -1,0 +1,29 @@
+[package]
+name = "nacre-pkcs11"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+license = "MIT OR Apache-2.0"
+description = "A Nacre signer whose private key stays on a PKCS#11 token (HSM, smart card, YubiKey PIV): ECDSA P-256 and RSA PKCS#1 v1.5."
+
+[lints]
+workspace = true
+
+[dependencies]
+nacre-core = { path = "../nacre-core", version = "0.1.0" }
+cryptoki = "0.12"
+# The version cryptoki 0.12 builds on: its raw bindings serve the one call it lacks.
+cryptoki-sys = "0.5"
+zeroize = "1"
+p256 = { version = "0.14", features = ["ecdsa"] }
+thiserror = "2"
+
+[dev-dependencies]
+nacre-core = { path = "../nacre-core", features = ["test-signer"] }
+# No version: neither is needed to publish this crate, so `cargo publish` drops them.
+nacre-pades = { path = "../nacre-pades" }
+nacre-conformance = { path = "../nacre-conformance", features = ["http"] }
+p256 = { version = "0.14", features = ["ecdsa", "pkcs8", "pem"] }
+x509-cert = "0.3"
+der = { version = "0.8", features = ["alloc", "pem"] }
+sha2 = "0.11"
