@@ -1,0 +1,28 @@
+#!/bin/sh
+# OCSP over HTTP POST for certificates issued by the bench intermediate, read from its
+# `openssl ca` index. The intermediate signs its own responses; a request nonce is echoed.
+set -eu
+
+PKI_DIR="${NACRE_PKI_STATE:-/run/nacre-pki}"
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+
+fail() {
+  printf 'Status: %s\r\nContent-Type: text/plain\r\n\r\n%s\n' "$1" "$2"
+  exit 0
+}
+
+[ "${REQUEST_METHOD:-}" = POST ] || fail "405 Method Not Allowed" "POST an OCSPRequest"
+length="${CONTENT_LENGTH:-0}"
+case "$length" in '' | *[!0-9]*) fail "400 Bad Request" "bad Content-Length" ;; esac
+[ "$length" -le 65536 ] || fail "413 Payload Too Large" "request over 64 KiB"
+
+head -c "$length" > "$work/request.der"
+openssl ocsp -index "$PKI_DIR/intermediate.index" -CA "$PKI_DIR/intermediate.cert.pem" \
+  -rsigner "$PKI_DIR/intermediate.cert.pem" -rkey "$PKI_DIR/intermediate.key.pem" \
+  -reqin "$work/request.der" -respout "$work/response.der" -nmin 5 \
+  > "$work/err" 2>&1 || fail "500 Internal Server Error" "$(cat "$work/err")"
+
+printf 'Content-Type: application/ocsp-response\r\nContent-Length: %s\r\n\r\n' \
+  "$(wc -c < "$work/response.der" | tr -d ' ')"
+cat "$work/response.der"

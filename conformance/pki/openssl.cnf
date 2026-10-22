@@ -1,0 +1,101 @@
+# OpenSSL configuration of the conformance bench's test PKI (ADR-0011).
+# Every path hangs off PKI_DIR, so the same file drives generate.sh on the
+# generated out/ directory and the responders on their writable copy of it.
+
+PKI_DIR = ${ENV::PKI_DIR}
+BENCH_URL = http://127.0.0.1:18081
+
+[ req ]
+distinguished_name = req_dn
+prompt = no
+utf8 = yes
+
+[ req_dn ]
+CN = placeholder
+
+[ ca ]
+default_ca = intermediate_ca
+
+[ root_ca ]
+new_certs_dir = $PKI_DIR/.newcerts
+default_md = sha256
+policy = policy_any
+unique_subject = no
+default_startdate = 20260101000000Z
+default_enddate = 20460101000000Z
+default_crl_days = 7300
+database = $PKI_DIR/root.index
+serial = $PKI_DIR/root.serial
+crlnumber = $PKI_DIR/root.crlnumber
+certificate = $PKI_DIR/root.cert.pem
+private_key = $PKI_DIR/root.key.pem
+
+[ intermediate_ca ]
+new_certs_dir = $PKI_DIR/.newcerts
+default_md = sha256
+policy = policy_any
+unique_subject = no
+default_startdate = 20260101000000Z
+default_enddate = 20460101000000Z
+default_crl_days = 7300
+database = $PKI_DIR/intermediate.index
+serial = $PKI_DIR/intermediate.serial
+crlnumber = $PKI_DIR/intermediate.crlnumber
+certificate = $PKI_DIR/intermediate.cert.pem
+private_key = $PKI_DIR/intermediate.key.pem
+
+[ policy_any ]
+countryName = optional
+organizationName = optional
+commonName = supplied
+
+[ v3_root ]
+basicConstraints = critical, CA:true
+keyUsage = critical, keyCertSign, cRLSign
+subjectKeyIdentifier = hash
+
+[ v3_intermediate ]
+basicConstraints = critical, CA:true, pathlen:0
+keyUsage = critical, keyCertSign, cRLSign
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always
+crlDistributionPoints = URI:$BENCH_URL/crl/root.crl
+
+[ v3_signer ]
+basicConstraints = critical, CA:false
+keyUsage = critical, digitalSignature, nonRepudiation
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always
+crlDistributionPoints = URI:$BENCH_URL/crl/intermediate.crl
+authorityInfoAccess = OCSP;URI:$BENCH_URL/cgi-bin/ocsp
+
+[ v3_tsa ]
+basicConstraints = critical, CA:false
+keyUsage = critical, digitalSignature, nonRepudiation
+extendedKeyUsage = critical, timeStamping
+subjectKeyIdentifier = hash
+authorityKeyIdentifier = keyid:always
+crlDistributionPoints = URI:$BENCH_URL/crl/intermediate.crl
+authorityInfoAccess = OCSP;URI:$BENCH_URL/cgi-bin/ocsp
+
+[ crl_ext ]
+authorityKeyIdentifier = keyid:always
+
+[ tsa ]
+default_tsa = bench_tsa
+
+[ bench_tsa ]
+serial = $PKI_DIR/tsa.serial
+crypto_device = builtin
+signer_cert = $PKI_DIR/tsa.cert.pem
+certs = $PKI_DIR/intermediate.cert.pem
+signer_key = $PKI_DIR/tsa.key.pem
+signer_digest = sha256
+# 2.999 is the ITU-T example arc: this policy exists for the bench only.
+default_policy = 2.999.1.1
+digests = sha256, sha384, sha512
+accuracy = secs:1
+ordering = no
+tsa_name = yes
+ess_cert_id_chain = no
+ess_cert_id_alg = sha256

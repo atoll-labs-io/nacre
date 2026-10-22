@@ -1,0 +1,67 @@
+name: Conformance
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # Cargo.lock is not versioned (ADR-0003): a daily run catches a dependency release
+    # even when no pull request is open (ADR-0011).
+    - cron: "17 4 * * *"
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    env:
+      NACRE_DSS_URL: http://127.0.0.1:18080
+      NACRE_SOFTHSM_MODULE: /usr/lib/softhsm/libsofthsm2.so
+    steps:
+      - uses: actions/checkout@v4
+      # Without an argument, rustup installs the toolchain pinned by rust-toolchain.toml.
+      - run: rustup toolchain install
+      - uses: docker/setup-buildx-action@v3
+      # The DSS image takes about ten minutes to build from source; the cache keeps it (ADR-0007).
+      - uses: docker/build-push-action@v6
+        with:
+          context: conformance/dss
+          file: conformance/dss/Containerfile
+          load: true
+          tags: localhost/nacre-dss:6.5.1
+          cache-from: type=gha,scope=nacre-dss
+          cache-to: type=gha,scope=nacre-dss,mode=max
+      - run: docker compose -f conformance/compose.yaml build pki
+      # No private key is committed: a fresh PKI each run, then references signed with it.
+      - run: docker compose -f conformance/compose.yaml --profile init run --rm pki-init
+      - run: docker compose -f conformance/compose.yaml up -d
+      - run: sh conformance/check.sh
+      - run: sh conformance/reference/generate.sh
+      # qpdf is a CI judge of the PDF output (ADR-0007), called by the ignored conformance tests.
+      - run: sudo apt-get update && sudo apt-get install -y softhsm2 qpdf
+      - run: cargo test --workspace --all-features -- --ignored
+      # Only the facade's end-to-end examples run here (s20): other crates may ship
+      # examples that are tools needing arguments, such as corpus generators.
+      - name: Run the examples of the facade crate
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          examples=(crates/nacre-sig/examples/*.rs)
+          if [ ${#examples[@]} -eq 0 ]; then
+            echo "no examples"
+          fi
+          for file in "${examples[@]}"; do
+            example="$(basename "$file" .rs)"
+            echo "running example $example of nacre-sig"
+            cargo run -p nacre-sig --example "$example" --all-features
+          done
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conformance-reports
+          path: target/conformance/
+          if-no-files-found: warn
+      - if: failure()
+        run: docker compose -f conformance/compose.yaml logs
+      - if: always()
+        run: docker compose -f conformance/compose.yaml down

@@ -1,0 +1,11 @@
+# The bench's CRL server, RFC 3161 TSA and OCSP responder (ADR-0011):
+# busybox httpd on 127.0.0.1:18081, OpenSSL behind two CGI scripts.
+FROM docker.io/library/alpine:3.24.3@sha256:71e9b7bae160ba167fa17414401b94cbcdaf3c32feeab9298bd794a2a0614c35
+
+RUN apk add --no-cache openssl busybox-extras
+
+COPY serve.sh /usr/local/bin/nacre-pki-serve
+COPY cgi-bin/ /srv/nacre-pki/cgi-bin/
+RUN chmod 0755 /usr/local/bin/nacre-pki-serve /srv/nacre-pki/cgi-bin/*
+
+ENTRYPOINT ["/usr/local/bin/nacre-pki-serve"]

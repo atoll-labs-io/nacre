@@ -1,0 +1,40 @@
+# Nacre's conformance bench (ADR-0007, ADR-0011): DSS 6.5.1 on 127.0.0.1:18080 and the
+# test PKI's CRL server, TSA and OCSP responder on 127.0.0.1:18081.
+# Host networking gives DSS, inside its container, and the tests, on the host, the same
+# URLs, the ones written in the bench certificates.
+# No private key is committed: pki-init generates a fresh PKI in pki/out/, run on its own
+# before `up` (conformance/README.md), so DSS loads its anchors from finished files.
+# podman-compose does not wait for `service_completed_successfully`, hence no depends_on.
+name: nacre-conformance
+
+services:
+  pki-init:
+    image: localhost/nacre-pki
+    build:
+      context: ./pki
+      dockerfile: Containerfile
+    profiles: [init]
+    network_mode: none
+    entrypoint: ["sh", "/pki/generate.sh"]
+    volumes:
+      - ./pki:/pki
+
+  dss:
+    image: localhost/nacre-dss:6.5.1
+    build:
+      context: ./dss
+      dockerfile: Containerfile
+    network_mode: host
+    volumes:
+      - ./pki/out/anchors.p12:/usr/local/tomcat/lib/nacre-anchors.p12:ro
+
+  pki:
+    image: localhost/nacre-pki
+    # busybox httpd as PID 1 would ignore SIGTERM.
+    init: true
+    build:
+      context: ./pki
+      dockerfile: Containerfile
+    network_mode: host
+    volumes:
+      - ./pki/out:/pki:ro

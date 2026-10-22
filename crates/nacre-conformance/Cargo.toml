@@ -1,0 +1,25 @@
+[package]
+name = "nacre-conformance"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+license = "MIT OR Apache-2.0"
+description = "Nacre's conformance bench client: submits a signed file to a local, pinned DSS and reads its verdict."
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror = "2"
+serde_json = "1"
+base64ct = { version = "1.8", features = ["alloc"] }
+nacre-core = { path = "../nacre-core" }
+ureq = { version = "3", default-features = false, features = ["json"], optional = true }
+
+[features]
+default = []
+http = ["dep:ureq"]
+
+[dev-dependencies]
+nacre-conformance = { path = ".", features = ["http"] }
