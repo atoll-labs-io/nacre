@@ -1,0 +1,90 @@
+# Scenario script: $T/qa/src/main.rs (crate qa-s14, path deps on the copy's nacre-validate, nacre-pades, nacre-core[test-signer]); built with: cargo build (CARGO_TARGET_DIR=$T/src/target)
+
+## $T/qa/Cargo.toml
+[package]
+name = "qa-s14"
+version = "0.0.0"
+edition = "2024"
+[workspace]
+[dependencies]
+nacre-validate = { path = "../src/crates/nacre-validate" }
+nacre-pades = { path = "../src/crates/nacre-pades" }
+nacre-core = { path = "../src/crates/nacre-core", features = ["test-signer"] }
+
+## $T/qa/src/main.rs
+// QA scenario driver for s14: calls only the public interface of nacre-validate.
+use std::panic::{AssertUnwindSafe, catch_unwind};
+
+fn report(path: &str) {
+    let bytes = match std::fs::read(path) {
+        Ok(b) => b,
+        Err(e) => { println!("cannot read {path}: {e}"); return; }
+    };
+    println!("input: {path} ({} bytes)", bytes.len());
+    match catch_unwind(AssertUnwindSafe(|| nacre_validate::validate(&bytes))) {
+        Err(_) => println!("PANIC"),
+        Ok(Err(e)) => println!("Err: kind={:?} message=\"{e}\" debug={e:?}", e.kind()),
+        Ok(Ok(results)) => {
+            println!("Ok: {} signature(s)", results.len());
+            for r in &results {
+                println!(
+                    "  field={:?} indication={:?} sub_indication={:?} level={:?} digest_verified={} signature_verified={} defect={:?}",
+                    r.field, r.report.indication(), r.report.sub_indication(), r.report.level(),
+                    r.digest_verified, r.signature_verified, r.defect
+                );
+            }
+        }
+    }
+}
+
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    match args[1].as_str() {
+        "sign" => {
+            let input = std::fs::read(&args[2]).unwrap();
+            let signer = nacre_core::TestSigner::from_secret(&[0x11; 32]).unwrap();
+            let t = nacre_pades::DateTime::new(2026, 10, 22, 8, 0, 0).unwrap();
+            match nacre_pades::sign(&input, &signer, t) {
+                Ok(out) => { std::fs::write(&args[3], out).unwrap(); println!("signed -> {}", args[3]); }
+                Err(e) => println!("sign error: {e}"),
+            }
+        }
+        "validate" => for p in &args[2..] { report(p); },
+        "fuzz" => {
+            // Deterministic mutation sweep over one file: n iterations, xorshift PRNG.
+            let base = std::fs::read(&args[2]).unwrap();
+            let n: usize = args[3].parse().unwrap();
+            let mut s: u64 = 0x9E3779B97F4A7C15;
+            let mut next = || { s ^= s << 13; s ^= s >> 7; s ^= s << 17; s };
+            let (mut ok, mut err, mut panics) = (0, 0, 0);
+            for _ in 0..n {
+                let mut m = base.clone();
+                let k = 1 + (next() % 4) as usize;
+                for _ in 0..k {
+                    let i = (next() as usize) % m.len();
+                    match next() % 3 { 0 => m[i] = next() as u8, 1 => { m.truncate(i.max(1)); } _ => m.insert(i, b"0123456789 <>[]/R"[(next() % 17) as usize]) }
+                }
+                match catch_unwind(AssertUnwindSafe(|| nacre_validate::validate(&m))) {
+                    Err(_) => panics += 1,
+                    Ok(Ok(_)) => ok += 1,
+                    Ok(Err(_)) => err += 1,
+                }
+            }
+            println!("mutations={n} ok={ok} err={err} panics={panics}");
+        }
+        other => println!("unknown mode {other}"),
+    }
+}
+
+## $T/mut.py (rewrites the fixed-width /ByteRange text in place, no re-signing)
+import sys
+src, dst, new = sys.argv[1], sys.argv[2], sys.argv[3]
+b = open(src, 'rb').read()
+i = b.index(b'/ByteRange [')
+j = b.index(b']', i) + 1
+old = b[i:j]
+new = new.encode()
+assert len(new) <= len(old), (new, old)
+new = new[:-1] + b' ' * (len(old) - len(new)) + b']'
+open(dst, 'wb').write(b[:i] + new + b[j:])
+print(old.decode(), '->', new.decode())

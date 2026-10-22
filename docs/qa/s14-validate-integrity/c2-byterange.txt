@@ -1,0 +1,39 @@
+# Criterion 2: /ByteRange not covering the whole file, overlapping, outside the file, not from 0, gap wider than /Contents (hand-forged from the s06 PDF, independent of the story's forge)
+# working directory: $T/work ($T = mktemp -d scratch copy of story/s14-validate-integrity, tree e3be979f4a05ef8132547028a2ec5a98208098cb)
+# Q = $T/src/target/debug/qa-s14 (scenario script, quoted whole in scenario-script.txt); C = $T/src/crates/nacre-validate/tests/corpus
+# stdin: none
+
+$ python3 -I /tmp/tmp.BjPpkNNqao/mut.py s06-signed.pdf br-nfs.pdf '/ByteRange [1 918 2603 576]' && $Q validate br-nfs.pdf
+/ByteRange [0 919 2603 576                    ] -> /ByteRange [1 918 2603 576                    ]
+input: br-nfs.pdf (3179 bytes)
+Ok: 1 signature(s)
+  field="Signature1" indication=TotalFailed sub_indication=Some(FormatFailure) level=None digest_verified=false signature_verified=false defect=Some(ByteRangeNotFromStart)
+[exit code: 0]
+
+$ python3 -I /tmp/tmp.BjPpkNNqao/mut.py s06-signed.pdf br-ovl.pdf '/ByteRange [0 2604 2603 576]' && $Q validate br-ovl.pdf
+/ByteRange [0 919 2603 576                    ] -> /ByteRange [0 2604 2603 576                   ]
+input: br-ovl.pdf (3179 bytes)
+Ok: 1 signature(s)
+  field="Signature1" indication=TotalFailed sub_indication=Some(FormatFailure) level=None digest_verified=false signature_verified=false defect=Some(ByteRangeOverlap)
+[exit code: 0]
+
+$ python3 -I /tmp/tmp.BjPpkNNqao/mut.py s06-signed.pdf br-out.pdf '/ByteRange [0 919 2603 577]' && $Q validate br-out.pdf
+/ByteRange [0 919 2603 576                    ] -> /ByteRange [0 919 2603 577                    ]
+input: br-out.pdf (3179 bytes)
+Ok: 1 signature(s)
+  field="Signature1" indication=TotalFailed sub_indication=Some(FormatFailure) level=None digest_verified=false signature_verified=false defect=Some(ByteRangeOutsideFile)
+[exit code: 0]
+
+$ python3 -I /tmp/tmp.BjPpkNNqao/mut.py s06-signed.pdf br-nwf.pdf '/ByteRange [0 919 2603 570]' && $Q validate br-nwf.pdf
+/ByteRange [0 919 2603 576                    ] -> /ByteRange [0 919 2603 570                    ]
+input: br-nwf.pdf (3179 bytes)
+Ok: 1 signature(s)
+  field="Signature1" indication=TotalFailed sub_indication=Some(FormatFailure) level=None digest_verified=false signature_verified=false defect=Some(ByteRangeNotWholeFile)
+[exit code: 0]
+
+$ python3 -I /tmp/tmp.BjPpkNNqao/mut.py s06-signed.pdf br-swa.pdf '/ByteRange [0 919 2610 569]' && $Q validate br-swa.pdf
+/ByteRange [0 919 2603 576                    ] -> /ByteRange [0 919 2610 569                    ]
+input: br-swa.pdf (3179 bytes)
+Ok: 1 signature(s)
+  field="Signature1" indication=TotalFailed sub_indication=Some(FormatFailure) level=None digest_verified=false signature_verified=false defect=Some(GapNotContents)
+[exit code: 0]

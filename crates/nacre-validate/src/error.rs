@@ -1,0 +1,43 @@
+/// Why a PDF could not be validated at all. A signature found defective is not an error:
+/// it is a [`SignatureValidation`](crate::SignatureValidation) with a failed report.
+#[non_exhaustive]
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    /// The PDF itself cannot be read.
+    #[error("the PDF cannot be read: {0}")]
+    Pdf(#[from] nacre_pdf::Error),
+    /// The PDF holds more signatures than are validated in one call.
+    #[error("{count} signatures, at most {max} are validated")]
+    TooManySignatures { count: usize, max: usize },
+}
+
+impl Error {
+    /// The coarse category of this error, safe to show to an untrusted party.
+    pub fn kind(&self) -> nacre_core::ErrorKind {
+        match self {
+            Self::Pdf(inner) => inner.kind(),
+            Self::TooManySignatures { .. } => nacre_core::ErrorKind::InvalidInput,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nacre_core::ErrorKind::{self, *};
+
+    #[test]
+    fn every_variant_has_its_kind() {
+        let rows: Vec<(Error, ErrorKind)> = vec![
+            (
+                Error::Pdf(nacre_pdf::Error::TrailingData { offset: 1 }),
+                InvalidInput,
+            ),
+            (Error::Pdf(nacre_pdf::Error::Encrypted), Indeterminate),
+            (Error::TooManySignatures { count: 2, max: 1 }, InvalidInput),
+        ];
+        for (error, kind) in rows {
+            assert_eq!(error.kind(), kind, "{error}");
+        }
+    }
+}

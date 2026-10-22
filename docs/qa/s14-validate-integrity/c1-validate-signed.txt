@@ -1,0 +1,31 @@
+# Criterion 1: validate a PDF signed by s06 (nacre_pades::sign), plus a third-party signed PDF and a twice-signed PDF
+# working directory: $T/work ($T = mktemp -d scratch copy of story/s14-validate-integrity, tree e3be979f4a05ef8132547028a2ec5a98208098cb)
+# Q = $T/src/target/debug/qa-s14 (scenario script, quoted whole in scenario-script.txt); C = $T/src/crates/nacre-validate/tests/corpus
+# stdin: none
+
+$ $Q sign $C/unsigned.pdf s06-signed.pdf
+signed -> s06-signed.pdf
+[exit code: 0]
+
+$ $Q validate s06-signed.pdf
+input: s06-signed.pdf (3179 bytes)
+Ok: 1 signature(s)
+  field="Signature1" indication=Indeterminate sub_indication=Some(NoCertificateChainFound) level=None digest_verified=true signature_verified=true defect=None
+[exit code: 0]
+
+$ $Q validate $C/certified-dss.pdf
+input: $T/src/crates/nacre-validate/tests/corpus/certified-dss.pdf (152955 bytes)
+Ok: 1 signature(s)
+  field="signature-test" indication=Indeterminate sub_indication=Some(NoCertificateChainFound) level=None digest_verified=true signature_verified=true defect=None
+[exit code: 0]
+
+$ $Q sign s06-signed.pdf twice.pdf
+signed -> twice.pdf
+[exit code: 0]
+
+$ $Q validate twice.pdf
+input: twice.pdf (5542 bytes)
+Ok: 2 signature(s)
+  field="Signature1" indication=TotalFailed sub_indication=Some(FormatFailure) level=None digest_verified=false signature_verified=false defect=Some(LaterRevision)
+  field="Signature2" indication=Indeterminate sub_indication=Some(NoCertificateChainFound) level=None digest_verified=true signature_verified=true defect=None
+[exit code: 0]
