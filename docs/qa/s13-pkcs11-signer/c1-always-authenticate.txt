@@ -1,0 +1,14 @@
+## Scenario 1d — key marked CKA_ALWAYS_AUTHENTICATE (the PIV 9c case), two signatures from one signer
+cwd: run; env SOFTHSM2_CONF=<throwaway token conf>, QA_PIN=<redacted, from env>
+token qa-token: qa-always (P-256, id 06, CKA_ALWAYS_AUTHENTICATE=true) stored by mkalways.rs (cryptoki), + its certificate
+$ probe /usr/lib/softhsm/libsofthsm2.so qa-token id:06 <digest> aa.sig 2
+open: ok; algorithm EcdsaP256Sha256; chain length 1
+sign 0: ok, 72 bytes -> aa.sig
+sign 1: ok, 71 bytes -> aa.sig.1
+exit: 0
+$ openssl dgst -sha256 -verify aa.pub -signature aa.sig msg
+Verified OK
+exit: 0
+$ openssl dgst -sha256 -verify aa.pub -signature aa.sig.1 msg
+Verified OK
+exit: 0

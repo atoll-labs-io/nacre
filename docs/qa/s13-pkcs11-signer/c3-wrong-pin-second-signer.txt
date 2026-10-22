@@ -1,0 +1,42 @@
+## Criterion 3, edge — a second signer opened on a token this process is already logged in to
+cwd: run; env SOFTHSM2_CONF=<throwaway token conf>, QA_PIN=<redacted, right PIN>; probe source: docs/qa/s13-pkcs11-signer/two.rs
+
+# run 1 — wrong PIN to the second signer
+$ QA_PIN2=WRONGpin77 two /usr/lib/softhsm/libsofthsm2.so <digest>
+signer A (id 01, right PIN) open: Ok("ok")
+signer B (id 02, PIN from QA_PIN2) open while A is alive: Err("this process is already logged in to the token; open one signer per token")
+signer A sign: Ok(71)
+signer B dropped
+signer A sign after B dropped: Ok(70)
+exit: 0
+
+# run 2 — wrong PIN to the second signer
+$ QA_PIN2=WRONGpin77 two /usr/lib/softhsm/libsofthsm2.so <digest>
+signer A (id 01, right PIN) open: Ok("ok")
+signer B (id 02, PIN from QA_PIN2) open while A is alive: Err("this process is already logged in to the token; open one signer per token")
+signer A sign: Ok(71)
+signer B dropped
+signer A sign after B dropped: Ok(71)
+exit: 0
+
+# right PIN to the second signer
+$ QA_PIN2=<right PIN> two /usr/lib/softhsm/libsofthsm2.so <digest>
+signer A (id 01, right PIN) open: Ok("ok")
+signer B (id 02, PIN from QA_PIN2) open while A is alive: Err("this process is already logged in to the token; open one signer per token")
+signer A sign: Ok(72)
+signer B dropped
+signer A sign after B dropped: Ok(70)
+exit: 0
+
+# the first signer dropped before the second is opened (probe seq.rs), wrong then right PIN
+$ QA_PIN2=WRONGpin77 seq /usr/lib/softhsm/libsofthsm2.so <digest>
+signer A (id 01, right PIN) sign: Ok(72)
+signer A dropped
+signer B (id 02, PIN from QA_PIN2) open after A dropped: Err("the token refused the PIN (few tries left) / WrongPin(CountLow)")
+exit: 0
+$ QA_PIN2=<right PIN> seq /usr/lib/softhsm/libsofthsm2.so <digest>
+signer A (id 01, right PIN) sign: Ok(72)
+signer A dropped
+signer B (id 02, PIN from QA_PIN2) open after A dropped: Ok("ok")
+signer B sign: Ok(256)
+exit: 0

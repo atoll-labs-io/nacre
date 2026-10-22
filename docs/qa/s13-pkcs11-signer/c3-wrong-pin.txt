@@ -1,0 +1,44 @@
+## Criterion 3 — wrong PIN
+cwd: run; env SOFTHSM2_CONF=<throwaway token conf>. PIN values below are throwaway values of this throwaway token; each output was searched for them (grep at the end).
+
+# wrong PIN 'WRONGpin77' given to open
+$ QA_PIN=WRONGpin77 probe /usr/lib/softhsm/libsofthsm2.so qa-token label:qa-ec <digest> w.sig
+open: kind Signer
+open Display: the token refused the PIN (few tries left)
+open Debug:   WrongPin(CountLow)
+exit: 2
+$ ls w.sig
+ls: impossible d'accéder à 'w.sig': Aucun fichier ou dossier de ce nom
+exit: 2
+
+# empty PIN
+$ QA_PIN= probe /usr/lib/softhsm/libsofthsm2.so qa-token label:qa-ec <digest> w.sig
+open: kind Signer
+open Display: the token refused the PIN (few tries left)
+open Debug:   WrongPin(CountLow)
+exit: 2
+
+# 300-character PIN
+$ QA_PIN=<300 x 'Z'> probe /usr/lib/softhsm/libsofthsm2.so qa-token label:qa-ec <digest> w.sig
+open: kind Signer
+open Display: the token refused the PIN (few tries left)
+open Debug:   WrongPin(CountLow)
+exit: 2
+
+# typo, then the right PIN, in the same process (QA_PIN_FIRST wrong, QA_PIN right)
+$ QA_PIN_FIRST=TYPOpin55 QA_PIN=<right PIN> probe /usr/lib/softhsm/libsofthsm2.so qa-token label:qa-ec <digest> retry.sig
+first open: kind Signer
+first open Display: the token refused the PIN (few tries left)
+first open Debug:   WrongPin(CountLow)
+open: ok; algorithm EcdsaP256Sha256; chain length 1
+sign 0: ok, 72 bytes -> retry.sig
+exit: 0
+Verified OK
+exit: 0
+
+# search for any PIN in every output above
+$ grep -c -E "WRONGpin77|TYPOpin55|<the right PIN>|ZZZZ" o1.txt o2.txt o3.txt o4.txt
+o2.txt:0
+o3.txt:0
+o4.txt:0
+o1.txt:0
