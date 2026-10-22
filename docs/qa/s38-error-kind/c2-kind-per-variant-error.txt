@@ -1,0 +1,42 @@
+# s38-error-kind — C2 invalid input: garbage, empty, truncated and hostile inputs to nacre-pdf (nacre-cms invalid inputs are in c2-kind-per-variant.txt)
+# Runs in a copy of story/s38-error-kind under $QA_TMP (mktemp -d). Install 'cargo fetch' exit 0; Build 'cargo build --workspace --all-features' exit 0.
+# Probe: scratch crate $QA_TMP/probe (source quoted whole in c1-error-kind.txt), CARGO_TARGET_DIR=$QA_TMP/target.
+
+$ cd $QA_TMP/probe && $QA_TMP/target/debug/probe pdf $QA_TMP/copy/crates/nacre-pdf/tests/corpus/hostile/circular-xref-chain.pdf $QA_TMP/copy/crates/nacre-pdf/tests/corpus/hostile/startxref-off-by-one.pdf $QA_TMP/copy/crates/nacre-pdf/tests/corpus/hostile/xref-malformed-prev.pdf
+(stdin: none)
+[pdf $QA_TMP/copy/crates/nacre-pdf/tests/corpus/hostile/circular-xref-chain.pdf]
+  kind()      = InvalidInput / "invalid input"
+  Display     = the /Prev chain loops back to offset 9
+  Debug       = XrefLoop { offset: 9 }
+
+[pdf $QA_TMP/copy/crates/nacre-pdf/tests/corpus/hostile/startxref-off-by-one.pdf]
+  kind()      = InvalidInput / "invalid input"
+  Display     = no cross-reference section at offset 564
+  Debug       = NotAnXrefSection { offset: 564 }
+
+[pdf $QA_TMP/copy/crates/nacre-pdf/tests/corpus/hostile/xref-malformed-prev.pdf]
+  kind()      = InvalidInput / "invalid input"
+  Display     = malformed cross-reference table at offset 66: /Prev is not an offset
+  Debug       = XrefTable { offset: 66, reason: "/Prev is not an offset" }
+
+[pdf empty]
+  kind()      = InvalidInput / "invalid input"
+  Display     = the input does not start with %PDF-
+  Debug       = MissingHeader
+
+[pdf text]
+  kind()      = InvalidInput / "invalid input"
+  Display     = the input does not start with %PDF-
+  Debug       = MissingHeader
+
+[pdf header only]
+  kind()      = InvalidInput / "invalid input"
+  Display     = no startxref statement in the last 1024 bytes
+  Debug       = MissingStartxref
+exit code: 0
+
+$ cd $QA_TMP/probe && $QA_TMP/target/debug/probe bogus-mode
+(stdin: none)
+usage: probe kinds|cms|pdf|secret
+exit code: 2
+
