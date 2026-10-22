@@ -1,0 +1,8 @@
+cwd: /tmp/qa-s06.rhEO8S/run
+stdin: none
+$ /tmp/qa-s06.rhEO8S/bin/qa-s06 sign /tmp/qa-s06.rhEO8S/copy/conformance/pki/out truncated-signed.pdf out.pdf
+--- stdout
+error: PDF: no startxref statement in the last 1024 bytes (kind InvalidInput) debug Pdf(MissingStartxref)
+--- stderr
+--- exit code: 2
+

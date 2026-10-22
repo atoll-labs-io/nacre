@@ -1,0 +1,11 @@
+cwd: /tmp/qa-s06.rhEO8S/run
+stdin: none
+$ sh -c cmp -n $(stat -c%s unsigned.pdf) unsigned.pdf once.pdf && echo "unsigned.pdf is a byte prefix of once.pdf"; cmp -n $(stat -c%s once.pdf) once.pdf twice.pdf && echo "once.pdf is a byte prefix of twice.pdf"; sha256sum unsigned.pdf; head -c $(stat -c%s unsigned.pdf) twice.pdf | sha256sum
+--- stdout
+unsigned.pdf is a byte prefix of once.pdf
+once.pdf is a byte prefix of twice.pdf
+e2519bc6fee13afbd4470f516b3de4a2e65abbd3da43493a411cc81ff430f86e  unsigned.pdf
+e2519bc6fee13afbd4470f516b3de4a2e65abbd3da43493a411cc81ff430f86e  -
+--- stderr
+--- exit code: 0
+

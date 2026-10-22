@@ -1,0 +1,27 @@
+cwd: /tmp/qa-s06.rhEO8S/run
+stdin: none
+$ /tmp/qa-s06.rhEO8S/bin/qa-s06 sign /tmp/qa-s06.rhEO8S/copy/conformance/pki/out junk.pdf junk-signed.pdf
+--- stdout
+error: PDF: data after the last %%EOF at offset 746 (kind InvalidInput) debug Pdf(TrailingData { offset: 746 })
+--- stderr
+--- exit code: 2
+
+cwd: /tmp/qa-s06.rhEO8S/run
+stdin: none
+$ sh -c cmp -n $(stat -c%s junk.pdf) junk.pdf junk-signed.pdf && echo "junk.pdf is a byte prefix of junk-signed.pdf"
+--- stdout
+--- stderr
+cmp: junk-signed.pdf: Aucun fichier ou dossier de ce nom
+--- exit code: 2
+
+cwd: /tmp/qa-s06.rhEO8S/run
+stdin: none
+$ /tmp/qa-s06.rhEO8S/bin/qa-s06 validate qa-s06-junk junk-signed.pdf
+--- stdout
+--- stderr
+
+thread 'main' (1728159) panicked at src/main.rs:64:47:
+called `Result::unwrap()` on an `Err` value: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+--- exit code: 101
+
