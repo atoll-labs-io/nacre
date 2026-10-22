@@ -111,3 +111,149 @@ pub enum Error {
     #[error("the signature is {len} bytes, more than the {capacity} reserved")]
     SignatureTooLarge { len: usize, capacity: usize },
 }
+
+impl Error {
+    /// The coarse category of this error, safe to show to an untrusted party.
+    pub fn kind(&self) -> nacre_core::ErrorKind {
+        use nacre_core::ErrorKind;
+        match self {
+            Self::UnsupportedFilter { .. }
+            | Self::UnsupportedPredictor { .. }
+            | Self::Encrypted => ErrorKind::Indeterminate,
+            Self::TooLarge { .. }
+            | Self::MissingHeader
+            | Self::MissingStartxref
+            | Self::TrailingData { .. }
+            | Self::NotAnXrefSection { .. }
+            | Self::XrefTable { .. }
+            | Self::XrefStream { .. }
+            | Self::XrefLoop { .. }
+            | Self::Syntax { .. }
+            | Self::TooDeep { .. }
+            | Self::DuplicateKey { .. }
+            | Self::StreamLength { .. }
+            | Self::Decode { .. }
+            | Self::DecodedTooLarge { .. }
+            | Self::ObjectNotFound { .. }
+            | Self::ObjectMismatch { .. }
+            | Self::ObjectStream { .. }
+            | Self::ReferenceLoop { .. }
+            | Self::WrongType { .. }
+            | Self::FieldLoop { .. }
+            | Self::Limit { .. }
+            | Self::Unwritable { .. }
+            | Self::ReservedEntry { .. }
+            | Self::EmptySignatureSlot
+            | Self::DuplicateField { .. }
+            | Self::CertifiedNoChanges
+            | Self::SignatureTooLarge { .. } => ErrorKind::InvalidInput,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nacre_core::ErrorKind::{self, *};
+
+    #[test]
+    fn every_variant_has_its_kind() {
+        let o = ObjectId::new(1, 0);
+        let rows: Vec<(Error, ErrorKind)> = vec![
+            (Error::TooLarge { len: 2, max: 1 }, InvalidInput),
+            (Error::MissingHeader, InvalidInput),
+            (Error::MissingStartxref, InvalidInput),
+            (Error::TrailingData { offset: 1 }, InvalidInput),
+            (Error::NotAnXrefSection { offset: 1 }, InvalidInput),
+            (
+                Error::XrefTable {
+                    offset: 1,
+                    reason: "r",
+                },
+                InvalidInput,
+            ),
+            (
+                Error::XrefStream {
+                    object: o,
+                    reason: "r",
+                },
+                InvalidInput,
+            ),
+            (Error::XrefLoop { offset: 1 }, InvalidInput),
+            (
+                Error::Syntax {
+                    offset: 1,
+                    expected: "e",
+                },
+                InvalidInput,
+            ),
+            (Error::TooDeep { offset: 1 }, InvalidInput),
+            (Error::DuplicateKey { offset: 1 }, InvalidInput),
+            (Error::StreamLength { object: o }, InvalidInput),
+            (
+                Error::UnsupportedFilter {
+                    object: o,
+                    filter: "f".into(),
+                },
+                Indeterminate,
+            ),
+            (
+                Error::UnsupportedPredictor {
+                    object: o,
+                    predictor: 3,
+                },
+                Indeterminate,
+            ),
+            (Error::Decode { object: o }, InvalidInput),
+            (Error::DecodedTooLarge { object: o, max: 1 }, InvalidInput),
+            (Error::ObjectNotFound { object: o }, InvalidInput),
+            (
+                Error::ObjectMismatch {
+                    object: o,
+                    offset: 1,
+                },
+                InvalidInput,
+            ),
+            (
+                Error::ObjectStream {
+                    object: o,
+                    reason: "r",
+                },
+                InvalidInput,
+            ),
+            (Error::ReferenceLoop { object: o }, InvalidInput),
+            (
+                Error::WrongType {
+                    object: o,
+                    expected: "e",
+                },
+                InvalidInput,
+            ),
+            (Error::Encrypted, Indeterminate),
+            (Error::FieldLoop { object: o }, InvalidInput),
+            (
+                Error::Limit {
+                    what: "w",
+                    offset: 0,
+                },
+                InvalidInput,
+            ),
+            (Error::Unwritable { what: "w" }, InvalidInput),
+            (Error::ReservedEntry { key: "k".into() }, InvalidInput),
+            (Error::EmptySignatureSlot, InvalidInput),
+            (Error::DuplicateField { name: "n".into() }, InvalidInput),
+            (Error::CertifiedNoChanges, InvalidInput),
+            (
+                Error::SignatureTooLarge {
+                    len: 2,
+                    capacity: 1,
+                },
+                InvalidInput,
+            ),
+        ];
+        assert_eq!(rows.len(), 30);
+        for (error, kind) in rows {
+            assert_eq!(error.kind(), kind, "{error}");
+        }
+    }
+}

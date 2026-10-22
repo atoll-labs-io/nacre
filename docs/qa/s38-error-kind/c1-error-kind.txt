@@ -1,0 +1,209 @@
+# s38-error-kind — C1 nominal: ErrorKind and nacre_core::Error::kind() through the public interface
+# Runs in a copy of story/s38-error-kind under $QA_TMP (mktemp -d). Install 'cargo fetch' exit 0; Build 'cargo build --workspace --all-features' exit 0.
+# Probe: scratch crate $QA_TMP/probe (source quoted whole in c1-error-kind.txt), CARGO_TARGET_DIR=$QA_TMP/target.
+
+## $QA_TMP/probe/Cargo.toml
+[package]
+name = "probe"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+nacre-core = { path = "../copy/crates/nacre-core", features = ["test-signer"] }
+nacre-cms = { path = "../copy/crates/nacre-cms" }
+nacre-pdf = { path = "../copy/crates/nacre-pdf" }
+x509-cert = "0.3"
+der = { version = "0.8", features = ["alloc"] }
+
+## $QA_TMP/probe/src/main.rs
+use nacre_core::{Error as CoreError, ErrorKind, Signer, TestSigner};
+
+fn render(label: &str, e: &(dyn std::error::Error + 'static), kind: ErrorKind) -> String {
+    let mut out = format!("[{label}]\n  kind()      = {:?} / \"{}\"\n  Display     = {}\n  Debug       = {:?}\n", kind, kind, e, e);
+    let mut src = e.source();
+    let mut depth = 1;
+    while let Some(s) = src {
+        out += &format!("  source[{depth}] = {} | {:?}\n", s, s);
+        src = s.source();
+        depth += 1;
+    }
+    out
+}
+
+fn main() {
+    let mode = std::env::args().nth(1).unwrap_or_default();
+    match mode.as_str() {
+        "kinds" => {
+            for k in [ErrorKind::InvalidInput, ErrorKind::InvalidSignature, ErrorKind::Indeterminate, ErrorKind::Signer, ErrorKind::Unavailable] {
+                println!("{:?} -> \"{}\"", k, k);
+            }
+            // Errors a user meets through the public interface of nacre-core.
+            let signer = TestSigner::from_secret(&[0x5A; 32]).expect("valid secret");
+            for len in [0usize, 31, 33, 4096] {
+                let e = signer.sign_digest(&vec![0u8; len]).unwrap_err();
+                println!("{}", render(&format!("core sign_digest len {len}"), &e, e.kind()));
+            }
+            let e = TestSigner::from_secret(&[0xFF; 32]).err().expect("out-of-range secret refused");
+            println!("{}", render("core from_secret [0xFF;32]", &e, e.kind()));
+            let e = CoreError::Timestamp("tsa at http://10.0.0.1 answered 503 for user alice".into());
+            println!("{}", render("core Timestamp(custom source)", &e, e.kind()));
+            let e = CoreError::Revocation("ocsp responder down".into());
+            println!("{}", render("core Revocation(custom source)", &e, e.kind()));
+            let e = CoreError::Signer("pkcs11 slot 3 locked".into());
+            println!("{}", render("core Signer(custom source)", &e, e.kind()));
+        }
+        "cms" => {
+            use nacre_cms::{Profile, SignedData, sign_detached};
+            let signer = TestSigner::from_secret(&[0x5A; 32]).unwrap();
+            let digest = [7u8; 32];
+            let good = sign_detached(&digest, &signer, &Profile::CMS, None).unwrap();
+            println!("signed {} bytes", good.len());
+            let sd = SignedData::from_der(&good).unwrap();
+            println!("verify_detached_digest(good) ok = {}", sd.verify_detached_digest(&digest).is_ok());
+            let show = |label: &str, r: Result<(), nacre_cms::Error>| match r {
+                Ok(()) => println!("[{label}] Ok (unexpected)\n"),
+                Err(e) => println!("{}", render(label, &e, e.kind())),
+            };
+            show("cms from_der(b\"hello\")", SignedData::from_der(b"hello").map(|_| ()));
+            show("cms from_der(empty)", SignedData::from_der(b"").map(|_| ()));
+            show("cms from_der(truncated)", SignedData::from_der(&good[..good.len() / 2]).map(|_| ()));
+            show("cms sign_detached digest 31 bytes", sign_detached(&[0u8; 31], &signer, &Profile::CMS, None).map(|_| ()));
+            let t = x509_cert::time::Time::from(der::DateTime::new(2026, 10, 22, 0, 0, 0).unwrap());
+            show("cms sign_detached PADES + signingTime", sign_detached(&digest, &signer, &Profile::PADES, Some(t)).map(|_| ()));
+            show("cms verify_detached_digest(other digest)", sd.verify_detached_digest(&[8u8; 32]).map(|_| ()));
+            show("cms verify_detached_digest(16 bytes)", sd.verify_detached_digest(&[8u8; 16]).map(|_| ()));
+            show("cms verify(None) on detached", sd.verify(None).map(|_| ()));
+            show("cms verify(Some(content)) wrong content", sd.verify(Some(b"other content")).map(|_| ()));
+            // Flip the last byte of the signature value (end of the DER).
+            let mut bad = good.clone();
+            let n = bad.len();
+            bad[n - 3] ^= 0x01;
+            match SignedData::from_der(&bad) {
+                Ok(b) => show("cms verify_detached_digest(tampered signature)", b.verify_detached_digest(&digest).map(|_| ())),
+                Err(e) => println!("{}", render("cms from_der(tampered signature)", &e, e.kind())),
+            }
+            // A signer whose chain is empty.
+            struct NoChain;
+            impl Signer for NoChain {
+                fn algorithm(&self) -> nacre_core::SignatureAlgorithm { nacre_core::SignatureAlgorithm::EcdsaP256Sha256 }
+                fn certificate_chain(&self) -> &[Vec<u8>] { &[] }
+                fn sign_digest(&self, _: &[u8]) -> Result<Vec<u8>, CoreError> { Err(CoreError::Signer("hsm offline".into())) }
+            }
+            show("cms sign_detached signer with empty chain", sign_detached(&digest, &NoChain, &Profile::CMS, None).map(|_| ()));
+            struct Failing(Vec<Vec<u8>>);
+            impl Signer for Failing {
+                fn algorithm(&self) -> nacre_core::SignatureAlgorithm { nacre_core::SignatureAlgorithm::EcdsaP256Sha256 }
+                fn certificate_chain(&self) -> &[Vec<u8>] { &self.0 }
+                fn sign_digest(&self, _: &[u8]) -> Result<Vec<u8>, CoreError> { Err(CoreError::Signer("hsm offline".into())) }
+            }
+            show("cms sign_detached signer that fails", sign_detached(&digest, &Failing(signer.certificate_chain().to_vec()), &Profile::CMS, None).map(|_| ()));
+            show("cms sign_detached signer with garbage certificate", sign_detached(&digest, &Failing(vec![b"not a cert".to_vec()]), &Profile::CMS, None).map(|_| ()));
+        }
+        "pdf" => {
+            use nacre_pdf::Document;
+            for path in std::env::args().skip(2) {
+                let bytes = std::fs::read(&path).unwrap();
+                match Document::parse(&bytes) {
+                    Ok(_) => println!("[pdf {path}] Ok\n"),
+                    Err(e) => println!("{}", render(&format!("pdf {path}"), &e, e.kind())),
+                }
+            }
+            for (label, b) in [("empty", &b""[..]), ("text", &b"hello world"[..]), ("header only", &b"%PDF-1.7\n"[..])] {
+                match Document::parse(b) {
+                    Ok(_) => println!("[pdf {label}] Ok\n"),
+                    Err(e) => println!("{}", render(&format!("pdf {label}"), &e, e.kind())),
+                }
+            }
+        }
+        "secret" => {
+            let secrets: [[u8; 32]; 3] = [[0xFF; 32], [0x5A; 32], [0x00; 32]];
+            let mut errors: Vec<(String, Box<dyn std::error::Error>, ErrorKind)> = Vec::new();
+            for s in secrets {
+                match TestSigner::from_secret(&s) {
+                    Err(e) => { let k = e.kind(); errors.push((format!("from_secret {:02x}", s[0]), Box::new(e), k)); }
+                    Ok(signer) => {
+                        let e = signer.sign_digest(&[0u8; 31]).unwrap_err();
+                        let k = e.kind();
+                        errors.push((format!("sign_digest(31) with {:02x}", s[0]), Box::new(e), k));
+                        let e = nacre_cms::sign_detached(&[0u8; 31], &signer, &nacre_cms::Profile::CMS, None).unwrap_err();
+                        let k = e.kind();
+                        errors.push((format!("cms sign_detached(31) with {:02x}", s[0]), Box::new(e), k));
+                    }
+                }
+            }
+            for (label, e, k) in &errors {
+                let mut text = format!("{}\n{:?}\n{:#?}\n{}\n{:?}\n", e, e, e, k, k);
+                let mut src = e.source();
+                while let Some(s) = src { text += &format!("{}\n{:?}\n{:#?}\n", s, s, s); src = s.source(); }
+                println!("--- {label} ---\n{text}");
+                for s in secrets {
+                    if s == [0u8; 32] { continue; }
+                    let lo: String = s.iter().map(|b| format!("{b:02x}")).collect();
+                    let up = lo.to_uppercase();
+                    let dec = s.iter().map(|b| b.to_string()).collect::<Vec<_>>().join(", ");
+                    let dec2 = s.iter().map(|b| b.to_string()).collect::<Vec<_>>().join(",");
+                    let found_raw = text.as_bytes().windows(8).any(|w| w == &s[..8]);
+                    let found = [&lo[..16], &up[..16], &dec[..20], &dec2[..16]].iter().any(|n| text.contains(*n)) || found_raw;
+                    println!("  secret {:02x}..: found = {found}", s[0]);
+                }
+            }
+        }
+        _ => { eprintln!("usage: probe kinds|cms|pdf|secret"); std::process::exit(2); }
+    }
+}
+
+$ cd $QA_TMP/probe && $QA_TMP/target/debug/probe kinds
+(stdin: none)
+InvalidInput -> "invalid input"
+InvalidSignature -> "invalid signature"
+Indeterminate -> "indeterminate"
+Signer -> "signer failure"
+Unavailable -> "service unavailable"
+[core sign_digest len 0]
+  kind()      = InvalidInput / "invalid input"
+  Display     = digest length is 0 bytes, the signature algorithm expects 32
+  Debug       = DigestLength { expected: 32, actual: 0 }
+
+[core sign_digest len 31]
+  kind()      = InvalidInput / "invalid input"
+  Display     = digest length is 31 bytes, the signature algorithm expects 32
+  Debug       = DigestLength { expected: 32, actual: 31 }
+
+[core sign_digest len 33]
+  kind()      = InvalidInput / "invalid input"
+  Display     = digest length is 33 bytes, the signature algorithm expects 32
+  Debug       = DigestLength { expected: 32, actual: 33 }
+
+[core sign_digest len 4096]
+  kind()      = InvalidInput / "invalid input"
+  Display     = digest length is 4096 bytes, the signature algorithm expects 32
+  Debug       = DigestLength { expected: 32, actual: 4096 }
+
+[core from_secret [0xFF;32]]
+  kind()      = Signer / "signer failure"
+  Display     = the signer failed
+  Debug       = Signer(signature::Error { source: None })
+  source[1] = signature error | signature::Error { source: None }
+
+[core Timestamp(custom source)]
+  kind()      = Unavailable / "service unavailable"
+  Display     = the timestamp authority failed
+  Debug       = Timestamp("tsa at http://10.0.0.1 answered 503 for user alice")
+  source[1] = tsa at http://10.0.0.1 answered 503 for user alice | "tsa at http://10.0.0.1 answered 503 for user alice"
+
+[core Revocation(custom source)]
+  kind()      = Unavailable / "service unavailable"
+  Display     = the revocation source failed
+  Debug       = Revocation("ocsp responder down")
+  source[1] = ocsp responder down | "ocsp responder down"
+
+[core Signer(custom source)]
+  kind()      = Signer / "signer failure"
+  Display     = the signer failed
+  Debug       = Signer("pkcs11 slot 3 locked")
+  source[1] = pkcs11 slot 3 locked | "pkcs11 slot 3 locked"
+exit code: 0
+

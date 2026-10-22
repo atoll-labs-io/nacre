@@ -10,5 +10,6 @@ description = "A strict PDF reader for signing: revisions, trailer, catalog and 
 workspace = true
 
 [dependencies]
+nacre-core = { path = "../nacre-core", version = "0.1.0" }
 thiserror = "2"
 miniz_oxide = "0.9"

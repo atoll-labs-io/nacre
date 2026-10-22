@@ -46,3 +46,40 @@ fn wrong_digest_length_is_refused() {
         "{err:?}"
     );
 }
+
+fn render_all(error: &dyn std::error::Error) -> String {
+    use std::fmt::Write;
+    let mut out = String::new();
+    let mut current: Option<&dyn std::error::Error> = Some(error);
+    while let Some(e) = current {
+        write!(out, "{e} {e:?} {e:#?} ").unwrap();
+        current = e.source();
+    }
+    out
+}
+
+fn assert_no_secret(rendered: &str, byte: u8) {
+    let hex = format!("{byte:02x}").repeat(32);
+    let list = vec![byte.to_string(); 2].join(", ");
+    let raw = String::from_utf8_lossy(&[byte; 4]).into_owned();
+    let lowered = rendered.to_lowercase();
+    assert!(!lowered.contains(&hex), "hex secret in {rendered}");
+    assert!(!rendered.contains(&list), "byte list in {rendered}");
+    assert!(!rendered.contains(&raw), "raw bytes in {rendered}");
+}
+
+#[test]
+fn errors_never_show_the_secret() {
+    let Err(refused) = TestSigner::from_secret(&[0xFF; 32]) else {
+        panic!("a scalar above the P-256 order must be refused");
+    };
+    let mut rendered = render_all(&refused);
+    rendered.push_str(&refused.kind().to_string());
+    assert_no_secret(&rendered, 0xFF);
+
+    let signer = TestSigner::from_secret(&[0x5A; 32]).unwrap();
+    let wrong = signer.sign_digest(&[0u8; 31]).unwrap_err();
+    let mut rendered = render_all(&wrong);
+    rendered.push_str(&wrong.kind().to_string());
+    assert_no_secret(&rendered, 0x5A);
+}

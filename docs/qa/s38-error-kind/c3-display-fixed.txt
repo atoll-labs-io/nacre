@@ -1,0 +1,28 @@
+# s38-error-kind — C3 nominal: Display of every ErrorKind is a fixed text; the same kind gives the same text whatever the input
+# Runs in a copy of story/s38-error-kind under $QA_TMP (mktemp -d). Install 'cargo fetch' exit 0; Build 'cargo build --workspace --all-features' exit 0.
+# Probe: scratch crate $QA_TMP/probe (source quoted whole in c1-error-kind.txt), CARGO_TARGET_DIR=$QA_TMP/target.
+
+$ cd $QA_TMP/probe && $QA_TMP/target/debug/probe kinds | grep -E -- '->|kind\(\)'
+(stdin: none)
+InvalidInput -> "invalid input"
+InvalidSignature -> "invalid signature"
+Indeterminate -> "indeterminate"
+Signer -> "signer failure"
+Unavailable -> "service unavailable"
+  kind()      = InvalidInput / "invalid input"
+  kind()      = InvalidInput / "invalid input"
+  kind()      = InvalidInput / "invalid input"
+  kind()      = InvalidInput / "invalid input"
+  kind()      = Signer / "signer failure"
+  kind()      = Unavailable / "service unavailable"
+  kind()      = Unavailable / "service unavailable"
+  kind()      = Signer / "signer failure"
+exit code: 0
+
+$ cd $QA_TMP/copy && CARGO_TARGET_DIR=$QA_TMP/target cargo test -p nacre-core --test error_kind 2>&1 | grep -E '^test |test result'
+(stdin: none)
+test core_kinds ... ok
+test kind_display_is_fixed ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+exit code: 0
+
