@@ -262,7 +262,7 @@ Les attaques et leurs fichiers d'exemple sont publiés (pdf-insecurity.org) ; n'
 - **Complexity**: 4
 - **Depends on**: s14-validate-integrity
 - **Surface**: `endpoint`
-- **Owns**: `crates/nacre-validate/`, `docs/security/attacks/pades.md`
+- **Owns**: `crates/nacre-validate/`, `crates/nacre-pdf/`, `docs/security/attacks/pades.md`
 
 ### Acceptance criteria
 - [ ] Chaque révision postérieure à une signature est listée dans le rapport et qualifiée : autorisée (`/DSS`, horodatage de document, nouvelle signature, remplissage de champ permis par DocMDP) ou non autorisée, avec les objets qu'elle change.
@@ -660,3 +660,20 @@ L'outil en ligne de commande et les liaisons pour d'autres langages restent en V
 
 ### Notes for the agent
 Story contrat (ADR-0012) : `nacre-core` est gelé après s01 et ne change que par une story contrat ; s06 à s37 suivent la convention « chaque `Error` expose `kind()` ». Les sous-indications EN 319 102-1 de `validate` sont des résultats, pas des erreurs : elles ne passent pas par `ErrorKind`. Ajouter une variante à `ErrorKind` est un changement de contrat, d'où `#[non_exhaustive]`.
+
+## s39-error-kind-from-sources — Le kind() d'une erreur d'horodatage ou de révocation dit sa vraie catégorie
+**As** développeur d'une application qui sert des tiers **I want** que le `kind()` d'une erreur de TSA ou de révocation dise la vraie catégorie **so that** je ne relance pas une attaque comme une panne.
+
+- **Complexity**: 2
+- **Depends on**: s07-tsp-client, s09-revocation-crl, s38-error-kind
+- **Surface**: `endpoint`
+- **Owns**: `crates/nacre-core/`, `crates/nacre-tsp/src/`, `crates/nacre-revocation/src/`
+
+### Acceptance criteria
+- [ ] `nacre_core::Error::Timestamp` et `nacre_core::Error::Revocation` portent un `ErrorKind` fixé par la source, `Unavailable` par défaut, et `kind()` le rend.
+- [ ] `HttpTsa` : un jeton forgé ou rejoué rend `InvalidSignature` ; une empreinte de mauvaise longueur rend `InvalidInput` ; une TSA injoignable rend `Unavailable`.
+- [ ] `HttpCrlSource` : une CRL invalide rend `InvalidSignature` ou `InvalidInput` selon la cause ; une adresse refusée (SSRF) rend `InvalidInput` ; un serveur injoignable rend `Unavailable`.
+- [ ] Un test par cas, sur un serveur local.
+
+### Notes for the agent
+Story contrat (ADR-0016, qui précise l'ADR-0012) : `nacre-core` est gelé et ne change que par une story contrat. Ne pas deviner le kind par downcast dans `nacre-core`. Jamais de TSA publique en test.
