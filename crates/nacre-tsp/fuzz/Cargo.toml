@@ -1,0 +1,25 @@
+[package]
+name = "nacre-tsp-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+rust-version = "1.97"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+nacre-core = { path = "../../nacre-core" }
+nacre-tsp = { path = ".." }
+
+# Its own workspace: the root manifest is frozen and must not list this crate.
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "response"
+path = "fuzz_targets/response.rs"
+test = false
+doc = false
+bench = false

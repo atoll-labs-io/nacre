@@ -1,0 +1,53 @@
+# Scenario c1-request-and-verify — driver scenarios.md, surface endpoint, platform lib
+## Script (src/bin/c1_request_and_verify.rs of a scratch crate depending on the copied crates/nacre-tsp, features http)
+```rust
+// Criterion 1: an imprint gives a DER TimeStampReq with a nonce and certReq; the
+// TimeStampResp is read and its TSTInfo verified.
+use nacre_core::DigestAlgorithm;
+use nacre_tsp::{Request, verify_response};
+use sha2::{Digest, Sha256};
+fn main() {
+    let dir = std::env::args().nth(1).unwrap();
+    let data = std::fs::read(format!("{dir}/data.bin")).unwrap();
+    let imprint = Sha256::digest(&data);
+    let nonce = [0xd4, 0x1c, 0xbf, 0xf4, 0xfd, 0xed, 0x9d, 0x81];
+    let req = Request::new(DigestAlgorithm::Sha256, &imprint, &nonce).unwrap();
+    let der = req.to_der().unwrap();
+    std::fs::write(std::env::args().nth(2).unwrap(), &der).unwrap();
+    let openssl = std::fs::read(format!("{dir}/request.tsq")).unwrap();
+    println!("request DER: {} bytes, equal to openssl's request.tsq: {}", der.len(), der == openssl);
+    let random = Request::with_random_nonce(DigestAlgorithm::Sha256, &imprint).unwrap();
+    println!("random nonce request: nonce {} bytes", random.nonce().len());
+    for name in ["bench.tsr", "digicert.tsr"] {
+        let resp = std::fs::read(format!("{dir}/{name}")).unwrap();
+        match verify_response(&resp, &req) {
+            Ok(t) => println!("{name}: verified, genTime {}, serial {} bytes, nonce equal {}, token {} bytes, TSA cert {} bytes",
+                t.gen_time(), t.serial_number().len(), t.nonce() == Some(&nonce[..]), t.token().len(), t.tsa_certificate().len()),
+            Err(e) => println!("{name}: ERROR {e} (kind {:?})", e.kind()),
+        }
+    }
+}
+```
+## Command
+cwd: <tmp>/scratch   stdin: /dev/null
+$ target/debug/c1_request_and_verify <tmp>/copy/crates/nacre-tsp/tests/corpus/recorded <tmp>/mine.tsq
+## stdout + stderr
+request DER: 70 bytes, equal to openssl's request.tsq: true
+random nonce request: nonce 8 bytes
+bench.tsr: verified, genTime 2026-10-22T09:26:32Z, serial 1 bytes, nonce equal true, token 1828 bytes, TSA cert 649 bytes
+digicert.tsr: verified, genTime 2026-10-22T09:25:50Z, serial 16 bytes, nonce equal true, token 5998 bytes, TSA cert 1777 bytes
+## Exit code: 0
+
+## Cross-check: the request the script wrote, read by OpenSSL
+$ openssl ts -query -in <tmp>/mine.tsq -text
+Using configuration from /etc/ssl/openssl.cnf
+Version: 1
+Hash Algorithm: sha256
+Message data:
+    0000 - ac 94 15 05 b5 d9 36 1d-90 bc 04 18 f0 aa 3d e1   ......6.......=.
+    0010 - ff 70 2a 92 ca 45 cf ca-8c 6e 34 b2 ec 82 7c 3c   .p*..E...n4...|<
+Policy OID: unspecified
+Nonce: 0xD41CBFF4FDED9D81
+Certificate required: yes
+Extensions:
+## Exit code: 0

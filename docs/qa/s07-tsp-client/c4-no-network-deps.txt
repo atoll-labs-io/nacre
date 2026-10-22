@@ -1,0 +1,161 @@
+# Scenario c4-no-network-deps — driver scenarios.md, surface endpoint, platform lib
+## Command
+cwd: <tmp>/copy (copy of the worktree's tracked files)   stdin: /dev/null
+$ cargo tree -p nacre-tsp -e normal --offline
+## stdout + stderr
+nacre-tsp v0.1.0 (<tmp>/copy/crates/nacre-tsp)
+├── der v0.8.2
+│   ├── const-oid v0.10.2
+│   ├── der_derive v0.8.0 (proc-macro)
+│   │   ├── proc-macro2 v1.0.107
+│   │   │   └── unicode-ident v1.0.27
+│   │   ├── quote v1.0.47
+│   │   │   └── proc-macro2 v1.0.107 (*)
+│   │   └── syn v2.0.119
+│   │       ├── proc-macro2 v1.0.107 (*)
+│   │       ├── quote v1.0.47 (*)
+│   │       └── unicode-ident v1.0.27
+│   ├── flagset v0.4.7
+│   ├── pem-rfc7468 v1.0.0
+│   │   └── base64ct v1.8.3
+│   └── zeroize v1.9.1
+├── getrandom v0.4.3
+│   ├── cfg-if v1.0.5
+│   ├── libc v0.2.191
+│   └── rand_core v0.10.1
+├── nacre-cms v0.1.0 (<tmp>/copy/crates/nacre-cms)
+│   ├── der v0.8.2 (*)
+│   ├── nacre-core v0.1.0 (<tmp>/copy/crates/nacre-core)
+│   │   └── thiserror v2.0.21
+│   │       └── thiserror-impl v2.0.21 (proc-macro)
+│   │           ├── proc-macro2 v1.0.107 (*)
+│   │           ├── quote v1.0.47 (*)
+│   │           └── syn v3.0.9
+│   │               ├── proc-macro2 v1.0.107 (*)
+│   │               ├── quote v1.0.47 (*)
+│   │               └── unicode-ident v1.0.27
+│   ├── p256 v0.14.0
+│   │   ├── ecdsa v0.17.0
+│   │   │   ├── der v0.8.2 (*)
+│   │   │   ├── digest v0.11.3
+│   │   │   │   ├── block-buffer v0.12.1
+│   │   │   │   │   └── hybrid-array v0.4.15
+│   │   │   │   │       ├── subtle v2.6.1
+│   │   │   │   │       ├── typenum v1.20.1
+│   │   │   │   │       └── zeroize v1.9.1
+│   │   │   │   ├── const-oid v0.10.2
+│   │   │   │   ├── crypto-common v0.2.2
+│   │   │   │   │   ├── getrandom v0.4.3 (*)
+│   │   │   │   │   ├── hybrid-array v0.4.15 (*)
+│   │   │   │   │   └── rand_core v0.10.1
+│   │   │   │   └── ctutils v0.4.3
+│   │   │   │       ├── cmov v0.5.4
+│   │   │   │       └── subtle v2.6.1
+│   │   │   ├── elliptic-curve v0.14.1
+│   │   │   │   ├── base16ct v1.0.0
+│   │   │   │   ├── crypto-bigint v0.7.5
+│   │   │   │   │   ├── cpubits v0.1.1
+│   │   │   │   │   ├── ctutils v0.4.3 (*)
+│   │   │   │   │   ├── getrandom v0.4.3 (*)
+│   │   │   │   │   ├── hybrid-array v0.4.15 (*)
+│   │   │   │   │   ├── num-traits v0.2.19
+│   │   │   │   │   ├── rand_core v0.10.1
+│   │   │   │   │   ├── subtle v2.6.1
+│   │   │   │   │   └── zeroize v1.9.1
+│   │   │   │   ├── crypto-common v0.2.2 (*)
+│   │   │   │   ├── digest v0.11.3 (*)
+│   │   │   │   ├── ff v0.14.0
+│   │   │   │   │   ├── rand_core v0.10.1
+│   │   │   │   │   └── subtle v2.6.1
+│   │   │   │   ├── group v0.14.0
+│   │   │   │   │   ├── ff v0.14.0 (*)
+│   │   │   │   │   ├── rand_core v0.10.1
+│   │   │   │   │   └── subtle v2.6.1
+│   │   │   │   ├── hybrid-array v0.4.15 (*)
+│   │   │   │   ├── pem-rfc7468 v1.0.0 (*)
+│   │   │   │   ├── pkcs8 v0.11.0
+│   │   │   │   │   ├── der v0.8.2 (*)
+│   │   │   │   │   └── spki v0.8.1
+│   │   │   │   │       └── der v0.8.2 (*)
+│   │   │   │   ├── rand_core v0.10.1
+│   │   │   │   ├── sec1 v0.8.1
+│   │   │   │   │   ├── base16ct v1.0.0
+│   │   │   │   │   ├── ctutils v0.4.3 (*)
+│   │   │   │   │   ├── der v0.8.2 (*)
+│   │   │   │   │   ├── hybrid-array v0.4.15 (*)
+│   │   │   │   │   ├── subtle v2.6.1
+│   │   │   │   │   └── zeroize v1.9.1
+│   │   │   │   ├── subtle v2.6.1
+│   │   │   │   └── zeroize v1.9.1
+│   │   │   ├── rfc6979 v0.6.0
+│   │   │   │   ├── crypto-bigint v0.7.5 (*)
+│   │   │   │   └── hmac v0.13.0
+│   │   │   │       └── digest v0.11.3 (*)
+│   │   │   ├── signature v3.0.0
+│   │   │   │   ├── digest v0.11.3 (*)
+│   │   │   │   └── rand_core v0.10.1
+│   │   │   ├── spki v0.8.1 (*)
+│   │   │   └── zeroize v1.9.1
+│   │   ├── elliptic-curve v0.14.1 (*)
+│   │   ├── primefield v0.14.0
+│   │   │   ├── crypto-bigint v0.7.5 (*)
+│   │   │   ├── crypto-common v0.2.2 (*)
+│   │   │   ├── ff v0.14.0 (*)
+│   │   │   ├── rand_core v0.10.1
+│   │   │   ├── subtle v2.6.1
+│   │   │   └── zeroize v1.9.1
+│   │   ├── primeorder v0.14.0
+│   │   │   ├── elliptic-curve v0.14.1 (*)
+│   │   │   ├── primefield v0.14.0 (*)
+│   │   │   └── wnaf v0.14.1
+│   │   │       ├── ff v0.14.0 (*)
+│   │   │       ├── group v0.14.0 (*)
+│   │   │       ├── hybrid-array v0.4.15 (*)
+│   │   │       └── primefield v0.14.0 (*)
+│   │   └── sha2 v0.11.1
+│   │       ├── cfg-if v1.0.5
+│   │       ├── cpufeatures v0.3.1
+│   │       └── digest v0.11.3 (*)
+│   ├── rsa v0.10.0-rc.19
+│   │   ├── const-oid v0.10.2
+│   │   ├── crypto-bigint v0.7.5 (*)
+│   │   ├── crypto-primes v0.7.2
+│   │   │   ├── crypto-bigint v0.7.5 (*)
+│   │   │   └── rand_core v0.10.1
+│   │   ├── digest v0.11.3 (*)
+│   │   ├── pkcs1 v0.8.0-rc.5
+│   │   │   ├── der v0.8.2 (*)
+│   │   │   └── spki v0.8.1 (*)
+│   │   ├── pkcs8 v0.11.0 (*)
+│   │   ├── rand_core v0.10.1
+│   │   ├── signature v3.0.0 (*)
+│   │   ├── spki v0.8.1 (*)
+│   │   └── zeroize v1.9.1
+│   ├── sha2 v0.11.1 (*)
+│   ├── spki v0.8.1 (*)
+│   ├── thiserror v2.0.21 (*)
+│   └── x509-cert v0.3.0
+│       ├── const-oid v0.10.2
+│       ├── der v0.8.2 (*)
+│       └── spki v0.8.1 (*)
+├── nacre-core v0.1.0 (<tmp>/copy/crates/nacre-core) (*)
+├── spki v0.8.1 (*)
+├── thiserror v2.0.21 (*)
+└── x509-cert v0.3.0 (*)
+## Exit code: 0
+
+## Network crates in that tree
+$ cargo tree -p nacre-tsp -e normal --offline --prefix none | grep -Ei "^(ureq|rustls|ring|webpki|hyper|reqwest|socket2|http |url |native-tls|openssl)"
+## Exit code: 1 (1 = grep found none)
+
+$ cargo tree -p nacre-tsp -e normal --offline --features http --prefix none | grep -Ei "^(ureq|rustls|ring|webpki)" | sort -u
+ring v0.17.14
+ring v0.17.14 (*)
+rustls-pki-types v1.15.1
+rustls-pki-types v1.15.1 (*)
+rustls v0.23.46
+rustls-webpki v0.103.16
+ureq-proto v0.6.5
+ureq v3.5.0
+webpki-roots v1.0.10
+## Exit code: 0

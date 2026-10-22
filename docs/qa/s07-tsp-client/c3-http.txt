@@ -1,0 +1,65 @@
+# Scenario c3-http — driver scenarios.md, surface endpoint, platform lib
+## Script (src/bin/c3_http.rs of a scratch crate depending on the copied crates/nacre-tsp, features http)
+```rust
+// Criterion 3: HttpTsa calls a TSA over HTTP and returns a verified token.
+use nacre_core::{DigestAlgorithm, TimestampAuthority};
+use nacre_tsp::{HttpTsa, verify_token};
+use sha2::{Digest, Sha256};
+fn main() {
+    let url = std::env::args().nth(1).unwrap();
+    let cert_der = std::fs::read(std::env::args().nth(2).unwrap()).unwrap();
+    let imprint = Sha256::digest(b"document QA s07, never sent");
+    let tsa = HttpTsa::new(&url);
+    for round in 1..=2 {
+        match tsa.timestamp(DigestAlgorithm::Sha256, &imprint) {
+            Ok(token) => {
+                let v = verify_token(&token, DigestAlgorithm::Sha256, &imprint).unwrap();
+                println!("round {round}: token {} bytes, verify_token ok, genTime {}, nonce {:?} bytes, TSA cert equals tsa.cert.der: {}",
+                    token.len(), v.gen_time(), v.nonce().map(|n| n.len()), v.tsa_certificate() == &cert_der[..]);
+            }
+            Err(e) => println!("round {round}: ERROR {e} (kind {:?})", e.kind()),
+        }
+    }
+}
+```
+## Command
+cwd: <tmp>/scratch   stdin: /dev/null
+$ target/debug/c3_http http://127.0.0.1:28461/cgi-bin/tsa <tmp>/tsa.cert.der
+## stdout + stderr (first run; the second run printed the same lines)
+round 1: token 1826 bytes, verify_token ok, genTime 2026-10-22T12:21:12Z, nonce Some(8) bytes, TSA cert equals tsa.cert.der: true
+round 2: token 1825 bytes, verify_token ok, genTime 2026-10-22T12:21:12Z, nonce Some(8) bytes, TSA cert equals tsa.cert.der: true
+## Exit code: 0
+
+## TSA behind 127.0.0.1:28461 (started by QA, not the s02 bench container)
+s02's own CGI script conformance/pki/cgi-bin/tsa (openssl ts -reply), run on a PKI freshly generated in the copy by conformance/pki/generate.sh (OpenSSL 3.6.5), its out/ copied to <tmp>/state, behind this wrapper:
+$ setsid python3 -I tsa_server.py 28461 <tmp>/copy/conformance/pki/cgi-bin/tsa <tmp>/state
+tsa.cert.der = openssl x509 -in <tmp>/state/tsa.cert.pem -outform DER
+```python
+import http.server, os, subprocess, sys
+CGI = sys.argv[2]; STATE = sys.argv[3]
+class H(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length", "0"))
+        body = self.rfile.read(n)
+        env = dict(os.environ, REQUEST_METHOD="POST", CONTENT_LENGTH=str(n), NACRE_PKI_STATE=STATE)
+        out = subprocess.run(["sh", CGI], input=body, env=env, capture_output=True).stdout
+        head, _, payload = out.partition(b"\r\n\r\n")
+        status = 200; headers = []
+        for line in head.split(b"\r\n"):
+            k, _, v = line.decode().partition(": ")
+            if k == "Status": status = int(v.split()[0])
+            else: headers.append((k, v))
+        self.send_response(status)
+        for k, v in headers: self.send_header(k, v)
+        self.end_headers(); self.wfile.write(payload)
+    def log_message(self, fmt, *a):
+        sys.stderr.write("%s %s\n" % (self.headers.get("Content-Type"), fmt % a))
+http.server.HTTPServer(("127.0.0.1", int(sys.argv[1])), H).serve_forever()
+```
+Server log over both runs (Content-Type of each request received, request line, status; the first GET is QA's readiness probe):
+None "GET / HTTP/1.1" 501 -
+application/timestamp-query "POST /cgi-bin/tsa HTTP/1.1" 200 -
+application/timestamp-query "POST /cgi-bin/tsa HTTP/1.1" 200 -
+application/timestamp-query "POST /cgi-bin/tsa HTTP/1.1" 200 -
+application/timestamp-query "POST /cgi-bin/tsa HTTP/1.1" 200 -
+Four POSTs for two runs of two rounds: the 5-byte-imprint case of c3-http-error.txt, run twice against this same URL, produced no request.
