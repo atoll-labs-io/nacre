@@ -1,0 +1,41 @@
+# Scenario c1-request-and-verify-error — driver scenarios.md, surface endpoint, platform lib
+## Script (src/bin/c1_request_and_verify_error.rs of a scratch crate depending on the copied crates/nacre-tsp, features http)
+```rust
+// Criterion 1, invalid input: an imprint of the wrong length, a response that is not
+// DER, a refused status.
+use nacre_core::DigestAlgorithm;
+use nacre_tsp::{Request, verify_response};
+fn main() {
+    match Request::new(DigestAlgorithm::Sha256, &[0u8; 20], &[1]) {
+        Ok(_) => println!("20-byte imprint as SHA-256: ACCEPTED"),
+        Err(e) => println!("20-byte imprint as SHA-256: {e} (kind {:?}, debug {e:?})", e.kind()),
+    }
+    match Request::new(DigestAlgorithm::Sha512, &[0u8; 32], &[1]) {
+        Ok(_) => println!("32-byte imprint as SHA-512: ACCEPTED"),
+        Err(e) => println!("32-byte imprint as SHA-512: {e} (kind {:?})", e.kind()),
+    }
+    let req = Request::new(DigestAlgorithm::Sha256, &[0u8; 32], &[1]).unwrap();
+    for (label, bytes) in [
+        ("plain text", b"HTTP error page".to_vec()),
+        ("empty", vec![]),
+        ("status rejection(2) with failInfo badAlg", vec![0x30, 0x09, 0x30, 0x07, 0x02, 0x01, 0x02, 0x03, 0x02, 0x07, 0x80]),
+        ("status granted, no token", vec![0x30, 0x05, 0x30, 0x03, 0x02, 0x01, 0x00]),
+    ] {
+        match verify_response(&bytes, &req) {
+            Ok(_) => println!("{label}: ACCEPTED"),
+            Err(e) => println!("{label}: {e} (kind {:?})", e.kind()),
+        }
+    }
+}
+```
+## Command
+cwd: <tmp>/scratch   stdin: /dev/null
+$ target/debug/c1_request_and_verify_error 
+## stdout + stderr
+20-byte imprint as SHA-256: digest length is 20 bytes, the algorithm produces 32 (kind InvalidInput, debug DigestLength { expected: 32, actual: 20 })
+32-byte imprint as SHA-512: digest length is 32 bytes, the algorithm produces 64 (kind InvalidInput)
+plain text: invalid DER: unexpected ASN.1 DER tag: expected SEQUENCE, got APPLICATION [8] (primitive) (kind InvalidInput)
+empty: invalid DER: ASN.1 DER message is incomplete: expected 1, actual 0 at DER byte 0 (kind InvalidInput)
+status rejection(2) with failInfo badAlg: the TSA refused the request: status 2, failure info Some(1) (kind Unavailable)
+status granted, no token: the response is granted but carries no token (kind InvalidInput)
+## Exit code: 0

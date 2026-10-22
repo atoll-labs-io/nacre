@@ -1,0 +1,39 @@
+# Scenario c3-http-error — driver scenarios.md, surface endpoint, platform lib
+## Script (src/bin/c3_http_error.rs of a scratch crate depending on the copied crates/nacre-tsp, features http)
+```rust
+// Criterion 3, invalid input: nothing listens, a server that is not a TSA, a malformed
+// URL, an imprint of the wrong length.
+use nacre_core::{DigestAlgorithm, TimestampAuthority};
+use nacre_tsp::HttpTsa;
+fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    for (label, url, len) in [
+        ("closed port", args[0].as_str(), 32usize),
+        ("not a TSA (python http.server, no POST handler)", args[1].as_str(), 32),
+        ("malformed URL", "not a url", 32),
+        ("imprint of 5 bytes", args[2].as_str(), 5),
+    ] {
+        match HttpTsa::new(url).timestamp(DigestAlgorithm::Sha256, &vec![7u8; len]) {
+            Ok(t) => println!("{label}: TOKEN {} bytes", t.len()),
+            Err(e) => {
+                let src = std::error::Error::source(&e).map(|s| s.to_string());
+                println!("{label}: {e} | debug {e:?} | source: {src:?} | kind {:?}", e.kind());
+            }
+        }
+    }
+}
+```
+## Command
+cwd: <tmp>/scratch   stdin: /dev/null
+$ curl -s -o /dev/null --max-time 3 http://127.0.0.1:28464/   # exit 7: nothing listens there
+$ target/debug/c3_http_error http://127.0.0.1:28464/ http://127.0.0.1:28462/ http://127.0.0.1:28461/cgi-bin/tsa
+## stdout + stderr (first run; the second run printed the same lines)
+closed port: the timestamp authority failed | debug Timestamp(Http(Io(Os { code: 111, kind: ConnectionRefused, message: "Connection refused" }))) | source: Some("TSA request failed: io: Connection refused (os error 111)") | kind Unavailable
+not a TSA (python http.server, no POST handler): the timestamp authority failed | debug Timestamp(Http(StatusCode(501))) | source: Some("TSA request failed: http status: 501") | kind Unavailable
+malformed URL: the timestamp authority failed | debug Timestamp(Http(Http(http::Error(InvalidUri(InvalidUriChar))))) | source: Some("TSA request failed: http: invalid uri character") | kind Unavailable
+imprint of 5 bytes: digest length is 5 bytes, the signature algorithm expects 32 | debug DigestLength { expected: 32, actual: 5 } | source: None | kind InvalidInput
+## Exit code: 0
+
+## Servers (started by QA)
+- 127.0.0.1:28462: `setsid python3 -I -m http.server 28462 --bind 127.0.0.1 --directory <tmp>/www` (empty folder). Its log shows `"POST / HTTP/1.1" 501` once per run.
+- 127.0.0.1:28461: the TSA of c3-http.txt. Its log shows no request from the 5-byte-imprint case (see c3-http.txt).

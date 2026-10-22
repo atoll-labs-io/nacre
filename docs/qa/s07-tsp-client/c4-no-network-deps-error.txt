@@ -1,0 +1,16 @@
+# Scenario c4-no-network-deps-error — driver scenarios.md, surface endpoint, platform lib
+## Command
+cwd: <tmp>/copy (copy of the worktree's tracked files)   stdin: /dev/null
+$ cargo tree -p nacre-tsp -e normal --features http --offline -i ureq; echo "--- rustls:"; cargo tree -p nacre-tsp -e normal --offline -i rustls; echo "--- ring:"; cargo tree -p nacre-tsp -e normal --offline -i ring
+## stdout + stderr
+ureq v3.5.0
+└── nacre-tsp v0.1.0 (<tmp>/copy/crates/nacre-tsp)
+--- rustls:
+warning: nothing to print.
+
+To find dependencies that require specific target platforms, try to use option `--target all` first, and then narrow your search scope accordingly.
+--- ring:
+warning: nothing to print.
+
+To find dependencies that require specific target platforms, try to use option `--target all` first, and then narrow your search scope accordingly.
+## Exit code: 0

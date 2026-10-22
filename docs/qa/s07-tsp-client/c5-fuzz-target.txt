@@ -1,0 +1,31 @@
+# Scenario c5-fuzz-target — driver scenarios.md, surface endpoint, platform lib
+## Command
+cwd: <tmp>/copy/crates/nacre-tsp   stdin: /dev/null
+$ cat fuzz/fuzz_targets/response.rs
+#![no_main]
+
+use libfuzzer_sys::fuzz_target;
+use nacre_core::DigestAlgorithm;
+use nacre_tsp::{Request, verify_response, verify_token};
+
+// The SHA-256 imprint and the nonce of `tests/corpus/recorded/request.tsq`.
+const IMPRINT: [u8; 32] = [
+    0xac, 0x94, 0x15, 0x05, 0xb5, 0xd9, 0x36, 0x1d, 0x90, 0xbc, 0x04, 0x18, 0xf0, 0xaa, 0x3d, 0xe1,
+    0xff, 0x70, 0x2a, 0x92, 0xca, 0x45, 0xcf, 0xca, 0x8c, 0x6e, 0x34, 0xb2, 0xec, 0x82, 0x7c, 0x3c,
+];
+const NONCE: [u8; 8] = [0xd4, 0x1c, 0xbf, 0xf4, 0xfd, 0xed, 0x9d, 0x81];
+
+fuzz_target!(|data: &[u8]| {
+    if let Ok(request) = Request::new(DigestAlgorithm::Sha256, &IMPRINT, &NONCE) {
+        let _ = verify_response(data, &request);
+    }
+    let _ = verify_token(data, DigestAlgorithm::Sha256, &IMPRINT);
+});
+$ cargo +nightly fuzz build response && cargo +nightly fuzz run response -- -max_total_time=20
+## stdout + stderr (tail; the run starts from an empty corpus in the copy)
+   Compiling nacre-tsp-fuzz v0.0.0 (<tmp>/copy/crates/nacre-tsp/fuzz)
+    Finished `release` profile [optimized + debuginfo] target(s) in 38.70s
+INFO: Running with entropic power schedule (0xFF, 100).
+Done 851602 runs in 21 second(s)
+## Exit code: 0
+No crash, no ERROR or SUMMARY line from the sanitizer, no crash-* artifact written.
