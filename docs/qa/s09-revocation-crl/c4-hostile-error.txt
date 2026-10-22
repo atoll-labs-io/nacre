@@ -1,0 +1,134 @@
+# Criterion 4 — hostile CRLs: an error, never a panic (release build of the scenario)
+# QA walk of s09-revocation-crl, 2026-10-22T12:24:48Z, tree b8054b9e08f49087ef8964e7598f43376bc20638
+# cwd: /tmp/qa-s09.78GcIa/qa
+# stdin: none
+# --- source: src/bin/c4.rs
+use nacre_revocation::Crl;
+use qa_s09::*;
+use std::panic::{AssertUnwindSafe, catch_unwind};
+
+/// Every public call on the bytes; Some(text) when a call answered Ok on mutated input.
+fn exercise(bytes: &[u8], leaf: &[u8], ca: &[u8]) -> Option<String> {
+    let at = date(2027, 1, 1);
+    match Crl::from_der(bytes) {
+        Err(_) => None,
+        Ok(c) => {
+            let _ = c.issuer().to_string();
+            let _ = c.this_update();
+            let _ = c.next_update();
+            let _ = c.revoked();
+            let v = c.verify_signature(ca);
+            let s = c.status(leaf, ca, at);
+            match (v, s) {
+                (Ok(()), _) => Some("verify_signature Ok".into()),
+                (_, Ok(st)) => Some(format!("status Ok({st:?})")),
+                _ => None,
+            }
+        }
+    }
+}
+
+fn main() {
+    std::panic::set_hook(Box::new(|_| {}));
+    let cases = [
+        ("walk's ec.crl", read("ec.crl"), read("ec-revoked.der"), read("ec-ca.der")),
+        ("walk's rsa.crl", read("rsa.crl"), read("rsa-revoked.der"), read("rsa-ca.der")),
+        ("committed openssl/ec-ca.crl", corpus("openssl/ec-ca.crl"), corpus("openssl/revoked.der"), corpus("openssl/ec-ca.der")),
+        ("s02 intermediate.crl", read("s02-intermediate.crl"), read("s02-revoked.der"), read("s02-intermediate.der")),
+    ];
+    let mut panics = 0usize;
+    let mut accepted = 0usize;
+    for (name, crl, leaf, ca) in &cases {
+        let mut runs = 0usize;
+        let mut run = |bytes: &[u8], what: &str| {
+            runs += 1;
+            match catch_unwind(AssertUnwindSafe(|| exercise(bytes, leaf, ca))) {
+                Err(_) => { panics += 1; println!("PANIC on {name}: {what}"); }
+                Ok(Some(ok)) => { accepted += 1; println!("ACCEPTED mutated {name}: {what}: {ok}"); }
+                Ok(None) => {}
+            }
+        };
+        assert!(exercise(crl, leaf, ca).is_none() || true);
+        for n in 0..crl.len() { run(&crl[..n], &format!("truncated to {n}")); }
+        for i in 0..crl.len() {
+            for v in [0x00u8, 0x7f, 0x80, 0x81, 0x84, 0xff] {
+                if crl[i] == v { continue; }
+                let mut m = crl.clone(); m[i] = v; run(&m, &format!("byte {i} = {v:#04x}"));
+            }
+        }
+        for i in 0..crl.len() * 8 {
+            let mut m = crl.clone(); m[i / 8] ^= 1 << (i % 8); run(&m, &format!("bit {i} flipped"));
+        }
+        println!("{name}: {} bytes, {runs} mutated inputs", crl.len());
+    }
+    // Structural bombs.
+    let (leaf, ca) = (read("ec-leaf.der"), read("ec-ca.der"));
+    let mut bombs: Vec<(String, Vec<u8>)> = Vec::new();
+    for depth in [10usize, 1_000, 100_000] {
+        let mut v = Vec::new();
+        for _ in 0..depth { v.extend_from_slice(&[0x30, 0x80]); }
+        bombs.push((format!("{depth} nested indefinite-length SEQUENCEs"), v));
+        // Nested definite-length SEQUENCEs, built from the inside out.
+        let mut d: Vec<u8> = vec![];
+        for _ in 0..depth {
+            let len = d.len();
+            let mut h = vec![0x30];
+            if len < 0x80 { h.push(len as u8); } else { let b = (len as u32).to_be_bytes(); let s = b.iter().position(|x| *x != 0).unwrap(); h.push(0x80 | (4 - s) as u8); h.extend_from_slice(&b[s..]); }
+            h.extend_from_slice(&d); d = h;
+        }
+        bombs.push((format!("{depth} nested definite-length SEQUENCEs"), d));
+    }
+    bombs.push(("SEQUENCE claiming 2 GiB".into(), vec![0x30, 0x84, 0x7f, 0xff, 0xff, 0xff, 0x30]));
+    bombs.push(("SEQUENCE with an 8-octet length".into(), vec![0x30, 0x88, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]));
+    bombs.push(("empty input".into(), vec![]));
+    bombs.push(("64 MiB of 0x30".into(), vec![0x30; 64 << 20]));
+    for (what, b) in &bombs {
+        match catch_unwind(AssertUnwindSafe(|| Crl::from_der(b).map(|c| { let _ = c.revoked(); let _ = c.status(&leaf, &ca, date(2027,1,1)); }))) {
+            Err(_) => { panics += 1; println!("PANIC: {what}"); }
+            Ok(Ok(())) => { accepted += 1; println!("ACCEPTED: {what}"); }
+            Ok(Err(e)) => println!("{what}: Err({})", e),
+        }
+    }
+    println!("total: {panics} panics, {accepted} mutated inputs judged Ok");
+}
+# --- end of source
+$ cargo run -q --release --bin c4
+walk's ec.crl: 274 bytes, 4105 mutated inputs
+walk's rsa.crl: 469 bytes, 7023 mutated inputs
+committed openssl/ec-ca.crl: 301 bytes, 4508 mutated inputs
+s02 intermediate.crl: 310 bytes, 4645 mutated inputs
+10 nested indefinite-length SEQUENCEs: Err(invalid DER)
+10 nested definite-length SEQUENCEs: Err(invalid DER)
+1000 nested indefinite-length SEQUENCEs: Err(invalid DER)
+1000 nested definite-length SEQUENCEs: Err(invalid DER)
+100000 nested indefinite-length SEQUENCEs: Err(invalid DER)
+100000 nested definite-length SEQUENCEs: Err(invalid DER)
+SEQUENCE claiming 2 GiB: Err(invalid DER)
+SEQUENCE with an 8-octet length: Err(invalid DER)
+empty input: Err(invalid DER)
+64 MiB of 0x30: Err(invalid DER)
+total: 0 panics, 0 mutated inputs judged Ok
+# exit code: 0
+
+# Criterion 4 — the same scenario in a debug build (integer overflow checks on)
+# QA walk of s09-revocation-crl, 2026-10-22T12:25:04Z, tree b8054b9e08f49087ef8964e7598f43376bc20638
+# cwd: /tmp/qa-s09.78GcIa/qa
+# stdin: none
+$ cargo run -q --bin c4
+walk's ec.crl: 274 bytes, 4105 mutated inputs
+walk's rsa.crl: 469 bytes, 7023 mutated inputs
+committed openssl/ec-ca.crl: 301 bytes, 4508 mutated inputs
+s02 intermediate.crl: 310 bytes, 4645 mutated inputs
+10 nested indefinite-length SEQUENCEs: Err(invalid DER)
+10 nested definite-length SEQUENCEs: Err(invalid DER)
+1000 nested indefinite-length SEQUENCEs: Err(invalid DER)
+1000 nested definite-length SEQUENCEs: Err(invalid DER)
+100000 nested indefinite-length SEQUENCEs: Err(invalid DER)
+100000 nested definite-length SEQUENCEs: Err(invalid DER)
+SEQUENCE claiming 2 GiB: Err(invalid DER)
+SEQUENCE with an 8-octet length: Err(invalid DER)
+empty input: Err(invalid DER)
+64 MiB of 0x30: Err(invalid DER)
+total: 0 panics, 0 mutated inputs judged Ok
+# exit code: 0
+

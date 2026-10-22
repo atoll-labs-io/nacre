@@ -1,0 +1,236 @@
+# Criterion 4 — the fuzz target exists
+# QA walk of s09-revocation-crl, 2026-10-22T12:26:15Z, tree b8054b9e08f49087ef8964e7598f43376bc20638
+# cwd: /tmp/qa-s09.78GcIa/copy/crates/nacre-revocation
+# stdin: none
+# --- source: fuzz/fuzz_targets/crl.rs
+#![no_main]
+
+use std::time::{Duration, SystemTime};
+
+use libfuzzer_sys::fuzz_target;
+use nacre_revocation::Crl;
+
+const CA: &[u8] = include_bytes!("../../tests/corpus/openssl/ec-ca.der");
+const LEAF: &[u8] = include_bytes!("../../tests/corpus/openssl/revoked.der");
+// 2027-01-01T00:00:00Z: the target never reads the clock.
+const AT: Duration = Duration::from_secs(1_798_761_600);
+
+fuzz_target!(|data: &[u8]| {
+    if let Ok(crl) = Crl::from_der(data) {
+        let _ = crl.issuer();
+        let _ = crl.this_update();
+        let _ = crl.next_update();
+        let _ = crl.revoked();
+        let _ = crl.verify_signature(CA);
+        let _ = crl.status(LEAF, CA, SystemTime::UNIX_EPOCH + AT);
+    }
+});
+# --- end of source
+$ cargo +nightly fuzz list
+crl
+# exit code: 0
+
+# Criterion 4 — a 60 s run of the target, seeded with the committed corpus and the walk's CRLs (copied to a scratch corpus dir)
+# QA walk of s09-revocation-crl, 2026-10-22T12:26:15Z, tree b8054b9e08f49087ef8964e7598f43376bc20638
+# cwd: /tmp/qa-s09.78GcIa/copy/crates/nacre-revocation
+# stdin: none
+$ cargo +nightly fuzz run crl /tmp/qa-s09.78GcIa/fuzz-corpus -- -max_total_time=60 -rss_limit_mb=2048
+    Updating crates.io index
+     Locking 68 packages to highest Rust 1.97 compatible versions
+   Compiling zeroize v1.9.1
+   Compiling subtle v2.6.1
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.27
+   Compiling libc v0.2.191
+   Compiling typenum v1.20.1
+   Compiling rand_core v0.10.1
+   Compiling getrandom v0.4.3
+   Compiling const-oid v0.10.2
+   Compiling cmov v0.5.4
+   Compiling cfg-if v1.0.5
+   Compiling autocfg v1.5.1
+   Compiling base64ct v1.8.3
+   Compiling flagset v0.4.7
+   Compiling cpubits v0.1.1
+   Compiling base16ct v1.0.0
+   Compiling thiserror v2.0.21
+   Compiling shlex v2.0.1
+   Compiling ff v0.14.0
+   Compiling find-msvc-tools v0.1.15
+   Compiling cpufeatures v0.3.1
+   Compiling arbitrary v1.5.0
+   Compiling ctutils v0.4.3
+   Compiling group v0.14.0
+   Compiling pem-rfc7468 v1.0.0
+   Compiling num-traits v0.2.19
+   Compiling syn v2.0.119
+   Compiling syn v3.0.9
+   Compiling jobserver v0.1.35
+   Compiling hybrid-array v0.4.15
+   Compiling cc v1.9.0
+   Compiling crypto-common v0.2.2
+   Compiling block-buffer v0.12.1
+   Compiling crypto-bigint v0.7.5
+   Compiling thiserror-impl v2.0.21
+   Compiling digest v0.11.3
+   Compiling signature v3.0.0
+   Compiling hmac v0.13.0
+   Compiling sha2 v0.11.1
+   Compiling libfuzzer-sys v0.4.13
+   Compiling der_derive v0.8.0
+   Compiling der v0.8.2
+   Compiling nacre-core v0.1.0 (/tmp/qa-s09.78GcIa/copy/crates/nacre-core)
+   Compiling spki v0.8.1
+   Compiling sec1 v0.8.1
+   Compiling primefield v0.14.0
+   Compiling rfc6979 v0.6.0
+   Compiling crypto-primes v0.7.2
+   Compiling pkcs8 v0.11.0
+   Compiling wnaf v0.14.1
+   Compiling pkcs1 v0.8.0-rc.5
+   Compiling elliptic-curve v0.14.1
+   Compiling x509-cert v0.3.0
+   Compiling ecdsa v0.17.0
+   Compiling primeorder v0.14.0
+   Compiling rsa v0.10.0-rc.19
+   Compiling p256 v0.14.0
+   Compiling nacre-revocation v0.1.0 (/tmp/qa-s09.78GcIa/copy/crates/nacre-revocation)
+   Compiling nacre-revocation-fuzz v0.0.0 (/tmp/qa-s09.78GcIa/copy/crates/nacre-revocation/fuzz)
+    Finished `release` profile [optimized + debuginfo] target(s) in 32.05s
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.04s
+     Running `/tmp/qa-s09.78GcIa/fuzz-target/x86_64-unknown-linux-gnu/release/crl -artifact_prefix=/tmp/qa-s09.78GcIa/copy/crates/nacre-revocation/fuzz/artifacts/crl/ -max_total_time=60 -rss_limit_mb=2048 /tmp/qa-s09.78GcIa/fuzz-corpus`
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 2112320269
+INFO: Loaded 1 modules   (13473 inline 8-bit counters): 13473 [0x55d6cda73010, 0x55d6cda764b1), 
+INFO: Loaded 1 PC tables (13473 PCs): 13473 [0x55d6cda764b8,0x55d6cdaaaec8), 
+INFO:       22 files found in /tmp/qa-s09.78GcIa/fuzz-corpus
+INFO: -max_len is not provided; libFuzzer will not generate inputs larger than 4096 bytes
+INFO: seed corpus: files: 22 min: 244b max: 476b total: 7465b rss: 48Mb
+#23	INITED cov: 1110 ft: 1702 corp: 15/4642b exec/s: 0 rss: 53Mb
+	NEW_FUNC[1/1]: 0x55d6cd81bb00  (/tmp/qa-s09.78GcIa/fuzz-target/x86_64-unknown-linux-gnu/release/crl+0x1ddb00) (BuildId: ee9232374860b17ea0f2805d27e29d6a77bdec96)
+#24	NEW    cov: 1136 ft: 2088 corp: 16/4915b lim: 460 exec/s: 0 rss: 53Mb L: 273/460 MS: 1 ChangeByte-
+#28	NEW    cov: 1150 ft: 2119 corp: 17/5220b lim: 460 exec/s: 0 rss: 53Mb L: 305/460 MS: 4 ChangeASCIIInt-ChangeBit-ChangeBinInt-ShuffleBytes-
+#31	NEW    cov: 1151 ft: 2120 corp: 18/5525b lim: 460 exec/s: 0 rss: 54Mb L: 305/460 MS: 3 ChangeByte-ShuffleBytes-ChangeBit-
+#32	NEW    cov: 1172 ft: 2278 corp: 19/5913b lim: 460 exec/s: 0 rss: 54Mb L: 388/460 MS: 1 InsertRepeatedBytes-
+#33	NEW    cov: 1180 ft: 2328 corp: 20/6266b lim: 460 exec/s: 0 rss: 54Mb L: 353/460 MS: 1 CopyPart-
+[QA: 1099 libFuzzer NEW/REDUCE progress lines omitted here; first and last five kept]
+	NEW_FUNC[1/1]: 0x55d6cd81ef70  (/tmp/qa-s09.78GcIa/fuzz-target/x86_64-unknown-linux-gnu/release/crl+0x1e0f70) (BuildId: ee9232374860b17ea0f2805d27e29d6a77bdec96)
+	NEW_FUNC[1/1]: 0x55d6cd819e40  (/tmp/qa-s09.78GcIa/fuzz-target/x86_64-unknown-linux-gnu/release/crl+0x1dbe40) (BuildId: ee9232374860b17ea0f2805d27e29d6a77bdec96)
+	NEW_FUNC[1/1]: 0x55d6cd81b550  (/tmp/qa-s09.78GcIa/fuzz-target/x86_64-unknown-linux-gnu/release/crl+0x1dd550) (BuildId: ee9232374860b17ea0f2805d27e29d6a77bdec96)
+#16384	pulse  cov: 1562 ft: 3482 corp: 241/70Kb lim: 460 exec/s: 8192 rss: 95Mb
+#32768	pulse  cov: 1589 ft: 3566 corp: 280/80Kb lim: 460 exec/s: 8192 rss: 127Mb
+#65536	pulse  cov: 1603 ft: 3615 corp: 309/88Kb lim: 516 exec/s: 8192 rss: 184Mb
+#131072	pulse  cov: 1634 ft: 3699 corp: 350/98Kb lim: 696 exec/s: 9362 rss: 300Mb
+#262144	pulse  cov: 1649 ft: 3746 corp: 381/105Kb lim: 1339 exec/s: 9709 rss: 461Mb
+	NEW_FUNC[1/6]: 0x55d6cd820130  (/tmp/qa-s09.78GcIa/fuzz-target/x86_64-unknown-linux-gnu/release/crl+0x1e2130) (BuildId: ee9232374860b17ea0f2805d27e29d6a77bdec96)
+	NEW_FUNC[2/6]: 0x55d6cd8c2c00  (/tmp/qa-s09.78GcIa/fuzz-target/x86_64-unknown-linux-gnu/release/crl+0x284c00) (BuildId: ee9232374860b17ea0f2805d27e29d6a77bdec96)
+#524288	pulse  cov: 1710 ft: 3889 corp: 414/114Kb lim: 3149 exec/s: 9892 rss: 466Mb
+#596185	REDUCE cov: 1713 ft: 3904 corp: 420/115Kb lim: 3754 exec/s: 10104 rss: 466Mb L: 231/471 MS: 3 PersAutoDict-EraseBytes-ChangeByte- DE: "U\035\017\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"-
+#602271	REDUCE cov: 1713 ft: 3904 corp: 420/115Kb lim: 3809 exec/s: 10037 rss: 466Mb L: 251/471 MS: 1 EraseBytes-
+#605477	REDUCE cov: 1713 ft: 3904 corp: 420/115Kb lim: 3831 exec/s: 10091 rss: 466Mb L: 308/471 MS: 1 EraseBytes-
+#606545	REDUCE cov: 1713 ft: 3905 corp: 421/116Kb lim: 3831 exec/s: 10109 rss: 466Mb L: 289/471 MS: 3 CMP-ShuffleBytes-ChangeBit- DE: "\325\000"-
+#606613	REDUCE cov: 1713 ft: 3905 corp: 421/116Kb lim: 3831 exec/s: 10110 rss: 466Mb L: 244/471 MS: 3 ChangeBinInt-CMP-EraseBytes- DE: "\200\363`\361\246{\000\000"-
+#607113	DONE   cov: 1713 ft: 3905 corp: 421/116Kb lim: 3831 exec/s: 9952 rss: 466Mb
+###### Recommended dictionary. ######
+"\001\000\000\000\000\000\000\000" # Uses: 767
+"\311\000" # Uses: 751
+"\377\377\377\377\377\377\377\012" # Uses: 758
+"\377\377\377\377\377\377\377\000" # Uses: 762
+"\377\377\377r" # Uses: 777
+"\037\000\000\000" # Uses: 768
+"\000\000\000#" # Uses: 801
+"&\000\000\000" # Uses: 772
+"\351\000\000\000\000\000\000\000" # Uses: 767
+"\000\000\000\272" # Uses: 770
+"\010\001\000\000\000\000\000\000" # Uses: 784
+"\000U" # Uses: 834
+"\377\377\377D" # Uses: 747
+"\000\000\000\254" # Uses: 801
+"\000\000\000\000\000\000\000\000" # Uses: 726
+"U\035\023\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000" # Uses: 831
+"\001\000\001 \001H\"n" # Uses: 700
+"\032\000\000\000" # Uses: 721
+"\005\000\000\000\000\000\000\000" # Uses: 723
+"\377\377\377\377\377\377\377\034" # Uses: 736
+"\377\377\377\377\000\000\000\000" # Uses: 707
+"\025\000\000\000\000\000\000\000" # Uses: 721
+"&\000" # Uses: 756
+"*\207H\316E\004\003\002\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000" # Uses: 694
+"\377\377\377\005" # Uses: 735
+"\264\000\000\000\000\000\000\000" # Uses: 725
+"\377\027" # Uses: 728
+"U\035\017\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000" # Uses: 702
+"\001\000\000\000\000\000\000>" # Uses: 683
+"\273\000" # Uses: 708
+":\000\000\000" # Uses: 699
+"*\206H\316=\004\003\002\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000" # Uses: 694
+"\026\000\000\000\000\000\000\000" # Uses: 698
+"\377\377\002\030MA\313\315" # Uses: 661
+"Nacre tes.s" # Uses: 680
+"\200\001" # Uses: 684
+"\000\000\000\013" # Uses: 647
+"\277\000\000\000\000\000\000\000" # Uses: 716
+"\001\004" # Uses: 684
+"\001H" # Uses: 661
+"U\024\012\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000" # Uses: 672
+"\022\000\000\000\000\000\000\000" # Uses: 602
+"\000\000\000\000\000\000\001\031" # Uses: 666
+"\377\377\377\377\377\377\377\310" # Uses: 602
+"Nacre OpenSSL CRL fixture CA" # Uses: 630
+"\377\377\377\377\377\377\377\331" # Uses: 667
+"\211\363!M(\003\000\000" # Uses: 627
+"\377\377\377\236" # Uses: 582
+"\000\000\000\257" # Uses: 647
+"\313\001\000\000" # Uses: 622
+"<\000" # Uses: 619
+">\000\000\000" # Uses: 598
+"\350\000\000\000\000\000\000\000" # Uses: 524
+"\000\000\001%" # Uses: 550
+"\001\000\000\\" # Uses: 518
+"\002\000\000\000\000\000\000\000" # Uses: 550
+"\377\377\377\377\377\377\377\005" # Uses: 531
+"\377\377\377\377\377\377\377U" # Uses: 520
+"U\004\003\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000" # Uses: 538
+"U\035\035\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000" # Uses: 507
+"\001\000\000\000\000\000\000A" # Uses: 477
+"\000\000\000\000\000\000\000\004" # Uses: 488
+"\000\000\000\000\000\000\000\001" # Uses: 488
+"E\000" # Uses: 468
+"?\000\000\000\000\000\000\000" # Uses: 455
+"\253\252\252\252\252\252\252\012" # Uses: 442
+"\001\012" # Uses: 483
+"\001%" # Uses: 447
+"\377\030" # Uses: 463
+"\273\232[C8\003\000\000" # Uses: 412
+"\377\000" # Uses: 410
+"\001\000\000\004" # Uses: 388
+"\001\000\000;" # Uses: 411
+"\327\000\000\000\000\000\000\000" # Uses: 359
+"\002\000\000\000" # Uses: 330
+"\000\002" # Uses: 322
+"\\\004\012\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000" # Uses: 321
+"\016\000\000\000\000\000\000\000" # Uses: 298
+"Nacre OrenSSL CR\006UUUUUUUe CA" # Uses: 290
+"\001\000\000\000\000\000\001-" # Uses: 282
+"\377\377\377\377\377\377\377(" # Uses: 302
+"U\004\006\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000" # Uses: 242
+"U\004\012\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000" # Uses: 223
+"*\377\000\316=\004\003\002\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000" # Uses: 196
+"\377\377\377\001" # Uses: 191
+"\003\000\000\000" # Uses: 189
+"\344\000" # Uses: 193
+"H*=\206\004\316\003\002\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000" # Uses: 188
+"\377\377\377\235" # Uses: 200
+"Nacre te\204ts" # Uses: 170
+"\377\377\377\377\377\377\377\377" # Uses: 108
+"\377\377\377\377\377\377\377\002" # Uses: 93
+"U\035\016\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000" # Uses: 93
+"*\206H\327=\004\003\002\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000" # Uses: 72
+"\335\315\337\011 \001\000\000" # Uses: 40
+"\325\000" # Uses: 0
+"\200\363`\361\246{\000\000" # Uses: 1
+###### End of recommended dictionary. ######
+Done 607113 runs in 61 second(s)
+# exit code: 0
+

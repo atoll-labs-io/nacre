@@ -1,0 +1,24 @@
+[package]
+name = "nacre-revocation-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+rust-version = "1.97"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+nacre-revocation = { path = ".." }
+
+# Its own workspace: the root manifest is frozen and must not list this crate.
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "crl"
+path = "fuzz_targets/crl.rs"
+test = false
+doc = false
+bench = false
