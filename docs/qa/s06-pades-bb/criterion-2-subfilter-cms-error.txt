@@ -1,0 +1,39 @@
+cwd: /tmp/qa-s06.rhEO8S/run
+stdin: none
+$ sh -c cmp once.pdf tampered.pdf; echo "(tampered.pdf = once.pdf with byte 101, inside the first /ByteRange part, replaced by X)"
+--- stdout
+once.pdf tampered.pdf sont différents: octet 101, ligne 7
+(tampered.pdf = once.pdf with byte 101, inside the first /ByteRange part, replaced by X)
+--- stderr
+--- exit code: 0
+
+cwd: /tmp/qa-s06.rhEO8S/run
+stdin: none
+$ /tmp/qa-s06.rhEO8S/bin/qa-s06 validate qa-s06-tampered tampered.pdf
+--- stdout
+--- stderr
+
+thread 'main' (1728113) panicked at src/main.rs:65:90:
+called `Result::unwrap()` on an `Err` value: Http(StatusCode(500))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+--- exit code: 101
+
+cwd: /tmp/qa-s06.rhEO8S/run
+stdin: none
+$ sh -c cmp once.pdf tampered2.pdf; grep -a -o "(.acre conformance bench[^)]*)" tampered2.pdf; echo "(tampered2.pdf = once.pdf with the first letter of the page text, byte 305, inside the first /ByteRange part, replaced by X)"
+--- stdout
+once.pdf tampered2.pdf sont différents: octet 305, ligne 15
+(Xacre conformance bench - fictitious reference document)
+(tampered2.pdf = once.pdf with the first letter of the page text, byte 305, inside the first /ByteRange part, replaced by X)
+--- stderr
+--- exit code: 0
+
+cwd: /tmp/qa-s06.rhEO8S/run
+stdin: none
+$ /tmp/qa-s06.rhEO8S/bin/qa-s06 validate qa-s06-tampered2 tampered2.pdf
+--- stdout
+signatures judged by DSS: 1
+  S-5767594DF82A9A86FBE16A8BA7F33B88AEC75810DF50EFF888AC5754A37EE79A format=PAdES-BASELINE-B indication=TotalFailed sub_indication=Some(HashFailure)
+--- stderr
+--- exit code: 0
+

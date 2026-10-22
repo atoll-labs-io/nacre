@@ -1,0 +1,54 @@
+cwd: /tmp/qa-s06.rhEO8S/run
+stdin: none
+$ /tmp/qa-s06.rhEO8S/copy/target/debug/qa-s06 sign /tmp/qa-s06.rhEO8S/copy/conformance/pki/out once.pdf twice.pdf
+--- stdout
+signed: 4669 bytes in, 8522 bytes out
+original bytes are a prefix: true
+--- stderr
+--- exit code: 0
+
+cwd: /tmp/qa-s06.rhEO8S/run
+stdin: none
+$ /tmp/qa-s06.rhEO8S/copy/target/debug/qa-s06 validate qa-s06-twice twice.pdf
+--- stdout
+signatures judged by DSS: 2
+  S-5767594DF82A9A86FBE16A8BA7F33B88AEC75810DF50EFF888AC5754A37EE79A format=PAdES-BASELINE-B indication=TotalPassed sub_indication=None
+  S-8686C9602B152462337CC0AAC433770DCFA6B643D39023F954680C81F5C9E6F7 format=PAdES-BASELINE-B indication=TotalPassed sub_indication=None
+--- stderr
+--- exit code: 0
+
+cwd: /tmp/qa-s06.rhEO8S/run
+stdin: none
+$ /tmp/qa-s06.rhEO8S/copy/target/debug/qa-s06 inspect twice.pdf cms-twice-
+--- stdout
+signature 1: /ByteRange [0, 919, 4093, 576]
+  range covers 0..919 and 4093..4669 (file length 8522)
+  /Contents reserve 1586 bytes, CMS 1584 bytes, zero padding 2 bytes (all zero: true)
+  /Sig before /Contents: << /Type /Sig /M <443A32303236313032323038303030305A> /Filter /Adobe.PPKLite /SubFilter /ETSI.CAdES.detached /ByteRange [0 919 4093 576                    ] /Contents 
+  /Sig after /Contents:  
+signature 2: /ByteRange [0, 4844, 8018, 504]
+  range covers 0..4844 and 8018..8522 (file length 8522)
+  /Contents reserve 1586 bytes, CMS 1584 bytes, zero padding 2 bytes (all zero: true)
+  /Sig before /Contents: << /Type /Sig /M <443A32303236313032323038303030305A> /Filter /Adobe.PPKLite /SubFilter /ETSI.CAdES.detached /ByteRange [0 4844 8018 504                   ] /Contents 
+  /Sig after /Contents:  
+--- stderr
+--- exit code: 0
+
+cwd: /tmp/qa-s06.rhEO8S/run
+stdin: none
+$ sh -c grep -a -c "%%EOF" twice.pdf; grep -a -o "/T *([^)]*)" twice.pdf
+--- stdout
+3
+--- stderr
+--- exit code: 1
+
+cwd: /tmp/qa-s06.rhEO8S/run
+stdin: none
+$ /tmp/qa-s06.rhEO8S/bin/qa-s06 validate qa-s06-reference-twice reference-twice.pdf
+--- stdout
+signatures judged by DSS: 2
+  S-49CD437FBCE172FE7E91104070C69FDBA5387C06230ACBD08CC93A494E1B1793 format=PAdES-BASELINE-B indication=TotalPassed sub_indication=None
+  S-3F0C5AF99EB731769C84716D5B92C30F1C690E093E5CCCF145EF425F16C14E55 format=PAdES-BASELINE-B indication=TotalPassed sub_indication=None
+--- stderr
+--- exit code: 0
+

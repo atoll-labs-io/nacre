@@ -1,0 +1,98 @@
+cwd: /tmp/qa-s06.rhEO8S/run
+stdin: none
+$ /tmp/qa-s06.rhEO8S/bin/qa-s06 sign /tmp/qa-s06.rhEO8S/copy/conformance/pki/out twice.pdf thrice.pdf
+--- stdout
+signed: 8522 bytes in, 12397 bytes out
+original bytes are a prefix: true
+--- stderr
+--- exit code: 0
+
+cwd: /tmp/qa-s06.rhEO8S/run
+stdin: none
+$ /tmp/qa-s06.rhEO8S/bin/qa-s06 inspect thrice.pdf cms-thrice-
+--- stdout
+signature 1: /ByteRange [0, 919, 4093, 576]
+  range covers 0..919 and 4093..4669 (file length 12397)
+  /Contents reserve 1586 bytes, CMS 1584 bytes, zero padding 2 bytes (all zero: true)
+  /Sig before /Contents: << /Type /Sig /M <443A32303236313032323038303030305A> /Filter /Adobe.PPKLite /SubFilter /ETSI.CAdES.detached /ByteRange [0 919 4093 576                    ] /Contents 
+  /Sig after /Contents:  
+signature 2: /ByteRange [0, 4844, 8018, 504]
+  range covers 0..4844 and 8018..8522 (file length 12397)
+  /Contents reserve 1586 bytes, CMS 1584 bytes, zero padding 2 bytes (all zero: true)
+  /Sig before /Contents: << /Type /Sig /M <443A32303236313032323038303030305A> /Filter /Adobe.PPKLite /SubFilter /ETSI.CAdES.detached /ByteRange [0 4844 8018 504                   ] /Contents 
+  /Sig after /Contents:  
+signature 3: /ByteRange [0, 8698, 11872, 525]
+  range covers 0..8698 and 11872..12397 (file length 12397)
+  /Contents reserve 1586 bytes, CMS 1584 bytes, zero padding 2 bytes (all zero: true)
+  /Sig before /Contents: << /Type /Sig /M <443A32303236313032323038303030305A> /Filter /Adobe.PPKLite /SubFilter /ETSI.CAdES.detached /ByteRange [0 8698 11872 525                  ] /Contents 
+  /Sig after /Contents:  
+--- stderr
+--- exit code: 0
+
+cwd: /tmp/qa-s06.rhEO8S/run
+stdin: none
+$ sh -c for f in cms-thrice-1.der cms-thrice-2.der cms-thrice-3.der; do printf "%s: signature value " $f; openssl cms -cmsout -print -inform DER -in $f | awk "/^        signature: /{s=1;next} s&&/^ +[0-9a-f]{4} - /{n++; last=\$0} s&&/unsignedAttrs/{exit} END{}" ; openssl asn1parse -inform DER -in $f | tail -3 | head -1; done
+--- stdout
+cms-thrice-1.der: signature value  1500:d=5  hl=2 l=  10 cons: SEQUENCE          
+cms-thrice-2.der: signature value  1500:d=5  hl=2 l=  10 cons: SEQUENCE          
+cms-thrice-3.der: signature value  1500:d=5  hl=2 l=  10 cons: SEQUENCE          
+--- stderr
+--- exit code: 0
+
+cwd: /tmp/qa-s06.rhEO8S/run
+stdin: none
+$ /tmp/qa-s06.rhEO8S/bin/qa-s06 sign-test unsigned.pdf selfsigned.pdf
+--- stdout
+signed: 3179 bytes out
+--- stderr
+--- exit code: 0
+
+cwd: /tmp/qa-s06.rhEO8S/run
+stdin: none
+$ /tmp/qa-s06.rhEO8S/bin/qa-s06 inspect selfsigned.pdf cms-self-
+--- stdout
+--- stderr
+
+thread 'main' (1727136) panicked at src/main.rs:73:47:
+called `Result::unwrap()` on an `Err` value: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+--- exit code: 101
+
+cwd: /tmp/qa-s06.rhEO8S/run
+stdin: none
+$ /tmp/qa-s06.rhEO8S/bin/qa-s06 sign /tmp/qa-s06.rhEO8S/copy/conformance/pki/out reference-signed.pdf reference-twice.pdf
+--- stdout
+signed: 39746 bytes in, 43858 bytes out
+original bytes are a prefix: true
+--- stderr
+--- exit code: 0
+
+cwd: /tmp/qa-s06.rhEO8S/run
+stdin: none
+$ /tmp/qa-s06.rhEO8S/bin/qa-s06 inspect reference-twice.pdf cms-ref-
+--- stdout
+signature 1: /ByteRange [0, 997, 38887, 859]
+  range covers 0..997 and 38887..39746 (file length 43858)
+  /Contents reserve 18944 bytes, CMS 1729 bytes, zero padding 17215 bytes (all zero: true)
+  /Sig before /Contents: << /Type /Sig /Filter /Adobe.PPKLite /SubFilter /ETSI.CAdES.detached /M (D:20261022094748+00'00') /Contents 
+  /Sig after /Contents:  /ByteRange [0 997 38887 859]                    
+signature 2: /ByteRange [0, 39922, 43096, 762]
+  range covers 0..39922 and 43096..43858 (file length 43858)
+  /Contents reserve 1586 bytes, CMS 1584 bytes, zero padding 2 bytes (all zero: true)
+  /Sig before /Contents: << /Type /Sig /M <443A32303236313032323038303030305A> /Filter /Adobe.PPKLite /SubFilter /ETSI.CAdES.detached /ByteRange [0 39922 43096 762                 ] /Contents 
+  /Sig after /Contents:  
+--- stderr
+--- exit code: 0
+
+cwd: /tmp/qa-s06.rhEO8S/run
+stdin: none
+$ sh -c for f in cms-thrice-1.der cms-thrice-2.der cms-thrice-3.der cms-ref-1.der cms-ref-2.der; do printf "%s signature value length: " $f; openssl asn1parse -inform DER -in $f | grep "prim: OCTET STRING" | tail -1 | sed -E "s/.*l= *([0-9]+) prim.*/\\1/"; done
+--- stdout
+cms-thrice-1.der signature value length: 70
+cms-thrice-2.der signature value length: 70
+cms-thrice-3.der signature value length: 70
+cms-ref-1.der signature value length: 71
+cms-ref-2.der signature value length: 70
+--- stderr
+--- exit code: 0
+

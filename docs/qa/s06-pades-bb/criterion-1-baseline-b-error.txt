@@ -1,0 +1,24 @@
+cwd: /tmp/qa-s06.rhEO8S/run
+stdin: none
+$ /tmp/qa-s06.rhEO8S/bin/qa-s06 sign /tmp/qa-s06.rhEO8S/copy/conformance/pki/out notapdf.txt out.pdf
+--- stdout
+error: PDF: the input does not start with %PDF- (kind InvalidInput) debug Pdf(MissingHeader)
+--- stderr
+--- exit code: 2
+
+cwd: /tmp/qa-s06.rhEO8S/run
+stdin: none
+$ /tmp/qa-s06.rhEO8S/bin/qa-s06 sign /tmp/qa-s06.rhEO8S/copy/conformance/pki/out empty.pdf out.pdf
+--- stdout
+error: PDF: the input does not start with %PDF- (kind InvalidInput) debug Pdf(MissingHeader)
+--- stderr
+--- exit code: 2
+
+cwd: /tmp/qa-s06.rhEO8S/run
+stdin: none
+$ /tmp/qa-s06.rhEO8S/bin/qa-s06 sign /tmp/qa-s06.rhEO8S/copy/conformance/pki/out truncated.pdf out.pdf
+--- stdout
+error: PDF: no startxref statement in the last 1024 bytes (kind InvalidInput) debug Pdf(MissingStartxref)
+--- stderr
+--- exit code: 2
+
