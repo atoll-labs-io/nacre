@@ -1,0 +1,54 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 194 >>
+stream
+BT /F1 18 Tf 72 760 Td (Nacre conformance bench - fictitious reference document) Tj ET
+BT /F1 12 Tf 72 730 Td (This document has no meaning; it exists to be signed by the bench test PKI.) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000247 00000 n 
+0000000491 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+561
+%%EOF
+6 0 obj
+<< /Type /Sig /Filter /Adobe.PPKLite /SubFilter /ETSI.CAdES.detached /M <443A32303236313032323038303030305A> /Contents <> >>
+endobj
+7 0 obj
+<< /FT /Sig /T <5369676E617475726531> /V 6 0 R /Type /Annot /Subtype /Widget /Rect [0 0 0 0] /F 132 >>
+endobj
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [7 0 R] /SigFlags 3 >> >>
+endobj
+xref
+1 1
+0000001002 00000 n
+6 2
+0000000744 00000 n
+0000000884 00000 n
+trailer
+<< /Size 8 /Prev 561 /Root 1 0 R >>
+startxref
+1095
+%%EOF

@@ -1,0 +1,39 @@
+# Criterion 2, malformed /ByteRange values (negative, real, five entries, integers too large for i64/usize)
+# working directory: $T/work ($T = mktemp -d scratch copy of story/s14-validate-integrity, tree e3be979f4a05ef8132547028a2ec5a98208098cb)
+# Q = $T/src/target/debug/qa-s14 (scenario script, quoted whole in scenario-script.txt); C = $T/src/crates/nacre-validate/tests/corpus
+# stdin: none
+
+$ python3 -I /tmp/tmp.BjPpkNNqao/mut.py s06-signed.pdf br-neg.pdf '/ByteRange [0 919 2603 -576]' && $Q validate br-neg.pdf
+/ByteRange [0 919 2603 576                    ] -> /ByteRange [0 919 2603 -576                   ]
+input: br-neg.pdf (3179 bytes)
+Ok: 1 signature(s)
+  field="Signature1" indication=TotalFailed sub_indication=Some(FormatFailure) level=None digest_verified=false signature_verified=false defect=Some(ByteRangeMalformed)
+[exit code: 0]
+
+$ python3 -I /tmp/tmp.BjPpkNNqao/mut.py s06-signed.pdf br-flt.pdf '/ByteRange [0 919 2603 576.0]' && $Q validate br-flt.pdf
+/ByteRange [0 919 2603 576                    ] -> /ByteRange [0 919 2603 576.0                  ]
+input: br-flt.pdf (3179 bytes)
+Ok: 1 signature(s)
+  field="Signature1" indication=TotalFailed sub_indication=Some(FormatFailure) level=None digest_verified=false signature_verified=false defect=Some(ByteRangeMalformed)
+[exit code: 0]
+
+$ python3 -I /tmp/tmp.BjPpkNNqao/mut.py s06-signed.pdf br-five.pdf '/ByteRange [0 919 2603 576 0]' && $Q validate br-five.pdf
+/ByteRange [0 919 2603 576                    ] -> /ByteRange [0 919 2603 576 0                  ]
+input: br-five.pdf (3179 bytes)
+Ok: 1 signature(s)
+  field="Signature1" indication=TotalFailed sub_indication=Some(FormatFailure) level=None digest_verified=false signature_verified=false defect=Some(ByteRangeMalformed)
+[exit code: 0]
+
+$ python3 -I /tmp/tmp.BjPpkNNqao/mut.py s06-signed.pdf br-big.pdf '/ByteRange [0 919 2603 99999999999999999999]' && $Q validate br-big.pdf
+/ByteRange [0 919 2603 576                    ] -> /ByteRange [0 919 2603 99999999999999999999   ]
+input: br-big.pdf (3179 bytes)
+Ok: 1 signature(s)
+  field="Signature1" indication=TotalFailed sub_indication=Some(FormatFailure) level=None digest_verified=false signature_verified=false defect=Some(NotASignatureDictionary)
+[exit code: 0]
+
+$ python3 -I /tmp/tmp.BjPpkNNqao/mut.py s06-signed.pdf br-ovf.pdf '/ByteRange [0 919 18446744073709551615 1]' && $Q validate br-ovf.pdf
+/ByteRange [0 919 2603 576                    ] -> /ByteRange [0 919 18446744073709551615 1      ]
+input: br-ovf.pdf (3179 bytes)
+Ok: 1 signature(s)
+  field="Signature1" indication=TotalFailed sub_indication=Some(FormatFailure) level=None digest_verified=false signature_verified=false defect=Some(NotASignatureDictionary)
+[exit code: 0]
