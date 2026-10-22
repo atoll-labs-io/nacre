@@ -1,0 +1,64 @@
+## Criterion 1 — invalid inputs a developer could plausibly give
+cwd: run; env SOFTHSM2_CONF=<throwaway token conf>, QA_PIN=<redacted, from env>
+
+# key label that does not exist
+$ probe /usr/lib/softhsm/libsofthsm2.so qa-token label:qa-absent <digest> e.sig
+open: kind Signer
+open Display: no private key matches the selector
+open Debug:   KeyNotFound
+exit: 2
+
+# token label that does not exist
+$ probe /usr/lib/softhsm/libsofthsm2.so no-such-token label:qa-ec <digest> e.sig
+open: kind Signer
+open Display: no PKCS#11 token carries the label asked for
+open Debug:   TokenNotFound
+exit: 2
+
+# module path that does not exist
+$ probe /nonexistent/libnope.so qa-token label:qa-ec <digest> e.sig
+open: kind Signer
+open Display: the PKCS#11 module cannot be loaded
+open Debug:   ModuleUnavailable
+exit: 2
+
+# a library that is not a PKCS#11 module (/usr/lib/libz.so.1)
+$ probe /usr/lib/libz.so.1 qa-token label:qa-ec <digest> e.sig
+open: kind Signer
+open Display: the PKCS#11 module cannot be loaded
+open Debug:   ModuleUnavailable
+exit: 2
+
+# a P-384 key (id 03), with its certificate
+$ probe /usr/lib/softhsm/libsofthsm2.so qa-token id:03 <digest> e.sig
+open: kind Signer
+open Display: the key is neither ECDSA P-256 nor RSA
+open Debug:   UnsupportedKey
+exit: 2
+
+# a P-256 key with no certificate (id 04)
+$ probe /usr/lib/softhsm/libsofthsm2.so qa-token id:04 <digest> e.sig
+open: kind Signer
+open Display: no certificate on the token carries the key's id
+open Debug:   CertificateNotFound
+exit: 2
+
+# a 20-byte digest to the ECDSA key
+$ probe /usr/lib/softhsm/libsofthsm2.so qa-token label:qa-ec <20-byte sha1 digest> e.sig
+open: ok; algorithm EcdsaP256Sha256; chain length 1
+sign 0: kind InvalidInput
+sign Display: digest length is 20 bytes, the signature algorithm expects 32
+sign Debug:   DigestLength { expected: 32, actual: 20 }
+exit: 3
+
+# a 20-byte digest to the RSA key
+$ probe /usr/lib/softhsm/libsofthsm2.so qa-token id:02 <20-byte sha1 digest> e.sig
+open: ok; algorithm RsaPkcs1v15Sha256; chain length 1
+sign 0: kind InvalidInput
+sign Display: digest length is 20 bytes, the signature algorithm expects 32
+sign Debug:   DigestLength { expected: 32, actual: 20 }
+exit: 3
+
+$ ls e.sig
+ls: impossible d'accéder à 'e.sig': Aucun fichier ou dossier de ce nom
+exit: 2

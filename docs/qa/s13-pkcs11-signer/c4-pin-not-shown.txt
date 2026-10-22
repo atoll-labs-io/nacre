@@ -1,0 +1,28 @@
+## Criterion 4 — the PIN in no error message and no log
+cwd: run; env SOFTHSM2_CONF=<throwaway token conf>. Throwaway wrong PIN 'WRONGpin77'; stdout and stderr kept apart
+$ printf 'WRONGpin77\n' | sign_pdf /usr/lib/softhsm/libsofthsm2.so 0b <pki>/intermediate.cert.pem in.pdf out2.pdf >out.txt 2>err.txt
+exit: 1
+-- stdout:
+-- stderr:
+Error: WrongPin(CountLow)
+$ ls out2.pdf
+ls: impossible d'accéder à 'out2.pdf': Aucun fichier ou dossier de ce nom
+exit: 2
+$ grep -c WRONGpin77 out.txt err.txt
+err.txt:0
+out.txt:0
+
+# the right PIN through sign_pdf: stdout and stderr searched for it
+$ printf '%s\n' "$QA_PIN" | sign_pdf /usr/lib/softhsm/libsofthsm2.so 0b <pki>/intermediate.cert.pem in.pdf out3.pdf >out3.txt 2>err3.txt
+exit: 0
+$ grep -c <right PIN> out3.txt err3.txt; wc -c err3.txt
+err3.txt:0
+out3.txt:0
+0
+
+# nominal library runs print nothing of their own: stderr of a successful probe run
+$ QA_PIN=<redacted> probe /usr/lib/softhsm/libsofthsm2.so qa-token label:qa-ec <digest> n.sig 2>err2.txt >/dev/null; wc -c err2.txt
+exit: 0
+0
+
+See also c3-wrong-pin.txt and c3-refused-pin-at-signature.txt: Display, Debug and source chain of every WrongPin and PinRefused searched for the PINs, 0 hits.

@@ -1,0 +1,40 @@
+## Criterion 3, at a signature — the token refuses the PIN of an always-authenticate key (the PIV 9c case) after open
+cwd: run; env SOFTHSM2_CONF=<throwaway token conf>, QA_PIN=<redacted, PIN at open>, QA_NEWPIN=<redacted>; probe source: docs/qa/s13-pkcs11-signer/reauth.rs
+The probe opens a signer on qa-always (id 06), signs once, changes the user PIN from another session of the same process (no login), then signs three times.
+$ reauth /usr/lib/softhsm/libsofthsm2.so 06 <digest> 3
+open: ok
+sign before PIN change: Ok(71)
+user PIN changed by another session
+sign 0 after change: kind Signer
+  Display: the signer failed
+  Debug:   Signer(WrongPin(CountLow))
+  source:  the token refused the PIN (few tries left) | WrongPin(CountLow)
+sign 1 after change: kind Signer
+  Display: the signer failed
+  Debug:   Signer(PinRefused)
+  source:  the token refused this signer's PIN earlier; open a new signer | PinRefused
+sign 2 after change: kind Signer
+  Display: the signer failed
+  Debug:   Signer(PinRefused)
+  source:  the token refused this signer's PIN earlier; open a new signer | PinRefused
+exit: 0
+
+# replay, PINs swapped back (open with the changed PIN, the probe restores the first one)
+$ reauth /usr/lib/softhsm/libsofthsm2.so 06 <digest> 3
+open: ok
+sign before PIN change: Ok(72)
+user PIN changed by another session
+sign 0 after change: kind Signer
+  Display: the signer failed
+  Debug:   Signer(WrongPin(CountLow))
+  source:  the token refused the PIN (few tries left) | WrongPin(CountLow)
+sign 1 after change: kind Signer
+  Display: the signer failed
+  Debug:   Signer(PinRefused)
+  source:  the token refused this signer's PIN earlier; open a new signer | PinRefused
+sign 2 after change: kind Signer
+  Display: the signer failed
+  Debug:   Signer(PinRefused)
+  source:  the token refused this signer's PIN earlier; open a new signer | PinRefused
+exit: 0
+(Every Display, Debug and source line above is a fixed text: no PIN appears in either run.)

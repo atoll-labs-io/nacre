@@ -1,0 +1,26 @@
+## Scenario 1b — RSA key found by id, PKCS#1 v1.5 SHA-256, checked by OpenSSL
+cwd: run; env SOFTHSM2_CONF=<throwaway token conf>, QA_PIN=<redacted, from env>
+token qa-token: qa-rsa (RSA-2048, id 02) + qa-rsa-cert
+$ probe /usr/lib/softhsm/libsofthsm2.so qa-token id:02 <sha256(msg)=43386c8eb9f31e73720d83adf3572821fffc6c9d9d19746a62e4d31a0a36efef> rsa.sig
+open: ok; algorithm RsaPkcs1v15Sha256; chain length 1
+sign 0: ok, 256 bytes -> rsa.sig
+exit: 0
+$ openssl dgst -sha256 -verify rsa.pub -signature rsa.sig msg
+Verified OK
+exit: 0
+$ openssl pkeyutl -verifyrecover -pubin -inkey rsa.pub -in rsa.sig | openssl asn1parse -inform DER
+    0:d=0  hl=2 l=  49 cons: SEQUENCE          
+    2:d=1  hl=2 l=  13 cons: SEQUENCE          
+    4:d=2  hl=2 l=   9 prim: OBJECT            :sha256
+   15:d=2  hl=2 l=   0 prim: NULL              
+   17:d=1  hl=2 l=  32 prim: OCTET STRING      [HEX DUMP]:43386C8EB9F31E73720D83ADF3572821FFFC6C9D9D19746A62E4D31A0A36EFEF
+exit: 0
+
+## Scenario 1c — ECDSA key by id, token not named (token_label None, one initialized token)
+$ probe /usr/lib/softhsm/libsofthsm2.so - id:01 <digest> ecid.sig
+open: ok; algorithm EcdsaP256Sha256; chain length 1
+sign 0: ok, 72 bytes -> ecid.sig
+exit: 0
+$ openssl dgst -sha256 -verify ec.pub -signature ecid.sig msg
+Verified OK
+exit: 0
