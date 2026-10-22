@@ -65,3 +65,84 @@ pub enum Error {
     #[error("the signer failed")]
     Signer(#[from] nacre_core::Error),
 }
+
+impl Error {
+    /// The coarse category of this error, safe to show to an untrusted party.
+    pub fn kind(&self) -> nacre_core::ErrorKind {
+        use nacre_core::ErrorKind;
+        match self {
+            Self::Der(_)
+            | Self::NotSignedData
+            | Self::ForbiddenAttribute(_)
+            | Self::ContentMissing
+            | Self::ContentAmbiguous
+            | Self::DigestLength { .. }
+            | Self::Certificate(_) => ErrorKind::InvalidInput,
+            Self::AlgorithmMismatch
+            | Self::MissingSignedAttributes
+            | Self::MissingAttribute(_)
+            | Self::DuplicateAttribute(_)
+            | Self::AttributeValueCount(_)
+            | Self::ContentTypeMismatch
+            | Self::MessageDigestMismatch
+            | Self::SigningCertificateMismatch
+            | Self::SignatureInvalid => ErrorKind::InvalidSignature,
+            Self::SignerCount(_)
+            | Self::UnsupportedAlgorithm(_)
+            | Self::SignerCertificateNotFound => ErrorKind::Indeterminate,
+            Self::Signer(inner) => inner.kind(),
+        }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::*;
+    use nacre_core::ErrorKind::{self, *};
+
+    #[test]
+    fn every_variant_has_its_kind() {
+        let oid = ObjectIdentifier::new_unwrap("1.2.3");
+        let der = || der::Error::from(der::ErrorKind::Failed);
+        let rows: Vec<(Error, ErrorKind)> = vec![
+            (Error::Der(der()), InvalidInput),
+            (Error::NotSignedData, InvalidInput),
+            (Error::ForbiddenAttribute(oid), InvalidInput),
+            (Error::ContentMissing, InvalidInput),
+            (Error::ContentAmbiguous, InvalidInput),
+            (
+                Error::DigestLength {
+                    expected: 32,
+                    actual: 20,
+                },
+                InvalidInput,
+            ),
+            (Error::Certificate(der()), InvalidInput),
+            (Error::AlgorithmMismatch, InvalidSignature),
+            (Error::MissingSignedAttributes, InvalidSignature),
+            (Error::MissingAttribute(oid), InvalidSignature),
+            (Error::DuplicateAttribute(oid), InvalidSignature),
+            (Error::AttributeValueCount(oid), InvalidSignature),
+            (Error::ContentTypeMismatch, InvalidSignature),
+            (Error::MessageDigestMismatch, InvalidSignature),
+            (Error::SigningCertificateMismatch, InvalidSignature),
+            (Error::SignatureInvalid, InvalidSignature),
+            (Error::SignerCount(2), Indeterminate),
+            (Error::UnsupportedAlgorithm(oid), Indeterminate),
+            (Error::SignerCertificateNotFound, Indeterminate),
+            (
+                Error::Signer(nacre_core::Error::Signer("x".into())),
+                ErrorKind::Signer,
+            ),
+            (
+                Error::Signer(nacre_core::Error::Timestamp("x".into())),
+                Unavailable,
+            ),
+        ];
+        assert_eq!(rows.len(), 21);
+        for (error, kind) in rows {
+            assert_eq!(error.kind(), kind, "{error}");
+        }
+    }
+}

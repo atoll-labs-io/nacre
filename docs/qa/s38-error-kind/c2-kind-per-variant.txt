@@ -1,0 +1,126 @@
+# s38-error-kind — C2 nominal: kind() on nacre-cms and nacre-pdf errors met through real calls, plus the story's every-variant tests
+# Runs in a copy of story/s38-error-kind under $QA_TMP (mktemp -d). Install 'cargo fetch' exit 0; Build 'cargo build --workspace --all-features' exit 0.
+# Probe: scratch crate $QA_TMP/probe (source quoted whole in c1-error-kind.txt), CARGO_TARGET_DIR=$QA_TMP/target.
+
+$ cd $QA_TMP/probe && $QA_TMP/target/debug/probe cms
+(stdin: none)
+signed 839 bytes
+verify_detached_digest(good) ok = true
+[cms from_der(b"hello")]
+  kind()      = InvalidInput / "invalid input"
+  Display     = invalid DER: unexpected ASN.1 DER tag: expected SEQUENCE, got APPLICATION [8] (constructed)
+  Debug       = Der(Error { kind: TagUnexpected { expected: Some(Tag(0x10: SEQUENCE)), actual: Tag(0x08: APPLICATION [8] (constructed)) }, position: None })
+  source[1] = unexpected ASN.1 DER tag: expected SEQUENCE, got APPLICATION [8] (constructed) | Error { kind: TagUnexpected { expected: Some(Tag(0x10: SEQUENCE)), actual: Tag(0x08: APPLICATION [8] (constructed)) }, position: None }
+
+[cms from_der(empty)]
+  kind()      = InvalidInput / "invalid input"
+  Display     = invalid DER: ASN.1 DER message is incomplete: expected 1, actual 0 at DER byte 0
+  Debug       = Der(Error { kind: Incomplete { expected_len: Length(1), actual_len: Length(0) }, position: Some(Length(0)) })
+  source[1] = ASN.1 DER message is incomplete: expected 1, actual 0 at DER byte 0 | Error { kind: Incomplete { expected_len: Length(1), actual_len: Length(0) }, position: Some(Length(0)) }
+
+[cms from_der(truncated)]
+  kind()      = InvalidInput / "invalid input"
+  Display     = invalid DER: ASN.1 DER message is incomplete: expected 839, actual 419 at DER byte 4
+  Debug       = Der(Error { kind: Incomplete { expected_len: Length(839), actual_len: Length(419) }, position: Some(Length(4)) })
+  source[1] = ASN.1 DER message is incomplete: expected 839, actual 419 at DER byte 4 | Error { kind: Incomplete { expected_len: Length(839), actual_len: Length(419) }, position: Some(Length(4)) }
+
+[cms sign_detached digest 31 bytes]
+  kind()      = InvalidInput / "invalid input"
+  Display     = digest length is 31 bytes, the algorithm produces 32
+  Debug       = DigestLength { expected: 32, actual: 31 }
+
+[cms sign_detached PADES + signingTime]
+  kind()      = InvalidInput / "invalid input"
+  Display     = the profile forbids attribute 1.2.840.113549.1.9.5
+  Debug       = ForbiddenAttribute(ObjectIdentifier(1.2.840.113549.1.9.5))
+
+[cms verify_detached_digest(other digest)]
+  kind()      = InvalidSignature / "invalid signature"
+  Display     = the content digest differs from the messageDigest attribute
+  Debug       = MessageDigestMismatch
+
+[cms verify_detached_digest(16 bytes)]
+  kind()      = InvalidInput / "invalid input"
+  Display     = digest length is 16 bytes, the algorithm produces 32
+  Debug       = DigestLength { expected: 32, actual: 16 }
+
+[cms verify(None) on detached]
+  kind()      = InvalidInput / "invalid input"
+  Display     = no content to verify
+  Debug       = ContentMissing
+
+[cms verify(Some(content)) wrong content]
+  kind()      = InvalidSignature / "invalid signature"
+  Display     = the content digest differs from the messageDigest attribute
+  Debug       = MessageDigestMismatch
+
+[cms verify_detached_digest(tampered signature)]
+  kind()      = InvalidSignature / "invalid signature"
+  Display     = the signature is invalid
+  Debug       = SignatureInvalid
+
+[cms sign_detached signer with empty chain]
+  kind()      = Indeterminate / "indeterminate"
+  Display     = no certificate matches the signer identifier
+  Debug       = SignerCertificateNotFound
+
+[cms sign_detached signer that fails]
+  kind()      = Signer / "signer failure"
+  Display     = the signer failed
+  Debug       = Signer(Signer("hsm offline"))
+  source[1] = the signer failed | Signer("hsm offline")
+  source[2] = hsm offline | "hsm offline"
+
+[cms sign_detached signer with garbage certificate]
+  kind()      = InvalidInput / "invalid input"
+  Display     = invalid certificate: unexpected ASN.1 DER tag: expected SEQUENCE, got APPLICATION [14] (constructed)
+  Debug       = Certificate(Error { kind: TagUnexpected { expected: Some(Tag(0x10: SEQUENCE)), actual: Tag(0x0e: APPLICATION [14] (constructed)) }, position: None })
+  source[1] = unexpected ASN.1 DER tag: expected SEQUENCE, got APPLICATION [14] (constructed) | Error { kind: TagUnexpected { expected: Some(Tag(0x10: SEQUENCE)), actual: Tag(0x0e: APPLICATION [14] (constructed)) }, position: None }
+exit code: 0
+
+$ cd $QA_TMP/probe && $QA_TMP/target/debug/probe pdf $QA_TMP/copy/crates/nacre-pdf/tests/corpus/real/chrome-print.pdf $QA_TMP/copy/crates/nacre-pdf/tests/corpus/hostile/aes256.pdf
+(stdin: none)
+[pdf $QA_TMP/copy/crates/nacre-pdf/tests/corpus/real/chrome-print.pdf] Ok
+
+[pdf $QA_TMP/copy/crates/nacre-pdf/tests/corpus/hostile/aes256.pdf]
+  kind()      = Indeterminate / "indeterminate"
+  Display     = the document is encrypted
+  Debug       = Encrypted
+
+[pdf empty]
+  kind()      = InvalidInput / "invalid input"
+  Display     = the input does not start with %PDF-
+  Debug       = MissingHeader
+
+[pdf text]
+  kind()      = InvalidInput / "invalid input"
+  Display     = the input does not start with %PDF-
+  Debug       = MissingHeader
+
+[pdf header only]
+  kind()      = InvalidInput / "invalid input"
+  Display     = no startxref statement in the last 1024 bytes
+  Debug       = MissingStartxref
+exit code: 0
+
+$ cd $QA_TMP/copy && CARGO_TARGET_DIR=$QA_TMP/target cargo test -p nacre-cms --lib every_variant 2>&1 | grep -E '^test |test result'
+(stdin: none)
+test error::tests::every_variant_has_its_kind ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+exit code: 0
+
+$ cd $QA_TMP/copy && CARGO_TARGET_DIR=$QA_TMP/target cargo test -p nacre-pdf --lib every_variant 2>&1 | grep -E '^test |test result'
+(stdin: none)
+test error::tests::every_variant_has_its_kind ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+exit code: 0
+
+$ cd /home/lecrabe/dev/atoll/nacre/.worktrees/s38-error-kind && awk '/^pub enum Error/,/^}/' crates/nacre-cms/src/error.rs | grep -cE '^    [A-Z]'; awk '/^pub enum Error/,/^}/' crates/nacre-pdf/src/error.rs | grep -cE '^    [A-Z]'; grep -n 'assert_eq!(rows.len()' crates/nacre-cms/src/error.rs crates/nacre-pdf/src/error.rs; grep -n '_ =>' crates/*/src/error.rs; echo 'no wildcard arm: grep printed nothing above'
+(stdin: none)
+20
+30
+crates/nacre-cms/src/error.rs:143:        assert_eq!(rows.len(), 21);
+crates/nacre-pdf/src/error.rs:254:        assert_eq!(rows.len(), 30);
+no wildcard arm: grep printed nothing above
+exit code: 0
+

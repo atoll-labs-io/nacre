@@ -9,6 +9,7 @@
 //! Certificates, tokens, CRLs and OCSP responses cross the traits as DER bytes, and every
 //! trait method returns the single [`Error`] of this crate; an implementation's own error
 //! travels as its boxed [`std::error::Error::source`].
+//! [`Error::kind`] gives the coarse [`ErrorKind`] an application may show to a third party.
 //!
 //! The `test-signer` feature, never enabled by default, adds [`TestSigner`], a software
 //! P-256 signer for tests only.
@@ -23,7 +24,7 @@ mod test_signer;
 mod timestamp;
 
 pub use algorithm::{DigestAlgorithm, SignatureAlgorithm};
-pub use error::{BoxError, Error};
+pub use error::{BoxError, Error, ErrorKind};
 pub use report::{
     Indication, SignatureForm, SignatureLevel, SignatureProfile, SubIndication, ValidationReport,
 };

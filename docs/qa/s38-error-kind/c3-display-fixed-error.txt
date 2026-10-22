@@ -1,0 +1,13 @@
+# s38-error-kind — C3 invalid input: digests of 0, 31, 33, 4096 bytes and differing PDF/CMS defects; kind() text must not move with them
+# Runs in a copy of story/s38-error-kind under $QA_TMP (mktemp -d). Install 'cargo fetch' exit 0; Build 'cargo build --workspace --all-features' exit 0.
+# Probe: scratch crate $QA_TMP/probe (source quoted whole in c1-error-kind.txt), CARGO_TARGET_DIR=$QA_TMP/target.
+
+$ cd $QA_TMP/probe && { $QA_TMP/target/debug/probe kinds; $QA_TMP/target/debug/probe cms; $QA_TMP/target/debug/probe pdf $QA_TMP/copy/crates/nacre-pdf/tests/corpus/hostile/*.pdf; } | grep -E 'kind\(\)' | sort | uniq -c
+(stdin: none)
+      2   kind()      = Indeterminate / "indeterminate"
+     18   kind()      = InvalidInput / "invalid input"
+      3   kind()      = InvalidSignature / "invalid signature"
+      3   kind()      = Signer / "signer failure"
+      2   kind()      = Unavailable / "service unavailable"
+exit code: 0
+
