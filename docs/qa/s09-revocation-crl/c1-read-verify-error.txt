@@ -1,0 +1,101 @@
+# Criterion 1 — invalid inputs
+# QA walk of s09-revocation-crl, 2026-10-22T12:22:44Z, tree b8054b9e08f49087ef8964e7598f43376bc20638
+# cwd: /tmp/qa-s09.78GcIa/qa
+# stdin: none
+# --- source: src/bin/c1.rs
+use nacre_revocation::Crl;
+use qa_s09::*;
+
+fn describe(label: &str, crl: &[u8], ca: &[u8]) {
+    println!("== {label}");
+    match Crl::from_der(crl) {
+        Err(e) => println!("from_der: Err({})", show(&e)),
+        Ok(c) => {
+            println!("issuer:      {}", c.issuer());
+            println!("thisUpdate:  {}", iso(c.this_update()));
+            println!("nextUpdate:  {}", c.next_update().map(iso).unwrap_or("none".into()));
+            match c.revoked() {
+                Ok(list) => {
+                    println!("revoked:     {} entr{}", list.len(), if list.len() == 1 { "y" } else { "ies" });
+                    for r in list {
+                        println!("  serial {} date {} reason {:?}", hex(&r.serial), iso(r.date), r.reason);
+                    }
+                }
+                Err(e) => println!("revoked: Err({})", show(&e)),
+            }
+            match c.verify_signature(ca) {
+                Ok(()) => println!("verify_signature: Ok"),
+                Err(e) => println!("verify_signature: Err({})", show(&e)),
+            }
+        }
+    }
+}
+
+fn verify_only(label: &str, crl: &[u8], ca: &[u8]) {
+    match Crl::from_der(crl) {
+        Err(e) => println!("{label}: from_der Err({})", show(&e)),
+        Ok(c) => match c.verify_signature(ca) {
+            Ok(()) => println!("{label}: verify_signature Ok"),
+            Err(e) => println!("{label}: verify_signature Err({})", show(&e)),
+        },
+    }
+}
+
+fn main() {
+    let mode = std::env::args().nth(1).unwrap_or_default();
+    if mode != "error" {
+        describe("committed fixture openssl/ec-ca.crl, issuer openssl/ec-ca.der", &corpus("openssl/ec-ca.crl"), &corpus("openssl/ec-ca.der"));
+        describe("committed fixture openssl/rsa-ca.crl, issuer openssl/rsa-ca.der", &corpus("openssl/rsa-ca.crl"), &corpus("openssl/rsa-ca.der"));
+        describe("walk's OpenSSL P-256 CA: ec.crl, ec-ca.der", &read("ec.crl"), &read("ec-ca.der"));
+        describe("walk's OpenSSL RSA-2048 CA: rsa.crl, rsa-ca.der", &read("rsa.crl"), &read("rsa-ca.der"));
+        describe("walk's second P-256 CA (empty CRL): ec2.crl, ec2-ca.der", &read("ec2.crl"), &read("ec2-ca.der"));
+        describe("s02 PKI: intermediate.crl, intermediate cert", &read("s02-intermediate.crl"), &read("s02-intermediate.der"));
+        describe("s02 PKI: root.crl, root cert", &read("s02-root.crl"), &read("s02-root.der"));
+        return;
+    }
+    let ec = read("ec.crl");
+    verify_only("P-256 CRL checked with the RSA CA", &ec, &read("rsa-ca.der"));
+    verify_only("P-256 CRL checked with another P-256 CA", &ec, &read("ec2-ca.der"));
+    verify_only("P-256 CRL checked with the s02 root", &ec, &read("s02-root.der"));
+    verify_only("P-256 CRL checked with its own leaf (not a CRL signer)", &ec, &read("ec-leaf.der"));
+    let mut flipped = ec.clone();
+    // A byte of thisUpdate: find "261001" UTCTime digits.
+    let pos = flipped.windows(6).position(|w| w == b"261001").unwrap();
+    flipped[pos + 5] = b'2';
+    verify_only("P-256 CRL with thisUpdate 261001 -> 261002 after signing", &flipped, &read("ec-ca.der"));
+    describe("P-384 CA: p384.crl, p384-ca.der", &read("p384.crl"), &read("p384-ca.der"));
+    let pem = std::process::Command::new("openssl").args(["crl", "-inform", "DER", "-in", &format!("{PKI}/ec.crl")]).output().unwrap().stdout;
+    verify_only("the same CRL as PEM text", &pem, &read("ec-ca.der"));
+    verify_only("empty input", &[], &read("ec-ca.der"));
+    verify_only("a certificate given as the CRL", &read("ec-leaf.der"), &read("ec-ca.der"));
+    let mut trailing = ec.clone();
+    trailing.extend_from_slice(&[0, 0]);
+    verify_only("the CRL followed by two zero bytes", &trailing, &read("ec-ca.der"));
+    let random: Vec<u8> = (0u32..300).map(|i| (i.wrapping_mul(2654435761) >> 13) as u8).collect();
+    verify_only("300 pseudo-random bytes", &random, &read("ec-ca.der"));
+    verify_only("issuer argument: the CRL itself instead of a certificate", &ec, &ec);
+    verify_only("issuer argument: empty", &ec, &[]);
+}
+# --- end of source
+$ cargo run -q --bin c1 -- error
+P-256 CRL checked with the RSA CA: verify_signature Err(the signature algorithm does not match | chain: the signature algorithm does not match | debug: AlgorithmMismatch | kind: InvalidSignature)
+P-256 CRL checked with another P-256 CA: verify_signature Err(the CRL signature is invalid | chain: the CRL signature is invalid | debug: SignatureInvalid | kind: InvalidSignature)
+P-256 CRL checked with the s02 root: verify_signature Err(the CRL signature is invalid | chain: the CRL signature is invalid | debug: SignatureInvalid | kind: InvalidSignature)
+P-256 CRL checked with its own leaf (not a CRL signer): verify_signature Err(the issuer certificate may not sign CRLs | chain: the issuer certificate may not sign CRLs | debug: IssuerNotCrlSigner | kind: Indeterminate)
+P-256 CRL with thisUpdate 261001 -> 261002 after signing: verify_signature Err(the CRL signature is invalid | chain: the CRL signature is invalid | debug: SignatureInvalid | kind: InvalidSignature)
+== P-384 CA: p384.crl, p384-ca.der
+issuer:      C=FR,O=QA,CN=QA s09 P384 CA
+thisUpdate:  2026-10-01T00:00:00Z
+nextUpdate:  2027-10-01T00:00:00Z
+revoked:     1 entry
+  serial 2002 date 2026-10-22T12:21:21Z reason Some(KeyCompromise)
+verify_signature: Err(unsupported algorithm 1.3.132.0.34 | chain: unsupported algorithm 1.3.132.0.34 | debug: UnsupportedAlgorithm(ObjectIdentifier(1.3.132.0.34)) | kind: Indeterminate)
+the same CRL as PEM text: from_der Err(invalid DER | chain: invalid DER <- unknown/unsupported ASN.1 DER tag: 0x2d at DER byte 1 | debug: Der(Error { kind: TagUnknown { byte: 45 }, position: Some(Length(1)) }) | kind: InvalidInput)
+empty input: from_der Err(invalid DER | chain: invalid DER <- ASN.1 DER message is incomplete: expected 1, actual 0 at DER byte 0 | debug: Der(Error { kind: Incomplete { expected_len: Length(1), actual_len: Length(0) }, position: Some(Length(0)) }) | kind: InvalidInput)
+a certificate given as the CRL: from_der Err(invalid DER | chain: invalid DER <- unexpected ASN.1 DER tag: expected INTEGER, got CONTEXT-SPECIFIC [0] (constructed) | debug: Der(Error { kind: TagUnexpected { expected: Some(Tag(0x02: INTEGER)), actual: Tag(0x00: CONTEXT-SPECIFIC [0] (constructed)) }, position: None }) | kind: InvalidInput)
+the CRL followed by two zero bytes: from_der Err(invalid DER | chain: invalid DER <- trailing data at end of DER message: decoded 274 bytes, 2 bytes remaining at DER byte 274 | debug: Der(Error { kind: TrailingData { decoded: Length(274), remaining: Length(2) }, position: Some(Length(274)) }) | kind: InvalidInput)
+300 pseudo-random bytes: from_der Err(invalid DER | chain: invalid DER <- unknown/unsupported ASN.1 DER tag: 0x00 at DER byte 1 | debug: Der(Error { kind: TagUnknown { byte: 0 }, position: Some(Length(1)) }) | kind: InvalidInput)
+issuer argument: the CRL itself instead of a certificate: verify_signature Err(invalid issuer certificate | chain: invalid issuer certificate <- unexpected ASN.1 DER tag: expected SEQUENCE, got UTCTime | debug: IssuerCertificate(Error { kind: TagUnexpected { expected: Some(Tag(0x10: SEQUENCE)), actual: Tag(0x17: UTCTime) }, position: None }) | kind: InvalidInput)
+issuer argument: empty: verify_signature Err(invalid issuer certificate | chain: invalid issuer certificate <- ASN.1 DER message is incomplete: expected 1, actual 0 at DER byte 0 | debug: IssuerCertificate(Error { kind: Incomplete { expected_len: Length(1), actual_len: Length(0) }, position: Some(Length(0)) }) | kind: InvalidInput)
+# exit code: 0
+

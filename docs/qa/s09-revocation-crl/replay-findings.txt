@@ -1,0 +1,26 @@
+# Replay of finding 1 — a refused distribution point reads kind Unavailable through RevocationSource
+# QA walk of s09-revocation-crl, 2026-10-22T12:28:16Z, tree b8054b9e08f49087ef8964e7598f43376bc20638
+# cwd: /tmp/qa-s09.78GcIa/qa
+# stdin: none
+# --- source: src/bin/replay.rs
+use nacre_core::RevocationSource;
+use nacre_revocation::HttpCrlSource;
+use qa_s09::*;
+
+fn main() {
+    let source = HttpCrlSource::new();
+    for leaf in ["dp-private", "dp-metadata"] {
+        let e = source.revocation(&read(&format!("{leaf}.der")), &read("ec-ca.der")).unwrap_err();
+        let inner = std::error::Error::source(&e).and_then(|s| s.downcast_ref::<nacre_revocation::Error>()).unwrap();
+        println!("{leaf}: nacre_core::Error kind() = {:?}; Display = {e}; inner {:?} kind() = {:?}", e.kind(), inner, inner.kind());
+    }
+    let e = source.revocation(&[], &read("ec-ca.der")).unwrap_err();
+    println!("empty certificate: nacre_core::Error kind() = {:?}; Display = {e}", e.kind());
+}
+# --- end of source
+$ cargo run -q --bin replay
+dp-private: nacre_core::Error kind() = Unavailable; Display = the revocation source failed; inner NonPublicAddress kind() = InvalidInput
+dp-metadata: nacre_core::Error kind() = Unavailable; Display = the revocation source failed; inner NonPublicAddress kind() = InvalidInput
+empty certificate: nacre_core::Error kind() = Unavailable; Display = the revocation source failed
+# exit code: 0
+
