@@ -1,0 +1,58 @@
+cwd: /tmp/qa-s06.rhEO8S/run
+stdin: none
+$ /tmp/qa-s06.rhEO8S/bin/qa-s06 inspect once.pdf cms-once-
+--- stdout
+signature 1: /ByteRange [0, 919, 4093, 576]
+  range covers 0..919 and 4093..4669 (file length 4669)
+  /Contents reserve 1586 bytes, CMS 1584 bytes, zero padding 2 bytes (all zero: true)
+  /Sig before /Contents: << /Type /Sig /M <443A32303236313032323038303030305A> /Filter /Adobe.PPKLite /SubFilter /ETSI.CAdES.detached /ByteRange [0 919 4093 576                    ] /Contents 
+  /Sig after /Contents:  
+--- stderr
+--- exit code: 0
+
+cwd: /tmp/qa-s06.rhEO8S/run
+stdin: none
+$ sh -c echo 443A32303236313032323038303030305A | xxd -r -p; echo
+--- stdout
+D:20261022080000Z
+--- stderr
+--- exit code: 0
+
+cwd: /tmp/qa-s06.rhEO8S/run
+stdin: none
+$ sh -c openssl cms -cmsout -print -inform DER -in cms-once-1.der | grep -E "object:|crls|<ABSENT>|signingTime" ; echo "--- count of signingTime (1.2.840.113549.1.9.5) in the CMS:"; openssl asn1parse -inform DER -in cms-once-1.der | grep -c -E "signingTime|1.2.840.113549.1.9.5"
+--- stdout
+        parameter: <ABSENT>
+      eContent: <ABSENT>
+            parameter: <ABSENT>
+          issuerUID: <ABSENT>
+          subjectUID: <ABSENT>
+              object: X509v3 Basic Constraints (2.5.29.19)
+              object: X509v3 Key Usage (2.5.29.15)
+              object: X509v3 Subject Key Identifier (2.5.29.14)
+              object: X509v3 Authority Key Identifier (2.5.29.35)
+              object: X509v3 CRL Distribution Points (2.5.29.31)
+          parameter: <ABSENT>
+            parameter: <ABSENT>
+          issuerUID: <ABSENT>
+          subjectUID: <ABSENT>
+              object: X509v3 Basic Constraints (2.5.29.19)
+              object: X509v3 Key Usage (2.5.29.15)
+              object: X509v3 Subject Key Identifier (2.5.29.14)
+              object: X509v3 Authority Key Identifier (2.5.29.35)
+              object: X509v3 CRL Distribution Points (2.5.29.31)
+              object: Authority Information Access (1.3.6.1.5.5.7.1.1)
+          parameter: <ABSENT>
+    crls:
+      <ABSENT>
+          parameter: <ABSENT>
+            object: contentType (1.2.840.113549.1.9.3)
+            object: messageDigest (1.2.840.113549.1.9.4)
+            object: id-smime-aa-signingCertificateV2 (1.2.840.113549.1.9.16.2.47)
+          parameter: <ABSENT>
+          <ABSENT>
+--- count of signingTime (1.2.840.113549.1.9.5) in the CMS:
+0
+--- stderr
+--- exit code: 1
+

@@ -1,0 +1,26 @@
+[package]
+name = "nacre-pades"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+license = "MIT OR Apache-2.0"
+description = "PAdES (ETSI EN 319 142-1) for Nacre: signs a PDF at PAdES-BASELINE-B with a Nacre signer, in a new incremental revision."
+
+[lints]
+workspace = true
+
+[dependencies]
+nacre-core = { path = "../nacre-core", version = "0.1.0" }
+nacre-cms = { path = "../nacre-cms", version = "0.1.0" }
+nacre-pdf = { path = "../nacre-pdf", version = "0.1.0" }
+sha2 = "0.11"
+der = { version = "0.8", features = ["alloc"] }
+x509-cert = "0.3"
+thiserror = "2"
+
+[dev-dependencies]
+nacre-core = { path = "../nacre-core", features = ["test-signer"] }
+# No version: nacre-conformance is never published, so `cargo publish` drops it.
+nacre-conformance = { path = "../nacre-conformance", features = ["http"] }
+p256 = { version = "0.14", features = ["ecdsa", "pkcs8", "pem"] }
+der = { version = "0.8", features = ["alloc", "pem"] }

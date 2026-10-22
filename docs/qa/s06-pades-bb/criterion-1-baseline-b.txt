@@ -1,0 +1,18 @@
+cwd: /tmp/qa-s06.rhEO8S/run
+stdin: none
+$ /tmp/qa-s06.rhEO8S/copy/target/debug/qa-s06 sign /tmp/qa-s06.rhEO8S/copy/conformance/pki/out unsigned.pdf once.pdf
+--- stdout
+signed: 744 bytes in, 4669 bytes out
+original bytes are a prefix: true
+--- stderr
+--- exit code: 0
+
+cwd: /tmp/qa-s06.rhEO8S/run
+stdin: none
+$ /tmp/qa-s06.rhEO8S/copy/target/debug/qa-s06 validate qa-s06-once once.pdf
+--- stdout
+signatures judged by DSS: 1
+  S-5767594DF82A9A86FBE16A8BA7F33B88AEC75810DF50EFF888AC5754A37EE79A format=PAdES-BASELINE-B indication=TotalPassed sub_indication=None
+--- stderr
+--- exit code: 0
+

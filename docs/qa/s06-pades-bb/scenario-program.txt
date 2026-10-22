@@ -1,0 +1,143 @@
+Scratch program every transcript runs (built outside the worktree, in the QA temp copy, against the copy's crates).
+
+=== Cargo.toml
+[package]
+name = "qa-s06"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+nacre-pades = { path = "/tmp/qa-s06.rhEO8S/copy/crates/nacre-pades" }
+nacre-core = { path = "/tmp/qa-s06.rhEO8S/copy/crates/nacre-core", features = ["test-signer"] }
+nacre-conformance = { path = "/tmp/qa-s06.rhEO8S/copy/crates/nacre-conformance", features = ["http"] }
+p256 = { version = "0.14", features = ["ecdsa", "pkcs8", "pem"] }
+der = { version = "0.8", features = ["alloc", "pem"] }
+
+=== src/main.rs (as built: the binary predates the last edit of sign-test, which therefore prints the output length and writes no file)
+// QA scratch program for s06-pades-bb: calls the public interface of nacre-pades as Patelle would.
+use std::path::PathBuf;
+
+use nacre_core::{SignatureAlgorithm, Signer, TestSigner};
+use nacre_pades::{DateTime, sign};
+use p256::ecdsa::signature::hazmat::PrehashSigner;
+use p256::ecdsa::{DerSignature, SigningKey};
+use p256::pkcs8::DecodePrivateKey;
+
+struct PemSigner {
+    key: SigningKey,
+    chain: Vec<Vec<u8>>,
+}
+
+impl PemSigner {
+    fn load(dir: &PathBuf) -> Self {
+        let key = SigningKey::from_pkcs8_pem(&std::fs::read_to_string(dir.join("signer.key.pem")).unwrap()).unwrap();
+        let chain = ["signer.cert.pem", "intermediate.cert.pem"]
+            .iter()
+            .map(|n| der::pem::decode_vec(std::fs::read(dir.join(n)).unwrap().as_slice()).unwrap().1)
+            .collect();
+        Self { key, chain }
+    }
+}
+
+impl Signer for PemSigner {
+    fn algorithm(&self) -> SignatureAlgorithm { SignatureAlgorithm::EcdsaP256Sha256 }
+    fn certificate_chain(&self) -> &[Vec<u8>] { &self.chain }
+    fn sign_digest(&self, digest: &[u8]) -> Result<Vec<u8>, nacre_core::Error> {
+        let s: DerSignature = self.key.sign_prehash(digest).map_err(|e| nacre_core::Error::Signer(Box::new(e)))?;
+        Ok(s.as_bytes().to_vec())
+    }
+}
+
+fn time() -> DateTime { DateTime::new(2026, 10, 22, 8, 0, 0).unwrap() }
+
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    match args[1].as_str() {
+        // sign <pki dir> <in> <out>
+        "sign" => {
+            let signer = PemSigner::load(&PathBuf::from(&args[2]));
+            let input = std::fs::read(&args[3]).unwrap();
+            match sign(&input, &signer, time()) {
+                Ok(out) => {
+                    println!("signed: {} bytes in, {} bytes out", input.len(), out.len());
+                    println!("original bytes are a prefix: {}", out.starts_with(&input));
+                    std::fs::write(&args[4], out).unwrap();
+                }
+                Err(e) => { println!("error: {e} (kind {:?}) debug {e:?}", e.kind()); std::process::exit(2); }
+            }
+        }
+        // sign-test <in> : sign with nacre-core's TestSigner, discard output
+        "sign-test" => {
+            let input = std::fs::read(&args[2]).unwrap();
+            let s = TestSigner::from_secret(&[0x11; 32]).unwrap();
+            match sign(&input, &s, time()) {
+                Ok(out) => println!("signed: {} bytes out", out.len()),
+                Err(e) => { println!("error: {e} (kind {:?}) debug {e:?}", e.kind()); std::process::exit(2); }
+            }
+        }
+        // validate <name> <file>
+        "validate" => {
+            let doc = std::fs::read(&args[3]).unwrap();
+            let r = nacre_conformance::Dss::from_env().unwrap().validate(&args[2], &doc).unwrap();
+            println!("signatures judged by DSS: {}", r.signatures.len());
+            for v in &r.signatures {
+                println!("  {} format={} indication={:?} sub_indication={:?}", v.id, v.format, v.report.indication(), v.report.sub_indication());
+            }
+        }
+        // inspect <file> <out prefix>: raw byte scan of every /ByteRange, writes each CMS as <prefix>N.der
+        "inspect" => {
+            let pdf = std::fs::read(&args[2]).unwrap();
+            let pat = b"/ByteRange";
+            let mut n = 0;
+            let mut i = 0;
+            while let Some(p) = pdf[i..].windows(pat.len()).position(|w| w == pat) {
+                let at = i + p;
+                let open = at + pdf[at..].iter().position(|&b| b == b'[').unwrap();
+                let close = open + pdf[open..].iter().position(|&b| b == b']').unwrap();
+                let nums: Vec<usize> = std::str::from_utf8(&pdf[open + 1..close]).unwrap().split_whitespace().map(|s| s.parse().unwrap()).collect();
+                n += 1;
+                println!("signature {n}: /ByteRange {:?}", nums);
+                println!("  range covers 0..{} and {}..{} (file length {})", nums[1], nums[2], nums[2] + nums[3], pdf.len());
+                let hole = &pdf[nums[1]..nums[2]];
+                let hex: Vec<u8> = hole.iter().copied().filter(|b| b.is_ascii_hexdigit()).collect();
+                let bytes: Vec<u8> = hex.chunks(2).map(|c| u8::from_str_radix(std::str::from_utf8(c).unwrap(), 16).unwrap()).collect();
+                let len = match bytes[1] { l if l < 0x80 => 2 + l as usize, 0x81 => 3 + bytes[2] as usize, 0x82 => 4 + ((bytes[2] as usize) << 8 | bytes[3] as usize), _ => 0 };
+                println!("  /Contents reserve {} bytes, CMS {} bytes, zero padding {} bytes (all zero: {})", bytes.len(), len, bytes.len() - len, bytes[len..].iter().all(|&b| b == 0));
+                std::fs::write(format!("{}{n}.der", args[3]), &bytes[..len]).unwrap();
+                let start = pdf[..at].windows(2).rposition(|w| w == b"<<").unwrap();
+                let dict = String::from_utf8_lossy(&pdf[start..nums[1]]).to_string();
+                let after = String::from_utf8_lossy(&pdf[nums[2]..(nums[2] + 200).min(pdf.len())]).to_string();
+                println!("  /Sig before /Contents: {}", dict.replace('\n', " "));
+                println!("  /Sig after /Contents: {}", after.split(">>").next().unwrap_or("").replace('\n', " "));
+                i = close;
+            }
+        }
+        _ => panic!("unknown mode"),
+    }
+}
+
+=== transcript wrapper tx.sh
+#!/bin/sh
+# usage: tx.sh <transcript file> <command...>; runs in $T/run
+out=$1; shift
+cd /tmp/qa-s06.rhEO8S/run
+{
+  echo "cwd: $(pwd)"
+  echo "stdin: none"
+  echo "\$ $*"
+  "$@" > /tmp/qa-s06.rhEO8S/o.txt 2> /tmp/qa-s06.rhEO8S/e.txt; code=$?
+  echo "--- stdout"; cat /tmp/qa-s06.rhEO8S/o.txt
+  echo "--- stderr"; cat /tmp/qa-s06.rhEO8S/e.txt
+  echo "--- exit code: $code"
+  echo
+} >> "$out"
+
+=== bench start (from the temp copy, compose project nacre-conformance)
+podman compose -p nacre-conformance -f conformance/compose.yaml down
+podman compose -p nacre-conformance -f conformance/compose.yaml --profile init run --rm pki-init
+podman compose -p nacre-conformance -f conformance/compose.yaml up -d
+sh conformance/check.sh   -> bench ready
+sh conformance/reference/generate.sh
