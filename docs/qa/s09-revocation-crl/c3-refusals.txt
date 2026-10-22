@@ -1,0 +1,109 @@
+# Criterion 3 — another issuer, an invalid signature, a stale CRL are reported as such
+# QA walk of s09-revocation-crl, 2026-10-22T12:24:12Z, tree b8054b9e08f49087ef8964e7598f43376bc20638
+# cwd: /tmp/qa-s09.78GcIa/qa
+# stdin: none
+# --- source: src/bin/c3.rs
+use nacre_revocation::Crl;
+use qa_s09::*;
+use std::time::{Duration, SystemTime};
+
+fn judge(label: &str, crl: &[u8], leaf: &[u8], issuer: &[u8], at: SystemTime) {
+    let r = Crl::from_der(crl).and_then(|c| c.status(leaf, issuer, at));
+    match r {
+        Ok(s) => println!("{label} @ {}: Ok({s:?})", iso(at)),
+        Err(e) => println!("{label} @ {}: Err({})", iso(at), show(&e)),
+    }
+}
+
+fn main() {
+    let mode = std::env::args().nth(1).unwrap_or_default();
+    let at = date(2027, 1, 1);
+    let ec = read("ec.crl");
+    let ca = read("ec-ca.der");
+    if mode == "ok" {
+        println!("-- baseline: the valid CRL judges both leaves");
+        judge("ec.crl, ec-leaf, ec-ca", &ec, &read("ec-leaf.der"), &ca, at);
+        judge("ec.crl, ec-revoked, ec-ca", &ec, &read("ec-revoked.der"), &ca, at);
+        println!("-- CRL from another issuer");
+        judge("rsa.crl (RSA CA) for ec-leaf, issuer rsa-ca", &read("rsa.crl"), &read("ec-leaf.der"), &read("rsa-ca.der"), at);
+        judge("ec.crl for rsa-revoked, issuer ec-ca", &ec, &read("rsa-revoked.der"), &ca, at);
+        judge("ec.crl for the s02 signer, issuer ec-ca", &ec, &read("s02-signer.der"), &ca, at);
+        judge("ec2.crl (empty, other CA) for ec-revoked, issuer ec2-ca", &read("ec2.crl"), &read("ec-revoked.der"), &read("ec2-ca.der"), at);
+        println!("-- invalid signature (one byte of thisUpdate changed after signing)");
+        let mut flipped = ec.clone();
+        let pos = flipped.windows(6).position(|w| w == b"261001").unwrap();
+        flipped[pos + 5] = b'2';
+        judge("tampered ec.crl, ec-leaf", &flipped, &read("ec-leaf.der"), &ca, at);
+        judge("tampered ec.crl, ec-revoked", &flipped, &read("ec-revoked.der"), &ca, at);
+        let mut sig = ec.clone();
+        let n = sig.len() - 3;
+        sig[n] ^= 0x01;
+        judge("ec.crl with one signature bit flipped, ec-leaf", &sig, &read("ec-leaf.der"), &ca, at);
+        println!("-- stale: nextUpdate 2027-10-01T00:00:00Z");
+        let next = date(2027, 10, 1);
+        judge("ec.crl, ec-leaf, at nextUpdate", &ec, &read("ec-leaf.der"), &ca, next);
+        judge("ec.crl, ec-leaf, nextUpdate + 1 s", &ec, &read("ec-leaf.der"), &ca, next + Duration::from_secs(1));
+        judge("ec.crl, ec-leaf, nextUpdate + 1 day", &ec, &read("ec-leaf.der"), &ca, next + Duration::from_secs(86400));
+        judge("ec.crl, ec-revoked, nextUpdate + 1 year", &ec, &read("ec-revoked.der"), &ca, date(2028, 10, 1));
+        judge("ec.crl, ec-leaf, before thisUpdate (2026-01-01)", &ec, &read("ec-leaf.der"), &ca, date(2026, 1, 1));
+        println!("-- the committed attack corpus (docs/security/attacks/revocation.md), leaf attacks/leaf.der");
+        let leaf = corpus("attacks/leaf.der");
+        let a = |f: &str| corpus(&format!("attacks/{f}"));
+        let at = date(2027, 1, 1);
+        for (file, issuer) in [
+            ("wrong-issuer.der", "other-ca.der"),
+            ("issuer-renamed.der", "renamed-ca.der"),
+            ("bad-signature.der", "ca.der"),
+            ("stale.der", "ca.der"),
+            ("no-next-update.der", "ca.der"),
+            ("critical-extension.der", "ca.der"),
+            ("algorithm-substitution.der", "ca.der"),
+            ("issuer-not-crl-signer.der", "non-crl-signer-ca.der"),
+            ("critical-entry-extension.der", "ca.der"),
+        ] {
+            judge(&format!("{file}, issuer {issuer}"), &a(file), &leaf, &a(issuer), at);
+        }
+        return;
+    }
+    println!("-- misuse");
+    judge("certificate and issuer swapped", &ec, &ca, &read("ec-revoked.der"), at);
+    judge("s02 root given for the s02 intermediate", &read("s02-intermediate.crl"), &read("s02-revoked.der"), &read("s02-root.der"), date(2030, 1, 1));
+    judge("s02 root CRL for the s02 revoked leaf", &read("s02-root.crl"), &read("s02-revoked.der"), &read("s02-root.der"), date(2030, 1, 1));
+    judge("certificate argument empty", &ec, &[], &ca, at);
+    judge("issuer argument empty", &ec, &read("ec-leaf.der"), &[], at);
+    judge("certificate argument is the CRL", &ec, &ec, &ca, at);
+    judge("issuer argument is the CRL", &ec, &read("ec-leaf.der"), &ec, at);
+    judge("control date at the epoch", &ec, &read("ec-leaf.der"), &ca, SystemTime::UNIX_EPOCH);
+}
+# --- end of source
+$ cargo run -q --bin c3 -- ok
+-- baseline: the valid CRL judges both leaves
+ec.crl, ec-leaf, ec-ca @ 2027-01-01T00:00:00Z: Ok(NotRevoked)
+ec.crl, ec-revoked, ec-ca @ 2027-01-01T00:00:00Z: Ok(Revoked { date: SystemTime { tv_sec: 1792671681, tv_nsec: 0 }, reason: Some(Superseded) })
+-- CRL from another issuer
+rsa.crl (RSA CA) for ec-leaf, issuer rsa-ca @ 2027-01-01T00:00:00Z: Err(the CRL was issued by another authority | chain: the CRL was issued by another authority | debug: WrongIssuer | kind: Indeterminate)
+ec.crl for rsa-revoked, issuer ec-ca @ 2027-01-01T00:00:00Z: Err(the CRL was issued by another authority | chain: the CRL was issued by another authority | debug: WrongIssuer | kind: Indeterminate)
+ec.crl for the s02 signer, issuer ec-ca @ 2027-01-01T00:00:00Z: Err(the CRL was issued by another authority | chain: the CRL was issued by another authority | debug: WrongIssuer | kind: Indeterminate)
+ec2.crl (empty, other CA) for ec-revoked, issuer ec2-ca @ 2027-01-01T00:00:00Z: Err(the CRL was issued by another authority | chain: the CRL was issued by another authority | debug: WrongIssuer | kind: Indeterminate)
+-- invalid signature (one byte of thisUpdate changed after signing)
+tampered ec.crl, ec-leaf @ 2027-01-01T00:00:00Z: Err(the CRL signature is invalid | chain: the CRL signature is invalid | debug: SignatureInvalid | kind: InvalidSignature)
+tampered ec.crl, ec-revoked @ 2027-01-01T00:00:00Z: Err(the CRL signature is invalid | chain: the CRL signature is invalid | debug: SignatureInvalid | kind: InvalidSignature)
+ec.crl with one signature bit flipped, ec-leaf @ 2027-01-01T00:00:00Z: Err(the CRL signature is invalid | chain: the CRL signature is invalid | debug: SignatureInvalid | kind: InvalidSignature)
+-- stale: nextUpdate 2027-10-01T00:00:00Z
+ec.crl, ec-leaf, at nextUpdate @ 2027-10-01T00:00:00Z: Ok(NotRevoked)
+ec.crl, ec-leaf, nextUpdate + 1 s @ 2027-10-01T00:00:01Z: Err(the CRL expired at its nextUpdate | chain: the CRL expired at its nextUpdate | debug: Expired { next_update: SystemTime { tv_sec: 1822348800, tv_nsec: 0 } } | kind: Indeterminate)
+ec.crl, ec-leaf, nextUpdate + 1 day @ 2027-10-02T00:00:00Z: Err(the CRL expired at its nextUpdate | chain: the CRL expired at its nextUpdate | debug: Expired { next_update: SystemTime { tv_sec: 1822348800, tv_nsec: 0 } } | kind: Indeterminate)
+ec.crl, ec-revoked, nextUpdate + 1 year @ 2028-10-01T00:00:00Z: Err(the CRL expired at its nextUpdate | chain: the CRL expired at its nextUpdate | debug: Expired { next_update: SystemTime { tv_sec: 1822348800, tv_nsec: 0 } } | kind: Indeterminate)
+ec.crl, ec-leaf, before thisUpdate (2026-01-01) @ 2026-01-01T00:00:00Z: Ok(NotRevoked)
+-- the committed attack corpus (docs/security/attacks/revocation.md), leaf attacks/leaf.der
+wrong-issuer.der, issuer other-ca.der @ 2027-01-01T00:00:00Z: Err(the CRL was issued by another authority | chain: the CRL was issued by another authority | debug: WrongIssuer | kind: Indeterminate)
+issuer-renamed.der, issuer renamed-ca.der @ 2027-01-01T00:00:00Z: Err(the CRL was issued by another authority | chain: the CRL was issued by another authority | debug: WrongIssuer | kind: Indeterminate)
+bad-signature.der, issuer ca.der @ 2027-01-01T00:00:00Z: Err(the CRL signature is invalid | chain: the CRL signature is invalid | debug: SignatureInvalid | kind: InvalidSignature)
+stale.der, issuer ca.der @ 2027-01-01T00:00:00Z: Err(the CRL expired at its nextUpdate | chain: the CRL expired at its nextUpdate | debug: Expired { next_update: SystemTime { tv_sec: 1780272000, tv_nsec: 0 } } | kind: Indeterminate)
+no-next-update.der, issuer ca.der @ 2027-01-01T00:00:00Z: Err(the CRL has no nextUpdate | chain: the CRL has no nextUpdate | debug: MissingNextUpdate | kind: Indeterminate)
+critical-extension.der, issuer ca.der @ 2027-01-01T00:00:00Z: Err(unsupported critical extension 2.5.29.28 | chain: unsupported critical extension 2.5.29.28 | debug: UnsupportedCriticalExtension(ObjectIdentifier(2.5.29.28)) | kind: Indeterminate)
+algorithm-substitution.der, issuer ca.der @ 2027-01-01T00:00:00Z: Err(the signature algorithm does not match | chain: the signature algorithm does not match | debug: AlgorithmMismatch | kind: InvalidSignature)
+issuer-not-crl-signer.der, issuer non-crl-signer-ca.der @ 2027-01-01T00:00:00Z: Err(the issuer certificate may not sign CRLs | chain: the issuer certificate may not sign CRLs | debug: IssuerNotCrlSigner | kind: Indeterminate)
+critical-entry-extension.der, issuer ca.der @ 2027-01-01T00:00:00Z: Err(unsupported critical extension 2.5.29.29 | chain: unsupported critical extension 2.5.29.29 | debug: UnsupportedCriticalExtension(ObjectIdentifier(2.5.29.29)) | kind: Indeterminate)
+# exit code: 0
+

@@ -1,0 +1,94 @@
+# Criterion 2 — distribution points the source must refuse (non-public addresses)
+# QA walk of s09-revocation-crl, 2026-10-22T12:23:26Z, tree b8054b9e08f49087ef8964e7598f43376bc20638
+# cwd: /tmp/qa-s09.78GcIa/qa
+# stdin: none
+$ cargo run -q --bin c2 -- refused
+distribution_point(ec-leaf) = Ok("http://127.0.0.1:18391/ec.crl")
+new(), ec-leaf: Err(core kind Unavailable; chain: the revocation source failed <- the CRL distribution point is not a public address; inner: NonPublicAddress kind InvalidInput)
+distribution_point(dp-localhost) = Ok("http://localhost:18391/ec.crl")
+new(), dp-localhost: Err(core kind Unavailable; chain: the revocation source failed <- the CRL distribution point is not a public address; inner: NonPublicAddress kind InvalidInput)
+distribution_point(dp-ipv6-loop) = Ok("http://[::1]:18391/ec.crl")
+new(), dp-ipv6-loop: Err(core kind Unavailable; chain: the revocation source failed <- the CRL distribution point is not a public address; inner: NonPublicAddress kind InvalidInput)
+distribution_point(dp-mapped) = Ok("http://[::ffff:127.0.0.1]:18391/ec.crl")
+new(), dp-mapped: Err(core kind Unavailable; chain: the revocation source failed <- the CRL distribution point is not a public address; inner: NonPublicAddress kind InvalidInput)
+distribution_point(dp-decimal) = Ok("http://2130706433:18391/ec.crl")
+new(), dp-decimal: Err(core kind Unavailable; chain: the revocation source failed <- the CRL distribution point is not a public address; inner: NonPublicAddress kind InvalidInput)
+distribution_point(dp-zero) = Ok("http://0.0.0.0:18391/ec.crl")
+new(), dp-zero: Err(core kind Unavailable; chain: the revocation source failed <- the CRL distribution point is not a public address; inner: NonPublicAddress kind InvalidInput)
+distribution_point(dp-private) = Ok("http://10.1.2.3/ec.crl")
+new(), dp-private: Err(core kind Unavailable; chain: the revocation source failed <- the CRL distribution point is not a public address; inner: NonPublicAddress kind InvalidInput)
+distribution_point(dp-metadata) = Ok("http://169.254.169.254/latest/meta-data")
+new(), dp-metadata: Err(core kind Unavailable; chain: the revocation source failed <- the CRL distribution point is not a public address; inner: NonPublicAddress kind InvalidInput)
+distribution_point(dp-unresolvable) = Ok("http://does-not-exist.invalid/ec.crl")
+new(), dp-unresolvable: Err(core kind Unavailable; chain: the revocation source failed <- the CRL download failed <- io: failed to lookup address information: Name or service not known; inner: Http(Io(Custom { kind: Uncategorized, error: "failed to lookup address information: Name or service not known" })) kind Unavailable)
+allowing_loopback(), dp-localhost: downloaded 274 bytes; status at 2027-01-01T00:00:00Z = NotRevoked
+allowing_loopback(), dp-ipv6-loop: Err(core kind Unavailable; chain: the revocation source failed <- the CRL download failed <- io: Connection refused (os error 111); inner: Http(Io(Os { code: 111, kind: ConnectionRefused, message: "Connection refused" })) kind Unavailable)
+allowing_loopback(), dp-mapped: downloaded 274 bytes; status at 2027-01-01T00:00:00Z = NotRevoked
+allowing_loopback(), dp-decimal: downloaded 274 bytes; status at 2027-01-01T00:00:00Z = NotRevoked
+allowing_loopback(), dp-zero: Err(core kind Unavailable; chain: the revocation source failed <- the CRL distribution point is not a public address; inner: NonPublicAddress kind InvalidInput)
+allowing_loopback(), dp-private: Err(core kind Unavailable; chain: the revocation source failed <- the CRL distribution point is not a public address; inner: NonPublicAddress kind InvalidInput)
+allowing_loopback(), dp-metadata: Err(core kind Unavailable; chain: the revocation source failed <- the CRL distribution point is not a public address; inner: NonPublicAddress kind InvalidInput)
+# exit code: 0
+
+# Criterion 2 — failing downloads and unusable distribution points
+# QA walk of s09-revocation-crl, 2026-10-22T12:23:26Z, tree b8054b9e08f49087ef8964e7598f43376bc20638
+# cwd: /tmp/qa-s09.78GcIa/qa
+# stdin: none
+$ cargo run -q --bin c2 -- error
+distribution_point(dp-redirect) = Ok("http://127.0.0.1:18391/redirect")
+allowing_loopback, dp-redirect: Err(core kind Unavailable; chain: the revocation source failed <- the CRL download failed <- http status: 302; inner: Http(StatusCode(302)) kind Unavailable)
+distribution_point(dp-404) = Ok("http://127.0.0.1:18391/missing.crl")
+allowing_loopback, dp-404: Err(core kind Unavailable; chain: the revocation source failed <- the CRL download failed <- http status: 404; inner: Http(StatusCode(404)) kind Unavailable)
+distribution_point(dp-junk) = Ok("http://127.0.0.1:18391/junk.crl")
+allowing_loopback, dp-junk: Err(core kind Unavailable; chain: the revocation source failed <- invalid DER <- unexpected ASN.1 DER tag: expected SEQUENCE, got CONTEXT-SPECIFIC [5] (constructed); inner: Der(Error { kind: TagUnexpected { expected: Some(Tag(0x10: SEQUENCE)), actual: Tag(0x05: CONTEXT-SPECIFIC [5] (constructed)) }, position: None }) kind InvalidInput)
+distribution_point(dp-cert) = Ok("http://127.0.0.1:18391/cert.crl")
+allowing_loopback, dp-cert: Err(core kind Unavailable; chain: the revocation source failed <- invalid DER <- unexpected ASN.1 DER tag: expected INTEGER, got CONTEXT-SPECIFIC [0] (constructed); inner: Der(Error { kind: TagUnexpected { expected: Some(Tag(0x02: INTEGER)), actual: Tag(0x00: CONTEXT-SPECIFIC [0] (constructed)) }, position: None }) kind InvalidInput)
+distribution_point(dp-down) = Ok("http://127.0.0.1:18399/ec.crl")
+allowing_loopback, dp-down: Err(core kind Unavailable; chain: the revocation source failed <- the CRL download failed <- io: Connection refused (os error 111); inner: Http(Io(Os { code: 111, kind: ConnectionRefused, message: "Connection refused" })) kind Unavailable)
+distribution_point(dp-https) = Err(NoDistributionPoint)
+allowing_loopback, dp-https: Err(core kind Unavailable; chain: the revocation source failed <- no usable CRL distribution point; inner: NoDistributionPoint kind Indeterminate)
+distribution_point(dp-ldap) = Err(NoDistributionPoint)
+allowing_loopback, dp-ldap: Err(core kind Unavailable; chain: the revocation source failed <- no usable CRL distribution point; inner: NoDistributionPoint kind Indeterminate)
+distribution_point(dp-nocdp) = Err(NoDistributionPoint)
+allowing_loopback, dp-nocdp: Err(core kind Unavailable; chain: the revocation source failed <- no usable CRL distribution point; inner: NoDistributionPoint kind Indeterminate)
+distribution_point(p384-revoked) = Ok("http://127.0.0.1:18391/p384.crl")
+allowing_loopback, p384-revoked: downloaded 310 bytes; status Err(unsupported algorithm 1.3.132.0.34 | chain: unsupported algorithm 1.3.132.0.34 | debug: UnsupportedAlgorithm(ObjectIdentifier(1.3.132.0.34)) | kind: Indeterminate)
+allowing_loopback, a CRL given as the certificate: Err(core kind Unavailable; chain: the revocation source failed <- invalid certificate <- unexpected ASN.1 DER tag: expected SEQUENCE, got UTCTime; inner: Certificate(Error { kind: TagUnexpected { expected: Some(Tag(0x10: SEQUENCE)), actual: Tag(0x17: UTCTime) }, position: None }) kind InvalidInput)
+allowing_loopback, empty certificate: Err(core kind Unavailable; chain: the revocation source failed <- invalid certificate <- ASN.1 DER message is incomplete: expected 1, actual 0 at DER byte 0; inner: Certificate(Error { kind: Incomplete { expected_len: Length(1), actual_len: Length(0) }, position: Some(Length(0)) }) kind InvalidInput)
+# exit code: 0
+
+# Criterion 2 — proxy variables pointing at a closed port must be ignored (env: HTTP_PROXY=http_proxy=ALL_PROXY=http://127.0.0.1:18399)
+# QA walk of s09-revocation-crl, 2026-10-22T12:23:26Z, tree b8054b9e08f49087ef8964e7598f43376bc20638
+# cwd: /tmp/qa-s09.78GcIa/qa
+# stdin: none
+$ cargo run -q --bin c2 -- proxy
+HTTP_PROXY=http://127.0.0.1:18399
+http_proxy=http://127.0.0.1:18399
+ALL_PROXY=http://127.0.0.1:18399
+ALL_PROXY=http://127.0.0.1:18399
+allowing_loopback under a proxy environment, ec-revoked: downloaded 274 bytes; status at 2027-01-01T00:00:00Z = Revoked { date: SystemTime { tv_sec: 1792671681, tv_nsec: 0 }, reason: Some(Superseded) }
+new() under a proxy environment, dp-private: Err(core kind Unavailable; chain: the revocation source failed <- the CRL distribution point is not a public address; inner: NonPublicAddress kind InvalidInput)
+# exit code: 0
+
+# Access log of the walk's server on 127.0.0.1:18391 (whole walk; line 1 is the walk's own readiness probe with curl, the rest are the scenarios above in order: ok, refused, error, proxy)
+127.0.0.1 "GET /ec.crl HTTP/1.1" 200 -
+127.0.0.1 "GET /ec.crl HTTP/1.1" 200 -
+127.0.0.1 "GET /ec.crl HTTP/1.1" 200 -
+127.0.0.1 "GET /rsa.crl HTTP/1.1" 200 -
+127.0.0.1 "GET /rsa.crl HTTP/1.1" 200 -
+127.0.0.1 "GET /ec.crl HTTP/1.1" 200 -
+127.0.0.1 "GET /ec.crl HTTP/1.1" 200 -
+127.0.0.1 "GET /ec.crl HTTP/1.1" 200 -
+127.0.0.1 "GET /redirect HTTP/1.1" 302 -
+127.0.0.1 code 404, message File not found
+127.0.0.1 "GET /missing.crl HTTP/1.1" 404 -
+127.0.0.1 "GET /junk.crl HTTP/1.1" 200 -
+127.0.0.1 "GET /cert.crl HTTP/1.1" 200 -
+127.0.0.1 "GET /p384.crl HTTP/1.1" 200 -
+127.0.0.1 "GET /ec.crl HTTP/1.1" 200 -
+# Access log of the walk's server on 127.0.0.1:18081 (line 1 readiness probe; 2-3 the s02 scenario; 4-5 the bench test)
+127.0.0.1 "GET /crl/intermediate.crl HTTP/1.1" 200 -
+127.0.0.1 "GET /crl/intermediate.crl HTTP/1.1" 200 -
+127.0.0.1 "GET /crl/intermediate.crl HTTP/1.1" 200 -
+127.0.0.1 "GET /crl/intermediate.crl HTTP/1.1" 200 -
+127.0.0.1 "GET /crl/intermediate.crl HTTP/1.1" 200 -

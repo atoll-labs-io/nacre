@@ -1,0 +1,137 @@
+# Criterion 2 — HttpCrlSource downloads the CRL named by the certificate (walk's own server on 127.0.0.1:18391)
+# QA walk of s09-revocation-crl, 2026-10-22T12:23:26Z, tree b8054b9e08f49087ef8964e7598f43376bc20638
+# cwd: /tmp/qa-s09.78GcIa/qa
+# stdin: none
+# --- source: src/bin/c2.rs
+use nacre_core::{RevocationData, RevocationSource};
+use nacre_revocation::{Crl, HttpCrlSource};
+use qa_s09::*;
+use std::time::SystemTime;
+
+fn fetch(label: &str, source: &dyn RevocationSource, leaf: &[u8], issuer: &[u8], at: SystemTime) {
+    match source.revocation(leaf, issuer) {
+        Ok(RevocationData::Crl(bytes)) => {
+            let status = Crl::from_der(&bytes).and_then(|c| c.status(leaf, issuer, at));
+            match status {
+                Ok(s) => println!("{label}: downloaded {} bytes; status at {} = {:?}", bytes.len(), iso(at), s),
+                Err(e) => println!("{label}: downloaded {} bytes; status Err({})", bytes.len(), show(&e)),
+            }
+        }
+        Ok(other) => println!("{label}: unexpected {other:?}"),
+        Err(e) => {
+            let inner = std::error::Error::source(&e).and_then(|s| s.downcast_ref::<nacre_revocation::Error>());
+            println!(
+                "{label}: Err(core kind {:?}; chain: {}; inner: {})",
+                e.kind(),
+                chain(&e),
+                inner.map(|i| format!("{:?} kind {:?}", i, i.kind())).unwrap_or("none".into())
+            );
+        }
+    }
+}
+
+fn main() {
+    let mode = std::env::args().nth(1).unwrap_or_default();
+    let at = date(2027, 1, 1);
+    let lo = HttpCrlSource::allowing_loopback();
+    let public = HttpCrlSource::new();
+    match mode.as_str() {
+        "ok" => {
+            for leaf in ["ec-leaf", "ec-revoked"] {
+                println!("distribution_point({leaf}) = {:?}", HttpCrlSource::distribution_point(&read(&format!("{leaf}.der"))));
+                fetch(&format!("allowing_loopback, {leaf}"), &lo, &read(&format!("{leaf}.der")), &read("ec-ca.der"), at);
+            }
+            for leaf in ["rsa-leaf", "rsa-revoked"] {
+                fetch(&format!("allowing_loopback, {leaf}"), &lo, &read(&format!("{leaf}.der")), &read("rsa-ca.der"), at);
+            }
+        }
+        "s02" => {
+            let at = date(2030, 1, 1);
+            for leaf in ["s02-revoked", "s02-signer"] {
+                println!("distribution_point({leaf}) = {:?}", HttpCrlSource::distribution_point(&read(&format!("{leaf}.der"))));
+                fetch(&format!("allowing_loopback, {leaf}"), &lo, &read(&format!("{leaf}.der")), &read("s02-intermediate.der"), at);
+            }
+        }
+        "refused" => {
+            for leaf in ["ec-leaf", "dp-localhost", "dp-ipv6-loop", "dp-mapped", "dp-decimal", "dp-zero", "dp-private", "dp-metadata", "dp-unresolvable"] {
+                println!("distribution_point({leaf}) = {:?}", HttpCrlSource::distribution_point(&read(&format!("{leaf}.der"))));
+                fetch(&format!("new(), {leaf}"), &public, &read(&format!("{leaf}.der")), &read("ec-ca.der"), at);
+            }
+            for leaf in ["dp-localhost", "dp-ipv6-loop", "dp-mapped", "dp-decimal", "dp-zero", "dp-private", "dp-metadata"] {
+                fetch(&format!("allowing_loopback(), {leaf}"), &lo, &read(&format!("{leaf}.der")), &read("ec-ca.der"), at);
+            }
+        }
+        "error" => {
+            for leaf in ["dp-redirect", "dp-404", "dp-junk", "dp-cert", "dp-down", "dp-https", "dp-ldap", "dp-nocdp", "p384-revoked"] {
+                println!("distribution_point({leaf}) = {:?}", HttpCrlSource::distribution_point(&read(&format!("{leaf}.der"))));
+                let issuer = if leaf.starts_with("p384") { read("p384-ca.der") } else { read("ec-ca.der") };
+                fetch(&format!("allowing_loopback, {leaf}"), &lo, &read(&format!("{leaf}.der")), &issuer, at);
+            }
+            fetch("allowing_loopback, a CRL given as the certificate", &lo, &read("ec.crl"), &read("ec-ca.der"), at);
+            fetch("allowing_loopback, empty certificate", &lo, &[], &read("ec-ca.der"), at);
+        }
+        "proxy" => {
+            for v in ["HTTP_PROXY", "http_proxy", "ALL_PROXY", "ALL_PROXY"] {
+                println!("{v}={}", std::env::var(v).unwrap_or_default());
+            }
+            fetch("allowing_loopback under a proxy environment, ec-revoked", &lo, &read("ec-revoked.der"), &read("ec-ca.der"), at);
+            fetch("new() under a proxy environment, dp-private", &public, &read("dp-private.der"), &read("ec-ca.der"), at);
+        }
+        _ => unreachable!(),
+    }
+}
+# --- end of source
+$ cargo run -q --bin c2 -- ok
+distribution_point(ec-leaf) = Ok("http://127.0.0.1:18391/ec.crl")
+allowing_loopback, ec-leaf: downloaded 274 bytes; status at 2027-01-01T00:00:00Z = NotRevoked
+distribution_point(ec-revoked) = Ok("http://127.0.0.1:18391/ec.crl")
+allowing_loopback, ec-revoked: downloaded 274 bytes; status at 2027-01-01T00:00:00Z = Revoked { date: SystemTime { tv_sec: 1792671681, tv_nsec: 0 }, reason: Some(Superseded) }
+allowing_loopback, rsa-leaf: downloaded 469 bytes; status at 2027-01-01T00:00:00Z = NotRevoked
+allowing_loopback, rsa-revoked: downloaded 469 bytes; status at 2027-01-01T00:00:00Z = Revoked { date: SystemTime { tv_sec: 1792671681, tv_nsec: 0 }, reason: Some(CessationOfOperation) }
+# exit code: 0
+
+# Criterion 2 — against the s02 PKI: its certificates and CRLs, served at the URL its leaves name (127.0.0.1:18081/crl/, a static server started by the walk, as the bench's busybox httpd serves them)
+# QA walk of s09-revocation-crl, 2026-10-22T12:23:26Z, tree b8054b9e08f49087ef8964e7598f43376bc20638
+# cwd: /tmp/qa-s09.78GcIa/qa
+# stdin: none
+$ cargo run -q --bin c2 -- s02
+distribution_point(s02-revoked) = Ok("http://127.0.0.1:18081/crl/intermediate.crl")
+allowing_loopback, s02-revoked: downloaded 310 bytes; status at 2030-01-01T00:00:00Z = Revoked { date: SystemTime { tv_sec: 1792662087, tv_nsec: 0 }, reason: Some(KeyCompromise) }
+distribution_point(s02-signer) = Ok("http://127.0.0.1:18081/crl/intermediate.crl")
+allowing_loopback, s02-signer: downloaded 310 bytes; status at 2030-01-01T00:00:00Z = NotRevoked
+# exit code: 0
+
+# Criterion 2 — the story's own bench test, run against the s02 PKI files served by the walk on 127.0.0.1:18081 (copy's conformance/pki/out holds only the s02 certificates and CRLs, no key)
+# QA walk of s09-revocation-crl, 2026-10-22T12:23:38Z, tree b8054b9e08f49087ef8964e7598f43376bc20638
+# cwd: /tmp/qa-s09.78GcIa/copy
+# stdin: none
+$ cargo test -q -p nacre-revocation --test bench -- --ignored
+
+running 1 test
+.
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+# exit code: 0
+
+# Access log of the walk's server on 127.0.0.1:18391 (whole walk; line 1 is the walk's own readiness probe with curl, the rest are the scenarios above in order: ok, refused, error, proxy)
+127.0.0.1 "GET /ec.crl HTTP/1.1" 200 -
+127.0.0.1 "GET /ec.crl HTTP/1.1" 200 -
+127.0.0.1 "GET /ec.crl HTTP/1.1" 200 -
+127.0.0.1 "GET /rsa.crl HTTP/1.1" 200 -
+127.0.0.1 "GET /rsa.crl HTTP/1.1" 200 -
+127.0.0.1 "GET /ec.crl HTTP/1.1" 200 -
+127.0.0.1 "GET /ec.crl HTTP/1.1" 200 -
+127.0.0.1 "GET /ec.crl HTTP/1.1" 200 -
+127.0.0.1 "GET /redirect HTTP/1.1" 302 -
+127.0.0.1 code 404, message File not found
+127.0.0.1 "GET /missing.crl HTTP/1.1" 404 -
+127.0.0.1 "GET /junk.crl HTTP/1.1" 200 -
+127.0.0.1 "GET /cert.crl HTTP/1.1" 200 -
+127.0.0.1 "GET /p384.crl HTTP/1.1" 200 -
+127.0.0.1 "GET /ec.crl HTTP/1.1" 200 -
+# Access log of the walk's server on 127.0.0.1:18081 (line 1 readiness probe; 2-3 the s02 scenario; 4-5 the bench test)
+127.0.0.1 "GET /crl/intermediate.crl HTTP/1.1" 200 -
+127.0.0.1 "GET /crl/intermediate.crl HTTP/1.1" 200 -
+127.0.0.1 "GET /crl/intermediate.crl HTTP/1.1" 200 -
+127.0.0.1 "GET /crl/intermediate.crl HTTP/1.1" 200 -
+127.0.0.1 "GET /crl/intermediate.crl HTTP/1.1" 200 -
