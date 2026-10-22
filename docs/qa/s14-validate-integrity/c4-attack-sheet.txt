@@ -1,0 +1,64 @@
+# Criterion 4: docs/security/attacks/pades.md against the corpus and the tests
+# working directory: $T/work ($T = mktemp -d scratch copy of story/s14-validate-integrity, tree e3be979f4a05ef8132547028a2ec5a98208098cb)
+# Q = $T/src/target/debug/qa-s14 (scenario script, quoted whole in scenario-script.txt); C = $T/src/crates/nacre-validate/tests/corpus
+# stdin: none
+
+$ cd $T/src && grep -o "^| [^|]*|" docs/security/attacks/pades.md | sed -n "3,100p"
+| USF, *Universal Signature Forgery* (Mladenov, Mainka, Meyer zu Selhausen, Grothe, Schwenk, *1 Trillion Dollar Refund: How To Spoof PDF Signatures*, ACM CCS 2019) |
+| USF (CCS 2019) |
+| USF (CCS 2019) |
+| USF (CCS 2019) |
+| USF (CCS 2019) |
+| USF (CCS 2019) |
+| USF (CCS 2019) |
+| USF (CCS 2019) |
+| USF (CCS 2019) |
+| USF (CCS 2019) |
+| USF (CCS 2019) |
+| SWA, *Signature Wrapping Attack* (CCS 2019) |
+| ISA, *Incremental Saving Attack* (CCS 2019) |
+| ISA (CCS 2019) |
+| Shadow *hide* (Mainka, Mladenov, Rohlmann, *Shadow Attacks: Hiding and Replacing Content in Signed PDFs*, NDSS 2021) |
+| Shadow *replace* (NDSS 2021) |
+| Shadow *hide-and-replace* (NDSS 2021) |
+| EAA, *Evil Annotation Attack* (Rohlmann, Mladenov, Mainka, Schwenk, *Breaking the Specification: PDF Certification*, IEEE S&P 2021) |
+| SSA, *Sneaky Signature Attack* (IEEE S&P 2021) |
+[exit code: 0]
+
+$ cd $T/src && for f in crates/nacre-validate/tests/corpus/attacks/*.pdf; do b=$(basename $f); echo "$b rows=$(grep -c "\`$b\`" docs/security/attacks/pades.md)"; done
+byterange-not-from-start.pdf rows=1
+byterange-not-whole-file.pdf rows=1
+byterange-outside-file.pdf rows=1
+byterange-overlap.pdf rows=1
+isa-appended-revision.pdf rows=1
+isa-no-xref.pdf rows=1
+swa-wrapped.pdf rows=1
+usf-byterange-missing.pdf rows=1
+usf-byterange-null.pdf rows=1
+usf-byterange-short.pdf rows=1
+usf-contents-empty.pdf rows=1
+usf-contents-missing.pdf rows=1
+usf-contents-null.pdf rows=1
+usf-contents-zeros.pdf rows=1
+[exit code: 0]
+
+$ cd $T/src && for t in $(grep -o "\`[a-z_]*_is_rejected\`" docs/security/attacks/pades.md | tr -d "\`"); do echo "$t defined=$(grep -c "fn $t()" crates/nacre-validate/tests/attacks.rs)"; done
+usf_contents_missing_is_rejected defined=1
+usf_contents_null_is_rejected defined=1
+usf_contents_empty_is_rejected defined=1
+usf_contents_zeros_is_rejected defined=1
+usf_byterange_missing_is_rejected defined=1
+usf_byterange_null_is_rejected defined=1
+usf_byterange_short_is_rejected defined=1
+byterange_not_from_start_is_rejected defined=1
+byterange_overlap_is_rejected defined=1
+byterange_outside_file_is_rejected defined=1
+byterange_not_whole_file_is_rejected defined=1
+swa_wrapped_is_rejected defined=1
+isa_appended_revision_is_rejected defined=1
+isa_no_xref_is_rejected defined=1
+[exit code: 0]
+
+$ cd $T/src && grep -n "fn covers_last_revision" crates/nacre-validate/src/validate.rs
+110:fn covers_last_revision(doc: &Document<'_>, end: usize) -> bool {
+[exit code: 0]

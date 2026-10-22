@@ -1,0 +1,27 @@
+# Criterion 3, hand variants outside the corpus: zeroed /Contents, unknown /SubFilter, one LF after %%EOF, object appended after %%EOF
+# working directory: $T/work ($T = mktemp -d scratch copy of story/s14-validate-integrity, tree e3be979f4a05ef8132547028a2ec5a98208098cb)
+# Q = $T/src/target/debug/qa-s14 (scenario script, quoted whole in scenario-script.txt); C = $T/src/crates/nacre-validate/tests/corpus
+# stdin: none
+
+$ python3 -I -c "b=open(\"s06-signed.pdf\",\"rb\").read(); i=b.index(b\"/Contents <\")+11; j=b.index(b\">\",i); open(\"zeros.pdf\",\"wb\").write(b[:i]+b\"0\"*(j-i)+b[j:])" && $Q validate zeros.pdf
+input: zeros.pdf (3179 bytes)
+Ok: 1 signature(s)
+  field="Signature1" indication=TotalFailed sub_indication=Some(FormatFailure) level=None digest_verified=false signature_verified=false defect=Some(ContentsNotDer)
+[exit code: 0]
+
+$ sed "s#/ETSI.CAdES.detached#/ETSI.CAdES.detachex#" s06-signed.pdf > subf.pdf && $Q validate subf.pdf
+input: subf.pdf (3179 bytes)
+Ok: 1 signature(s)
+  field="Signature1" indication=TotalFailed sub_indication=Some(FormatFailure) level=None digest_verified=false signature_verified=false defect=Some(UnsupportedSubFilter)
+[exit code: 0]
+
+$ printf "\n" | cat s06-signed.pdf - > trail-lf.pdf && $Q validate trail-lf.pdf
+input: trail-lf.pdf (3180 bytes)
+Ok: 1 signature(s)
+  field="Signature1" indication=TotalFailed sub_indication=Some(FormatFailure) level=None digest_verified=false signature_verified=false defect=Some(ByteRangeNotWholeFile)
+[exit code: 0]
+
+$ printf "\n1 0 obj\n(x)\nendobj\n" | cat s06-signed.pdf - > trail-obj.pdf && $Q validate trail-obj.pdf
+input: trail-obj.pdf (3199 bytes)
+Err: kind=InvalidInput message="the PDF cannot be read: data after the last %%EOF at offset 3180" debug=Pdf(TrailingData { offset: 3180 })
+[exit code: 0]

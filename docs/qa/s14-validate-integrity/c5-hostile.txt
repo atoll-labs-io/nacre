@@ -1,0 +1,39 @@
+# Criterion 5: hostile input gives an error, never a panic; a fuzz target exists
+# working directory: $T/work ($T = mktemp -d scratch copy of story/s14-validate-integrity, tree e3be979f4a05ef8132547028a2ec5a98208098cb)
+# Q = $T/src/target/debug/qa-s14 (scenario script, quoted whole in scenario-script.txt); C = $T/src/crates/nacre-validate/tests/corpus
+# stdin: none
+
+$ : > empty.pdf; printf "hello world" > text.pdf; printf "%%PDF-1.7\n%%%%EOF\n" > minimal.pdf; head -c 1500 s06-signed.pdf > trunc.pdf; $Q validate empty.pdf text.pdf minimal.pdf trunc.pdf
+input: empty.pdf (0 bytes)
+Err: kind=InvalidInput message="the PDF cannot be read: the input does not start with %PDF-" debug=Pdf(MissingHeader)
+input: text.pdf (11 bytes)
+Err: kind=InvalidInput message="the PDF cannot be read: the input does not start with %PDF-" debug=Pdf(MissingHeader)
+input: minimal.pdf (15 bytes)
+Err: kind=InvalidInput message="the PDF cannot be read: no startxref statement in the last 1024 bytes" debug=Pdf(MissingStartxref)
+input: trunc.pdf (1500 bytes)
+Err: kind=InvalidInput message="the PDF cannot be read: data after the last %%EOF at offset 744" debug=Pdf(TrailingData { offset: 744 })
+[exit code: 0]
+
+$ python3 -I -c "b=open(\"s06-signed.pdf\",\"rb\").read(); i=b.index(b\"/Contents <\")+10; j=b.index(b\">\",i)+1; n=(j-i)//2; open(\"deep.pdf\",\"wb\").write(b[:i]+b\"[\"*n+b\"]\"*(j-i-n)+b[j:])" && $Q validate deep.pdf
+input: deep.pdf (3179 bytes)
+Ok: 1 signature(s)
+  field="Signature1" indication=TotalFailed sub_indication=Some(FormatFailure) level=None digest_verified=false signature_verified=false defect=Some(NotASignatureDictionary)
+[exit code: 0]
+
+$ $Q fuzz s06-signed.pdf 20000
+mutations=20000 ok=1972 err=18028 panics=0
+[exit code: 0]
+
+$ $Q fuzz $C/certified-dss.pdf 1000
+mutations=1000 ok=130 err=870 panics=0
+[exit code: 0]
+
+$ cat $T/src/crates/nacre-validate/fuzz/fuzz_targets/validate.rs
+#![no_main]
+
+use libfuzzer_sys::fuzz_target;
+
+fuzz_target!(|data: &[u8]| {
+    let _ = nacre_validate::validate(data);
+});
+[exit code: 0]

@@ -1,0 +1,19 @@
+# Criterion 1, invalid input: unsigned PDF, signed byte altered (no re-signing), missing file
+# working directory: $T/work ($T = mktemp -d scratch copy of story/s14-validate-integrity, tree e3be979f4a05ef8132547028a2ec5a98208098cb)
+# Q = $T/src/target/debug/qa-s14 (scenario script, quoted whole in scenario-script.txt); C = $T/src/crates/nacre-validate/tests/corpus
+# stdin: none
+
+$ $Q validate $C/unsigned.pdf
+input: $T/src/crates/nacre-validate/tests/corpus/unsigned.pdf (744 bytes)
+Ok: 0 signature(s)
+[exit code: 0]
+
+$ python3 -I -c "b=bytearray(open(\"s06-signed.pdf\",\"rb\").read()); i=b.index(b\"BT\"); b[i+3]^=1; open(\"altered.pdf\",\"wb\").write(b)" && $Q validate altered.pdf
+input: altered.pdf (3179 bytes)
+Ok: 1 signature(s)
+  field="Signature1" indication=TotalFailed sub_indication=Some(HashFailure) level=None digest_verified=false signature_verified=false defect=Some(Cms(MessageDigestMismatch))
+[exit code: 0]
+
+$ $Q validate /nonexistent.pdf
+cannot read /nonexistent.pdf: No such file or directory (os error 2)
+[exit code: 0]

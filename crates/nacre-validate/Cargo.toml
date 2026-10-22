@@ -1,0 +1,24 @@
+[package]
+name = "nacre-validate"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+license = "MIT OR Apache-2.0"
+description = "Validation of PAdES signatures for Nacre: checks that each signature covers the document and is cryptographically valid."
+
+[lints]
+workspace = true
+
+[dependencies]
+nacre-core = { path = "../nacre-core", version = "0.1.0" }
+nacre-pdf = { path = "../nacre-pdf", version = "0.1.0" }
+nacre-cms = { path = "../nacre-cms", version = "0.1.0" }
+sha2 = "0.11"
+der = { version = "0.8", features = ["alloc"] }
+thiserror = "2"
+
+[dev-dependencies]
+nacre-core = { path = "../nacre-core", features = ["test-signer"] }
+# No version: dev-dependencies are dropped by `cargo publish`.
+nacre-pades = { path = "../nacre-pades" }
+der = { version = "0.8", features = ["alloc", "oid"] }
