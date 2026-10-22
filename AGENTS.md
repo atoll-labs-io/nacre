@@ -259,6 +259,7 @@ No code exists yet (ADR-0002): these rules come from the ADRs and the stories, a
 - Parsing code never panics on input: `clippy::unwrap_used`, `clippy::expect_used`, `clippy::panic` and `clippy::indexing_slicing` are denied outside `#[cfg(test)]`; every length, depth and size read from input is bounded (brief, Security & abuse).
 - Errors are one `thiserror` enum per crate, returned, never logged; no crate writes to stdout, stderr or a logger.
 - A secret (PIN, token, key handle) is held in a `zeroize` type and never derives or implements `Debug` or `Display` with its value.
+- Every crate's `Error` exposes `kind() -> nacre_core::ErrorKind`, each variant mapped to one kind; no message carries a PIN, key, token or file path, and an application shows third parties the kind only (ADR-0012).
 - No judging code reads the system clock: the control date is a parameter (s09, s16, s17).
 - No crate opens a network connection outside the implementations behind its `http` feature; the core goes through the `Signer`, `TimestampAuthority` and `RevocationSource` traits of `nacre-core` (ADR-0006, s01).
 - Primitives, DER, certificates, CRLs and OCSP structures come from RustCrypto (`der`, `spki`, `x509-cert`, `x509-ocsp`); every signature format is written in Nacre; never add the `cms` or `x509-tsp` crates (ADR-0001, ADR-0004).
