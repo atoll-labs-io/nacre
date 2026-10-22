@@ -34,3 +34,15 @@ A decision the person took is not logged here: it is an ADR or a story.
 | 2026-10-22 | s05-pdf-revision | Shipped with a major finding open (field-name validation incomplete), filed as #46 | The reviewer allowed the ship |
 | 2026-10-22 | — | Filed #44 asking s02's `conformance.yml` to install qpdf | s05's `qpdf --check` test is `#[ignore = "conformance"]` and no workflow installs qpdf |
 | 2026-10-22 | — | Closed #32 by hand | Fixed by s05 (PR #45); the PR body's second "fixes" did not auto-close it |
+| 2026-10-22 | s02-conformance-harness | Amended the plan with the owner's test-key decision (PKI regenerated at each bench start) and reran the implementer on its staged work | The first run's commit was refused for committing private keys; the owner chose "no key in git" |
+| 2026-10-22 | s02-conformance-harness | Added a daily schedule to `conformance.yml` (task 8) | The owner asked to catch drift at once; `Cargo.lock` is not versioned |
+| 2026-10-22 | s02-conformance-harness | Kept the responders at `/cgi-bin/tsa` and `/cgi-bin/ocsp` instead of `/tsa` and `/ocsp` (ADR-0011's wording) | busybox httpd runs CGI only under `/cgi-bin/`; s07, s09 and s10 code against these URLs |
+| 2026-10-22 | s02-conformance-harness | Checked by hand that `conformance/dss/` matches Patelle's pinned DSS (same 6.5.1 archive and SHA-256; only the planned port, anchor-store and comment edits differ) | The reviewer could not read Patelle's repository |
+| 2026-10-22 | s02-conformance-harness | Fix run 1: install `qpdf` in `conformance.yml` (#44) | The ship's CI failed on s05's `qpdf_check_is_clean` |
+| 2026-10-22 | s02-conformance-harness | Fix run 2: run only `nacre-sig` examples in CI instead of every workspace example | The ship's CI ran s03's `forge_attacks` generator, which needs an argument; `Max attempts` reached, the ship then passed |
+| 2026-10-22 | s02-conformance-harness | Stopped and removed the local bench containers left running by the implementer | Their worktree had been removed at cleanup |
+| 2026-10-22 | s38-error-kind | Removed the first s38 worktree (`--force`, its research and plan backed up and restored) and re-forked it from the corrected story | The story's Owns had to include `crates/nacre-pdf/Cargo.toml`, and po-bounds reads Owns at the fork point |
+| 2026-10-22 | — | Restored s38 in `docs/stories.md` (PR #57) | A lead script had built PR #56 from a stale `docs/stories.md` in the wrong worktree and removed s38 |
+| 2026-10-22 | s38-error-kind | Implementer on `Model light` (sonnet) | Complexity 2, at `Light up to: 2` |
+| 2026-10-22 | s38-error-kind | Held two review findings mentioning the test signer's secret out of the tracker | Their text bears on a secret (ADR-0077) |
+| 2026-10-22 | — | Closed #44 by hand | Fixed by s02 (PR #58) |
