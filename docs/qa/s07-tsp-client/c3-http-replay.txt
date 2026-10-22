@@ -1,0 +1,35 @@
+# Scenario c3-http-replay — driver scenarios.md, surface endpoint, platform lib
+## Script (src/bin/c3_http_replay.rs of a scratch crate depending on the copied crates/nacre-tsp, features http)
+```rust
+// Criterion 3, hostile TSA: a server that answers every request with the same recorded
+// bench response (another nonce, another imprint). What does the caller of the
+// TimestampAuthority trait see?
+use nacre_core::{DigestAlgorithm, TimestampAuthority};
+use nacre_tsp::HttpTsa;
+fn main() {
+    let url = std::env::args().nth(1).unwrap();
+    match HttpTsa::new(&url).timestamp(DigestAlgorithm::Sha256, &[7u8; 32]) {
+        Ok(t) => println!("replayed response: TOKEN ACCEPTED {} bytes", t.len()),
+        Err(e) => {
+            let src = std::error::Error::source(&e).map(|s| s.to_string());
+            println!("replayed response: {e} | source: {src:?} | kind {:?}", e.kind());
+        }
+    }
+}
+```
+## Command
+cwd: <tmp>/scratch   stdin: /dev/null
+$ target/debug/c3_http_replay http://127.0.0.1:28463/
+## stdout + stderr (first run; the second run printed the same line)
+replayed response: the timestamp authority failed | source: Some("the token time-stamps another imprint") | kind Unavailable
+## Exit code: 0
+
+## Local server behind 127.0.0.1:28463 (started by QA, answers every POST with recorded/bench.tsr)
+$ setsid python3 -I tsa_server.py 28463 <tmp>/replay.sh <tmp>/state   (tsa_server.py quoted in c3-http.txt)
+```sh
+#!/bin/sh
+cat > /dev/null
+printf 'Content-Type: application/timestamp-reply\r\n\r\n'
+cat <tmp>/copy/crates/nacre-tsp/tests/corpus/recorded/bench.tsr
+```
+Server log: `application/timestamp-query "POST / HTTP/1.1" 200 -`, once per run.

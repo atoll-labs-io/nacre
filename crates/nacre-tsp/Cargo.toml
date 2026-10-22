@@ -1,0 +1,35 @@
+[package]
+name = "nacre-tsp"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+license = "MIT OR Apache-2.0"
+description = "RFC 3161 timestamp client written for Nacre: builds a TimeStampReq from a digest, reads the TimeStampResp and verifies its token."
+
+[lints]
+workspace = true
+
+[dependencies]
+nacre-core = { path = "../nacre-core", version = "0.1.0" }
+nacre-cms = { path = "../nacre-cms", version = "0.1.0" }
+der = { version = "0.8", features = ["alloc", "derive", "oid"] }
+spki = { version = "0.8", features = ["alloc"] }
+x509-cert = "0.3"
+getrandom = "0.4"
+thiserror = "2"
+ureq = { version = "3", default-features = false, features = ["rustls"], optional = true }
+
+[features]
+default = []
+http = ["dep:ureq"]
+
+[dev-dependencies]
+nacre-tsp = { path = ".", features = ["http"] }
+nacre-core = { path = "../nacre-core", features = ["test-signer"] }
+nacre-conformance = { path = "../nacre-conformance" }
+sha2 = "0.11"
+# Only the forged `signingCertificate` v1 attribute needs it: the ESSCertID hash is SHA-1.
+sha1 = "0.11"
+p256 = { version = "0.14", features = ["ecdsa", "pkcs8"] }
+x509-cert = { version = "0.3", features = ["builder", "pem"] }
+der = { version = "0.8", features = ["alloc", "derive", "oid", "pem"] }

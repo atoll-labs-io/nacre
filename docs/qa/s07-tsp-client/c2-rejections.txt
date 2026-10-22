@@ -1,0 +1,63 @@
+# Scenario c2-rejections — driver scenarios.md, surface endpoint, platform lib
+## Script (src/bin/c2_rejections.rs of a scratch crate depending on the copied crates/nacre-tsp, features http)
+```rust
+// Criterion 2 (and the attack list of criterion 5): imprint, nonce or signature differing
+// are rejected, each with its own error; every forged corpus case of the fix run too.
+use nacre_core::DigestAlgorithm;
+use nacre_tsp::{Request, verify_response};
+use sha2::{Digest, Sha256};
+fn main() {
+    let dir = std::env::args().nth(1).unwrap();
+    let data = std::fs::read(format!("{dir}/recorded/data.bin")).unwrap();
+    let imprint = Sha256::digest(&data);
+    let nonce = [0xd4, 0x1c, 0xbf, 0xf4, 0xfd, 0xed, 0x9d, 0x81];
+    let req = Request::new(DigestAlgorithm::Sha256, &imprint, &nonce).unwrap();
+    let mut other = nonce; other[7] ^= 1;
+    let other_req = Request::new(DigestAlgorithm::Sha256, &imprint, &other).unwrap();
+    let mut flipped = imprint.to_vec(); flipped[0] ^= 1;
+    let other_imprint_req = Request::new(DigestAlgorithm::Sha256, &flipped, &nonce).unwrap();
+    let cases: [(&str, &str, &Request); 14] = [
+        ("baseline forged", "attacks/valid.tsr", &req),
+        ("imprint differs (forged token)", "attacks/imprint-other.tsr", &req),
+        ("imprint differs (bench token, request of another imprint)", "recorded/bench.tsr", &other_imprint_req),
+        ("nonce differs (bench token, other nonce)", "recorded/bench.tsr", &other_req),
+        ("nonce absent", "attacks/nonce-absent.tsr", &req),
+        ("signature differs", "attacks/signature-invalid.tsr", &req),
+        ("no timeStamping EKU", "attacks/no-timestamping-eku.tsr", &req),
+        ("ESS v1 only", "attacks/ess-v1-only.tsr", &req),
+        ("content type other than TSTInfo", "attacks/content-type-other.tsr", &req),
+        ("EKU not critical", "attacks/eku-not-critical.tsr", &req),
+        ("EKU with an extra purpose", "attacks/eku-extra-purpose.tsr", &req),
+        ("imprint labelled SHA3-256", "attacks/imprint-algorithm-other.tsr", &req),
+        ("imprint hash parameters INTEGER 0", "attacks/imprint-parameters-other.tsr", &req),
+        ("FreeTSA (SHA-512, P-384)", "recorded/freetsa.tsr", &req),
+    ];
+    for (label, file, r) in cases {
+        let resp = std::fs::read(format!("{dir}/{file}")).unwrap();
+        match verify_response(&resp, r) {
+            Ok(_) => println!("{label} [{file}]: verified"),
+            Err(e) => println!("{label} [{file}]: {e} | {e:?} | kind {:?}", e.kind()),
+        }
+    }
+}
+```
+## Command
+cwd: <tmp>/scratch   stdin: /dev/null
+$ target/debug/c2_rejections <tmp>/copy/crates/nacre-tsp/tests/corpus
+## stdout + stderr
+baseline forged [attacks/valid.tsr]: verified
+imprint differs (forged token) [attacks/imprint-other.tsr]: the token time-stamps another imprint | ImprintMismatch | kind InvalidSignature
+imprint differs (bench token, request of another imprint) [recorded/bench.tsr]: the token time-stamps another imprint | ImprintMismatch | kind InvalidSignature
+nonce differs (bench token, other nonce) [recorded/bench.tsr]: the token carries another nonce | NonceMismatch | kind InvalidSignature
+nonce absent [attacks/nonce-absent.tsr]: the token carries no nonce | NonceMissing | kind InvalidSignature
+signature differs [attacks/signature-invalid.tsr]: token signature: the signature is invalid | Cms(SignatureInvalid) | kind InvalidSignature
+no timeStamping EKU [attacks/no-timestamping-eku.tsr]: the TSA certificate is not restricted to time-stamping | NotTimestampingCertificate | kind InvalidSignature
+ESS v1 only [attacks/ess-v1-only.tsr]: the token has no signingCertificateV2 attribute | SigningCertificateMissing | kind Indeterminate
+content type other than TSTInfo [attacks/content-type-other.tsr]: the token does not encapsulate a TSTInfo | NotTstInfo | kind InvalidInput
+EKU not critical [attacks/eku-not-critical.tsr]: the TSA certificate is not restricted to time-stamping | NotTimestampingCertificate | kind InvalidSignature
+EKU with an extra purpose [attacks/eku-extra-purpose.tsr]: the TSA certificate is not restricted to time-stamping | NotTimestampingCertificate | kind InvalidSignature
+imprint labelled SHA3-256 [attacks/imprint-algorithm-other.tsr]: the token time-stamps another imprint | ImprintMismatch | kind InvalidSignature
+imprint hash parameters INTEGER 0 [attacks/imprint-parameters-other.tsr]: the token time-stamps another imprint | ImprintMismatch | kind InvalidSignature
+FreeTSA (SHA-512, P-384) [recorded/freetsa.tsr]: token signature: unsupported algorithm 2.16.840.1.101.3.4.2.3 | Cms(UnsupportedAlgorithm(ObjectIdentifier(2.16.840.1.101.3.4.2.3))) | kind Indeterminate
+## Exit code: 0
+(Run twice; same output both times.)

@@ -1,0 +1,38 @@
+# Scenario c2-rejections-error — driver scenarios.md, surface endpoint, platform lib
+## Script (src/bin/c2_rejections_error.rs of a scratch crate depending on the copied crates/nacre-tsp, features http)
+```rust
+// Criterion 2, invalid input: a valid token checked through verify_token with the wrong
+// algorithm or a truncated imprint.
+use nacre_core::DigestAlgorithm;
+use nacre_tsp::{Request, verify_response, verify_token};
+fn main() {
+    let dir = std::env::args().nth(1).unwrap();
+    let req_bytes = std::fs::read(format!("{dir}/recorded/request.tsq")).unwrap();
+    let _ = req_bytes;
+    let nonce = [0xd4, 0x1c, 0xbf, 0xf4, 0xfd, 0xed, 0x9d, 0x81];
+    let data = std::fs::read(format!("{dir}/recorded/data.bin")).unwrap();
+    use sha2::{Digest, Sha256, Sha512};
+    let req = Request::new(DigestAlgorithm::Sha256, &Sha256::digest(&data), &nonce).unwrap();
+    let resp = std::fs::read(format!("{dir}/recorded/bench.tsr")).unwrap();
+    let token = verify_response(&resp, &req).unwrap().token().to_vec();
+    for (label, alg, imprint) in [
+        ("SHA-512 imprint of the same data", DigestAlgorithm::Sha512, Sha512::digest(&data).to_vec()),
+        ("SHA-256 imprint cut to 31 bytes", DigestAlgorithm::Sha256, Sha256::digest(&data)[..31].to_vec()),
+        ("token bytes truncated by one", DigestAlgorithm::Sha256, Sha256::digest(&data).to_vec()),
+    ] {
+        let t = if label.starts_with("token") { &token[..token.len() - 1] } else { &token[..] };
+        match verify_token(t, alg, &imprint) {
+            Ok(_) => println!("{label}: verified"),
+            Err(e) => println!("{label}: {e} (kind {:?})", e.kind()),
+        }
+    }
+}
+```
+## Command
+cwd: <tmp>/scratch   stdin: /dev/null
+$ target/debug/c2_rejections_error <tmp>/copy/crates/nacre-tsp/tests/corpus
+## stdout + stderr
+SHA-512 imprint of the same data: the token time-stamps another imprint (kind InvalidSignature)
+SHA-256 imprint cut to 31 bytes: digest length is 31 bytes, the algorithm produces 32 (kind InvalidInput)
+token bytes truncated by one: token signature: invalid DER: ASN.1 DER message is incomplete: expected 1828, actual 1827 at DER byte 4 (kind InvalidInput)
+## Exit code: 0

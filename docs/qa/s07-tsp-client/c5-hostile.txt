@@ -1,0 +1,38 @@
+# Scenario c5-hostile — driver scenarios.md, surface endpoint, platform lib
+## Script (src/bin/c5_hostile.rs of a scratch crate depending on the copied crates/nacre-tsp, features http)
+```rust
+// Criterion 5: a hostile response gives an error, never a panic.
+use nacre_core::DigestAlgorithm;
+use nacre_tsp::{Request, verify_response, verify_token};
+fn main() {
+    let dir = std::env::args().nth(1).unwrap();
+    let bench = std::fs::read(format!("{dir}/recorded/bench.tsr")).unwrap();
+    let req = Request::new(DigestAlgorithm::Sha256, &[0u8; 32], &[1]).unwrap();
+    let mut seed: u64 = 0x5eed_0007;
+    let mut rnd = || { seed ^= seed << 13; seed ^= seed >> 7; seed ^= seed << 17; seed };
+    let mut errs = 0; let mut oks = 0; let total = 200_000;
+    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        for i in 0..total {
+            let mut b = bench.clone();
+            let flips = 1 + (rnd() % 4) as usize;
+            for _ in 0..flips { let p = (rnd() as usize) % b.len(); b[p] = rnd() as u8; }
+            if i % 3 == 0 { let cut = (rnd() as usize) % b.len(); b.truncate(cut); }
+            match verify_response(&b, &req) { Ok(_) => oks += 1, Err(_) => errs += 1 }
+            let _ = verify_token(&b, DigestAlgorithm::Sha256, &[0u8; 32]);
+        }
+    }));
+    println!("mutated bench.tsr: {total} cases, {errs} errors, {oks} accepted, panicked: {}", r.is_err());
+    let mut deep = Vec::new(); for _ in 0..100_000 { deep.extend([0x30, 0x80]); }
+    println!("100000 nested indefinite SEQUENCEs: {:?}", verify_response(&deep, &req).map(|_| ()).map_err(|e| e.to_string()));
+    let huge = [0x30, 0x84, 0xff, 0xff, 0xff, 0xff, 0x30];
+    println!("length 2^32-1 header: {:?}", verify_response(&huge, &req).map(|_| ()).map_err(|e| e.to_string()));
+}
+```
+## Command
+cwd: <tmp>/scratch   stdin: /dev/null
+$ target/debug/c5_hostile <tmp>/copy/crates/nacre-tsp/tests/corpus
+## stdout + stderr
+mutated bench.tsr: 200000 cases, 200000 errors, 0 accepted, panicked: false
+100000 nested indefinite SEQUENCEs: Err("invalid DER: indefinite length disallowed/malformed at DER byte 2")
+length 2^32-1 header: Err("invalid DER: integer overflow")
+## Exit code: 0
