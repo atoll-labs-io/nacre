@@ -643,20 +643,3 @@ Risque principal : la chaîne de confiance des listes elles-mêmes (certificats 
 
 ### Notes for the agent
 L'outil en ligne de commande et les liaisons pour d'autres langages restent en V2 (brief, non-goals) : pas de binaire ici.
-
-## s38-error-kind — Une catégorie d'erreur grossière à montrer aux tiers
-**As** développeur d'une application qui sert des tiers **I want** une catégorie d'erreur grossière pour chaque erreur de Nacre **so that** je ne montre à l'extérieur rien qui décrive la cause, tout en gardant le détail pour moi.
-
-- **Complexity**: 2
-- **Depends on**: s01-workspace-contract, s03-cms-signed-data, s04-pdf-read
-- **Surface**: `endpoint`
-- **Owns**: `crates/nacre-core/`, `crates/nacre-cms/src/error.rs`, `crates/nacre-pdf/src/error.rs`
-
-### Acceptance criteria
-- [ ] `nacre-core` expose `ErrorKind` (`InvalidInput`, `InvalidSignature`, `Indeterminate`, `Signer`, `Unavailable`, `#[non_exhaustive]`) et `nacre_core::Error::kind()`.
-- [ ] `nacre-cms` et `nacre-pdf` exposent `kind()` sur leur `Error` ; chaque variante a sa catégorie, ce qu'un test vérifie sur toutes les variantes.
-- [ ] Le `Display` de `ErrorKind` est un texte fixe qui ne dépend jamais de l'entrée.
-- [ ] Aucun message d'erreur ne contient de secret : un test le vérifie pour le PIN avec le signataire de test de `nacre-core`.
-
-### Notes for the agent
-Story contrat (ADR-0012) : `nacre-core` est gelé après s01 et ne change que par une story contrat ; s06 à s37 suivent la convention « chaque `Error` expose `kind()` ». Les sous-indications EN 319 102-1 de `validate` sont des résultats, pas des erreurs : elles ne passent pas par `ErrorKind`. Ajouter une variante à `ErrorKind` est un changement de contrat, d'où `#[non_exhaustive]`.
