@@ -299,9 +299,9 @@ Validation de chemin RFC 5280 écrite par Nacre sur les certificats de `x509-cer
 - **Owns**: `crates/nacre-validate/`
 
 ### Acceptance criteria
-- [ ] Une signature B-T faite avant la révocation du certificat, avec une CRL postérieure à la révocation, reste valide ; une signature dont l'horodatage est postérieur à la révocation rend `TOTAL_FAILED` avec `REVOKED`.
+- [ ] Une signature B-T faite avant la révocation du certificat, avec une CRL postérieure à la révocation, reste valide ; une signature dont l'horodatage est postérieur à la révocation rend `INDETERMINATE` avec `REVOKED_NO_POE`.
 - [ ] Sans horodatage (B-B), la révocation est jugée à la date de contrôle, et un certificat révoqué depuis rend `INDETERMINATE` (`REVOKED_NO_POE`).
-- [ ] Les données de `/DSS` suffisent, sans réseau, pour juger un PDF B-LT ou B-LTA de s11 et s12 ; sans données et sans `RevocationSource`, l'indication est `INDETERMINATE` (`TRY_LATER` ou `REVOCATION_OUT_OF_BOUNDS_NO_POE`).
+- [ ] Les données de `/DSS` suffisent, sans réseau, pour juger un PDF B-LT ou B-LTA de s11 et s12 ; sans données et sans `RevocationSource`, l'indication est `INDETERMINATE` (`CERTIFICATE_CHAIN_GENERAL_FAILURE`).
 - [ ] La chaîne de la TSA est jugée comme celle du signataire.
 - [ ] Ces cas sont confrontés à DSS par le banc de s02, et DSS rend la même indication et la même sous-indication.
 
