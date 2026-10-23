@@ -1,0 +1,35 @@
+# nothing listens on 127.0.0.1:18493 (checked with ss before the run)
+$ cd /tmp/qa-s08.JKa7O6/work && qa-s08 tsa u.pdf http://127.0.0.1:18493/
+stdin: (none)
+--- stdout+stderr ---
+Err (Display): the timestamp authority failed
+Err (kind): Unavailable
+  caused by: the timestamp authority failed
+  caused by: TSA request failed: io: Connection refused (os error 111)
+  caused by: io: Connection refused (os error 111)
+output file written: false
+authority asked: 1 time(s)
+--- exit code: 0 ---
+
+# local TSA on 18492 answers every request with TimeStampResp status 2 (rejection), DER 30 05 30 03 02 01 02
+$ cd /tmp/qa-s08.JKa7O6/work && qa-s08 tsa r.pdf http://127.0.0.1:18492/
+stdin: (none)
+--- stdout+stderr ---
+Err (Display): the timestamp authority failed
+Err (kind): Unavailable
+  caused by: the timestamp authority failed
+  caused by: the TSA refused the request: status 2, failure info None
+output file written: false
+authority asked: 1 time(s)
+--- exit code: 0 ---
+
+# replay of the unreachable-TSA scenario
+$ cd /tmp/qa-s08.JKa7O6/work && qa-s08 tsa u2.pdf http://127.0.0.1:18493/
+Err (Display): the timestamp authority failed
+Err (kind): Unavailable
+  caused by: the timestamp authority failed
+  caused by: TSA request failed: io: Connection refused (os error 111)
+  caused by: io: Connection refused (os error 111)
+output file written: false
+authority asked: 1 time(s)
+--- exit code: 0 ---

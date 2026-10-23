@@ -8,6 +8,20 @@ pub enum Error {
     /// The CMS signature could not be made.
     #[error("CMS: {0}")]
     Cms(#[from] nacre_cms::Error),
+    /// The timestamp authority failed to answer.
+    #[error("the timestamp authority failed")]
+    Timestamp(#[source] nacre_core::Error),
+    /// The timestamp authority returned a token that is not a single DER value.
+    #[error("the timestamp authority returned a token that is not DER")]
+    TimestampToken(#[source] der::Error),
+    /// The timestamp token does not fit the room reserved for it.
+    #[error("the timestamp token is {len} bytes, more than the {max} reserved")]
+    TimestampTooLarge {
+        /// The size of the token, in DER bytes.
+        len: usize,
+        /// The most the `/Contents` slot reserves room for.
+        max: usize,
+    },
 }
 
 impl Error {
@@ -16,6 +30,10 @@ impl Error {
         match self {
             Self::Pdf(inner) => inner.kind(),
             Self::Cms(inner) => inner.kind(),
+            Self::Timestamp(inner) => inner.kind(),
+            Self::TimestampToken(_) | Self::TimestampTooLarge { .. } => {
+                nacre_core::ErrorKind::InvalidInput
+            }
         }
     }
 }
@@ -43,6 +61,15 @@ mod tests {
                 ))),
                 ErrorKind::Signer,
             ),
+            (
+                Error::Timestamp(nacre_core::Error::Timestamp("x".into())),
+                Unavailable,
+            ),
+            (
+                Error::TimestampToken(der::Error::from(der::ErrorKind::Failed)),
+                InvalidInput,
+            ),
+            (Error::TimestampTooLarge { len: 2, max: 1 }, InvalidInput),
         ];
         for (error, kind) in rows {
             assert_eq!(error.kind(), kind, "{error}");

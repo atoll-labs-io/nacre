@@ -12,7 +12,8 @@ mod support;
 
 use nacre_conformance::{Dss, reports_dir};
 use nacre_core::Indication;
-use nacre_pades::{DateTime, sign};
+use nacre_pades::{DateTime, Level, sign, sign_at_level};
+use nacre_tsp::HttpTsa;
 use support::BenchSigner;
 
 const UNSIGNED: &[u8] = include_bytes!("corpus/unsigned.pdf");
@@ -66,4 +67,31 @@ fn both_bench_signatures_are_pades_baseline_b() {
         assert_eq!(verdict.report.sub_indication(), None, "{}", verdict.id);
         assert_eq!(verdict.format, "PAdES-BASELINE-B", "{}", verdict.id);
     }
+}
+
+#[test]
+#[ignore = "conformance"]
+fn bench_signature_is_pades_baseline_t() {
+    let report = reports_dir().join("s08-pades-t.xml");
+    let _ = std::fs::remove_file(&report);
+    let tsa = HttpTsa::new("http://127.0.0.1:18081/cgi-bin/tsa");
+    let signed = sign_at_level(
+        UNSIGNED,
+        &BenchSigner::load(),
+        time(),
+        Level::T { tsa: &tsa },
+    )
+    .unwrap();
+
+    let reports = Dss::from_env()
+        .unwrap()
+        .validate("s08-pades-t", &signed)
+        .unwrap();
+
+    assert_eq!(reports.signatures.len(), 1);
+    let verdict = &reports.signatures[0];
+    assert_eq!(verdict.report.indication(), Indication::TotalPassed);
+    assert_eq!(verdict.report.sub_indication(), None);
+    assert_eq!(verdict.format, "PAdES-BASELINE-T");
+    assert!(report.is_file());
 }

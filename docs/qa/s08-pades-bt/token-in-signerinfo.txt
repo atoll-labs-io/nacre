@@ -1,0 +1,25 @@
+$ cd /tmp/qa-s08.JKa7O6/work && qa-s08 tsa t.pdf http://127.0.0.1:18491/
+stdin: (none)
+--- stdout+stderr ---
+Ok: 35998 bytes written to t.pdf
+unsigned input is a byte prefix of the output: true
+authority asked: 1 time(s)
+--- exit code: 0 ---
+$ cd /tmp/qa-s08.JKa7O6/work && qa-s08 inspect t.pdf cms.der token.der sigval.bin
+stdin: (none)
+--- stdout+stderr ---
+/Contents slot: 17250 bytes, CMS: 2141 bytes
+  oid 1.2.840.113549.1.9.16.2.14 with 1 value(s)
+  token verifies over SHA-256(signature value): Ok(DateTime { year: 2026, month: 10, day: 23, hour: 8, minutes: 37, seconds: 56, unix_duration: 1792744676s })
+--- exit code: 0 ---
+=== openssl, independent check ===
+$ openssl ts -verify -data sigval.bin -in token.der -token_in -CAfile tsa.pem
+Using configuration from /etc/ssl/openssl.cnf
+Verification: OK
+--- exit code: 0 ---
+$ openssl cms -cmsout -print -inform DER -in cms.der | grep -A4 unsignedAttrs
+        unsignedAttrs:
+            object: id-smime-aa-timeStampToken (1.2.840.113549.1.9.16.2.14)
+            set:
+              SEQUENCE:
+    0:d=0  hl=4 l=1272 cons: SEQUENCE          
