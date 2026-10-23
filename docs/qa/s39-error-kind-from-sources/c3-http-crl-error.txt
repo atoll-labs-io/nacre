@@ -1,0 +1,27 @@
+Criterion 3, invalid input — certificate bytes that are not DER, a certificate with no CRL
+distribution point, a server answering 404.
+Program: program.txt (scenario "crl-error"). Run twice, outputs byte-identical.
+
+cwd:     $QA_TMP/run
+command: $QA_TMP/target/debug/qa-s39 crl-error
+stdin:   none
+stderr:  (empty)
+stdout:
+certificate bytes that are not DER: Err(nacre_core::Error::Revocation { .. })
+  kind()    = InvalidInput ("invalid input")
+  Display   = the revocation source failed
+  source    = invalid certificate
+  source    = unexpected ASN.1 DER tag: expected SEQUENCE, got APPLICATION [14] (constructed)
+  downcast  = nacre_revocation::Error, its kind() = InvalidInput
+certificate without a CRL distribution point: Err(nacre_core::Error::Revocation { .. })
+  kind()    = Indeterminate ("indeterminate")
+  Display   = the revocation source failed
+  source    = no usable CRL distribution point
+  downcast  = nacre_revocation::Error, its kind() = Indeterminate
+server answers 404: Err(nacre_core::Error::Revocation { .. })
+  kind()    = Unavailable ("service unavailable")
+  Display   = the revocation source failed
+  source    = the revocation download failed
+  source    = http status: 404
+  downcast  = nacre_revocation::Error, its kind() = Unavailable
+exit code: 0

@@ -1,0 +1,27 @@
+Criterion 4 — HttpOcspSource: a replayed response (different nonce) gives InvalidSignature;
+a refused address gives InvalidInput.
+Program: program.txt (scenario "ocsp"). Local responder on 127.0.0.1 answering the corpus
+response crates/nacre-revocation/tests/corpus/ocsp-attacks/base.der (fixed nonce 0x4e x 32),
+issuer ocsp-attacks/ca.der. Run twice, outputs byte-identical.
+
+cwd:     $QA_TMP/run
+command: $QA_TMP/target/debug/qa-s39 ocsp
+stdin:   none
+stderr:  (empty)
+stdout:
+replayed response (fixed nonce): Err(nacre_core::Error::Revocation { .. })
+  kind()    = InvalidSignature ("invalid signature")
+  Display   = the revocation source failed
+  source    = the OCSP response nonce does not match the request
+  downcast  = nacre_revocation::Error, its kind() = InvalidSignature
+refused address (HttpOcspSource::new, 127.0.0.1): Err(nacre_core::Error::Revocation { .. })
+  kind()    = InvalidInput ("invalid input")
+  Display   = the revocation source failed
+  source    = the revocation source address is not public
+  downcast  = nacre_revocation::Error, its kind() = InvalidInput
+refused address (allowing_loopback, fd00::1): Err(nacre_core::Error::Revocation { .. })
+  kind()    = InvalidInput ("invalid input")
+  Display   = the revocation source failed
+  source    = the revocation source address is not public
+  downcast  = nacre_revocation::Error, its kind() = InvalidInput
+exit code: 0

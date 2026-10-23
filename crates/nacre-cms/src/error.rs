@@ -136,7 +136,7 @@ mod tests {
                 ErrorKind::Signer,
             ),
             (
-                Error::Signer(nacre_core::Error::Timestamp("x".into())),
+                Error::Signer(nacre_core::Error::timestamp("x")),
                 Unavailable,
             ),
         ];

@@ -1,0 +1,39 @@
+Criterion 3 — HttpCrlSource: a malformed CRL gives InvalidInput; a refused address (SSRF)
+gives InvalidInput; an unreachable server gives Unavailable. The source does not judge the
+CRL's signature.
+Program: program.txt (scenario "crl"). Certificates built in the program, naming the CRL
+distribution point; local server on 127.0.0.1. The last call is a control: a valid CRL
+fetched with loopback allowed succeeds. Run twice, outputs byte-identical.
+
+cwd:     $QA_TMP/run
+command: $QA_TMP/target/debug/qa-s39 crl
+stdin:   none
+stderr:  (empty)
+stdout:
+malformed CRL: Err(nacre_core::Error::Revocation { .. })
+  kind()    = InvalidInput ("invalid input")
+  Display   = the revocation source failed
+  source    = invalid DER
+  source    = unexpected ASN.1 DER tag: expected SEQUENCE, got APPLICATION [14] (constructed)
+  downcast  = nacre_revocation::Error, its kind() = InvalidInput
+refused address (HttpCrlSource::new, 127.0.0.1): Err(nacre_core::Error::Revocation { .. })
+  kind()    = InvalidInput ("invalid input")
+  Display   = the revocation source failed
+  source    = the revocation source address is not public
+  downcast  = nacre_revocation::Error, its kind() = InvalidInput
+refused address (allowing_loopback, 10.1.2.3): Err(nacre_core::Error::Revocation { .. })
+  kind()    = InvalidInput ("invalid input")
+  Display   = the revocation source failed
+  source    = the revocation source address is not public
+  downcast  = nacre_revocation::Error, its kind() = InvalidInput
+unreachable server (closed port): Err(nacre_core::Error::Revocation { .. })
+  kind()    = Unavailable ("service unavailable")
+  Display   = the revocation source failed
+  source    = the revocation download failed
+  source    = io: Connection refused (os error 111)
+  downcast  = nacre_revocation::Error, its kind() = Unavailable
+valid CRL, loopback allowed (control): Ok(..)
+exit code: 0
+
+Note: the control CRL (ec-ca.crl) is fetched with an issuer argument of zero bytes and
+comes back Ok: the source does not check the CRL's signature, as the criterion says.

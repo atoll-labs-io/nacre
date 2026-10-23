@@ -16,7 +16,7 @@ struct DownTsa;
 
 impl TimestampAuthority for DownTsa {
     fn timestamp(&self, _algorithm: DigestAlgorithm, _imprint: &[u8]) -> Result<Vec<u8>, Error> {
-        Err(Error::Timestamp(Box::new(io::Error::other("tsa down"))))
+        Err(Error::timestamp(io::Error::other("tsa down")))
     }
 }
 

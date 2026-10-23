@@ -36,7 +36,7 @@ mod tests {
 
     impl RevocationSource for Failing {
         fn revocation(&self, _: &[u8], _: &[u8]) -> Result<RevocationData, nacre_core::Error> {
-            Err(nacre_core::Error::Revocation("unreachable".into()))
+            Err(nacre_core::Error::revocation("unreachable"))
         }
     }
 

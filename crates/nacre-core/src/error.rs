@@ -11,12 +11,24 @@ pub enum Error {
     /// The signer failed; the source is the implementation's error.
     #[error("the signer failed")]
     Signer(#[source] BoxError),
-    /// The timestamp authority failed; the source is the implementation's error.
+    /// The timestamp authority failed; `kind` is the category the authority saw, `source`
+    /// the implementation's error. Built with [`Error::timestamp`] or
+    /// [`Error::timestamp_with_kind`].
     #[error("the timestamp authority failed")]
-    Timestamp(#[source] BoxError),
-    /// The revocation source failed; the source is the implementation's error.
+    Timestamp {
+        kind: ErrorKind,
+        #[source]
+        source: BoxError,
+    },
+    /// The revocation source failed; `kind` is the category the source saw, `source` the
+    /// implementation's error. Built with [`Error::revocation`] or
+    /// [`Error::revocation_with_kind`].
     #[error("the revocation source failed")]
-    Revocation(#[source] BoxError),
+    Revocation {
+        kind: ErrorKind,
+        #[source]
+        source: BoxError,
+    },
 }
 
 impl Error {
@@ -25,7 +37,45 @@ impl Error {
         match self {
             Self::DigestLength { .. } => ErrorKind::InvalidInput,
             Self::Signer(_) => ErrorKind::Signer,
-            Self::Timestamp(_) | Self::Revocation(_) => ErrorKind::Unavailable,
+            Self::Timestamp { kind, .. } | Self::Revocation { kind, .. } => *kind,
+        }
+    }
+
+    /// A timestamp authority failure of kind [`ErrorKind::Unavailable`].
+    ///
+    /// Pass the implementation's error by value: a `Box<E>` would be boxed a second time,
+    /// and the source would then be the box, no longer `E` itself.
+    pub fn timestamp(source: impl Into<BoxError>) -> Self {
+        Self::timestamp_with_kind(ErrorKind::Unavailable, source)
+    }
+
+    /// A timestamp authority failure of the kind the authority saw, such as
+    /// [`ErrorKind::InvalidSignature`] for a forged or replayed token.
+    ///
+    /// Pass the implementation's error by value, as for [`Error::timestamp`].
+    pub fn timestamp_with_kind(kind: ErrorKind, source: impl Into<BoxError>) -> Self {
+        Self::Timestamp {
+            kind,
+            source: source.into(),
+        }
+    }
+
+    /// A revocation source failure of kind [`ErrorKind::Unavailable`].
+    ///
+    /// Pass the implementation's error by value: a `Box<E>` would be boxed a second time,
+    /// and the source would then be the box, no longer `E` itself.
+    pub fn revocation(source: impl Into<BoxError>) -> Self {
+        Self::revocation_with_kind(ErrorKind::Unavailable, source)
+    }
+
+    /// A revocation source failure of the kind the source saw, such as
+    /// [`ErrorKind::InvalidInput`] for a malformed CRL.
+    ///
+    /// Pass the implementation's error by value, as for [`Error::revocation`].
+    pub fn revocation_with_kind(kind: ErrorKind, source: impl Into<BoxError>) -> Self {
+        Self::Revocation {
+            kind,
+            source: source.into(),
         }
     }
 }
