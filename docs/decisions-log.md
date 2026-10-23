@@ -81,3 +81,6 @@ A decision the person took is not logged here: it is an ADR or a story.
 | 2026-10-23 | s40-validate-ssa-by-effect | Kept a visible-rect signature without `/AP` refused, against the planner's proposal | Loosening a security rule is not decided in passing |
 | 2026-10-23 | s16-validate-chain | Widened Owns with `docs/security/attacks/cms.md` and `pades.md`, re-forked the lane | Both attack files hand the chain check to s16 (stories review major) |
 | 2026-10-23 | s16-validate-chain | Accepted the plan's `INDETERMINATE / TRY_LATER` for a valid chain until s17 judges revocation | Fail closed; matches s17's no-data criterion |
+| 2026-10-23 | s16-validate-chain | The person chose the EKU rule: judged on the signer only, critical or not, `id-kp-clientAuth` accepted; issuers' EKU decoded but not judged | Many PIV and qualified signing certificates carry `clientAuth`; RFC 5280 does not require EKU on CAs; DSS parity left to s18 |
+| 2026-10-23 | s16-validate-chain | Fix runs 1 and 2 although the reviews allowed the ship; fix run 3 granted by the person | Each major was a downgrade path through unsigned data or an untested guard |
+| 2026-10-23 | s16-validate-chain | Unsigned pool data (CMS `certificates`, `/DSS`) treated as hints that can never disqualify a path | Review and QA showed a third party could downgrade a valid signature without touching signed bytes |
