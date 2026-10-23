@@ -1,6 +1,6 @@
 #!/bin/sh
 # Smoke checks of the running conformance bench, with OpenSSL as the judge:
-# the PKI chain, the CRL, the TSA and the OCSP responder. Exits non-zero on the first failure.
+# the PKI chain, the CRL, both TSAs and the OCSP responder. Exits non-zero on the first failure.
 set -eu
 
 BENCH="$(cd "$(dirname "$0")" && pwd)"
@@ -33,7 +33,7 @@ wait_for "$DSS_URL/"
 wait_for "$PKI_URL/crl/intermediate.crl"
 
 openssl verify -CAfile "$PKI/root.cert.pem" -untrusted "$PKI/intermediate.cert.pem" \
-  "$PKI/signer.cert.pem" "$PKI/tsa.cert.pem" || fail "the PKI chain does not verify"
+  "$PKI/signer.cert.pem" "$PKI/tsa.cert.pem" "$PKI/tsa2.cert.pem" || fail "the PKI chain does not verify"
 
 revoked_serial="$(openssl x509 -in "$PKI/revoked.cert.pem" -noout -serial | cut -d= -f2)"
 curl -sf --max-time 30 -o "$work/intermediate.crl" "$PKI_URL/crl/intermediate.crl" || fail "no CRL served"
@@ -45,12 +45,19 @@ echo "ok: intermediate.crl lists the revoked serial $revoked_serial"
 
 echo "Nacre conformance bench" > "$work/data"
 openssl ts -query -data "$work/data" -sha256 -cert -out "$work/query.tsq" 2> /dev/null
-curl -sf --max-time 30 -H 'Content-Type: application/timestamp-query' --data-binary "@$work/query.tsq" \
-  -o "$work/reply.tsr" "$PKI_URL/cgi-bin/tsa" || fail "the TSA did not answer"
-openssl ts -verify -data "$work/data" -in "$work/reply.tsr" -CAfile "$PKI/root.cert.pem" \
-  -untrusted "$PKI/intermediate.cert.pem" 2> /dev/null | grep -q 'Verification: OK' ||
-  fail "the TSA token does not verify"
-echo "ok: the TSA answers a verifiable token"
+# Each endpoint must answer with a token that verifies and is signed by its own TSA.
+for pair in "tsa:Nacre Test TSA" "tsa2:Nacre Test Document TSA"; do
+  endpoint="${pair%%:*}"
+  name="${pair#*:}"
+  curl -sf --max-time 30 -H 'Content-Type: application/timestamp-query' --data-binary "@$work/query.tsq" \
+    -o "$work/$endpoint.tsr" "$PKI_URL/cgi-bin/$endpoint" || fail "$endpoint did not answer"
+  openssl ts -verify -data "$work/data" -in "$work/$endpoint.tsr" -CAfile "$PKI/root.cert.pem" \
+    -untrusted "$PKI/intermediate.cert.pem" 2> /dev/null | grep -q 'Verification: OK' ||
+    fail "the $endpoint token does not verify"
+  openssl ts -reply -in "$work/$endpoint.tsr" -text 2> /dev/null |
+    grep -q "^TSA: .*CN *= *$name\$" || fail "the $endpoint token is not signed by $name"
+  echo "ok: $endpoint answers a verifiable token signed by $name"
+done
 
 ocsp_status() {
   openssl ocsp -url "$PKI_URL/cgi-bin/ocsp" -issuer "$PKI/intermediate.cert.pem" \

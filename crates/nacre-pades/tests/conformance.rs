@@ -12,7 +12,7 @@ mod support;
 
 use nacre_conformance::{Dss, reports_dir};
 use nacre_core::Indication;
-use nacre_pades::{DateTime, Level, sign, sign_at_level};
+use nacre_pades::{DateTime, Level, extend, sign, sign_at_level};
 use nacre_revocation::{Fallback, HttpCrlSource, HttpOcspSource};
 use nacre_tsp::HttpTsa;
 use support::{BenchSigner, bench_certificate};
@@ -131,4 +131,72 @@ fn bench_signature_is_pades_baseline_lt() {
     assert_eq!(verdict.report.sub_indication(), None);
     assert_eq!(verdict.format, "PAdES-BASELINE-LT");
     assert!(report.is_file());
+}
+
+const TSA_URL: &str = "http://127.0.0.1:18081/cgi-bin/tsa";
+const DOCUMENT_TSA_URL: &str = "http://127.0.0.1:18081/cgi-bin/tsa2";
+
+fn bench_revocation() -> Fallback<HttpOcspSource, HttpCrlSource> {
+    Fallback::new(
+        HttpOcspSource::allowing_loopback(),
+        HttpCrlSource::allowing_loopback(),
+    )
+}
+
+/// `UNSIGNED` signed at B-LTA, the signature time-stamped by `tsa` and the document by `tsa2`.
+fn bench_lta() -> Vec<u8> {
+    let issuers = [bench_certificate("root.cert.pem")];
+    sign_at_level(
+        UNSIGNED,
+        &BenchSigner::load(),
+        time(),
+        Level::LTA {
+            tsa: &HttpTsa::new(TSA_URL),
+            revocation: &bench_revocation(),
+            issuers: &issuers,
+            document_tsa: &HttpTsa::new(DOCUMENT_TSA_URL),
+        },
+    )
+    .unwrap()
+}
+
+fn assert_one_lta_signature(name: &str, pdf: &[u8]) {
+    let report = reports_dir().join(format!("{name}.xml"));
+    let reports = Dss::from_env().unwrap().validate(name, pdf).unwrap();
+
+    assert_eq!(reports.signatures.len(), 1);
+    let verdict = &reports.signatures[0];
+    assert_eq!(verdict.report.indication(), Indication::TotalPassed);
+    assert_eq!(verdict.report.sub_indication(), None);
+    assert_eq!(verdict.format, "PAdES-BASELINE-LTA");
+    assert!(report.is_file());
+}
+
+#[test]
+#[ignore = "conformance"]
+fn bench_signature_is_pades_baseline_lta() {
+    let _ = std::fs::remove_file(reports_dir().join("s12-pades-lta.xml"));
+
+    let signed = bench_lta();
+
+    assert_one_lta_signature("s12-pades-lta", &signed);
+}
+
+#[test]
+#[ignore = "conformance"]
+fn extended_signature_stays_pades_baseline_lta() {
+    let _ = std::fs::remove_file(reports_dir().join("s12-pades-lta-extended.xml"));
+    let signed = bench_lta();
+    let issuers = [bench_certificate("root.cert.pem")];
+
+    let extended = extend(
+        &signed,
+        &HttpTsa::new(TSA_URL),
+        &bench_revocation(),
+        &issuers,
+    )
+    .unwrap();
+
+    assert!(extended.starts_with(&signed));
+    assert_one_lta_signature("s12-pades-lta-extended", &extended);
 }

@@ -1,5 +1,6 @@
 #!/bin/sh
-# RFC 3161 over HTTP: one TimeStampReq in, one TimeStampResp out, signed by the bench TSA.
+# RFC 3161 over HTTP: one TimeStampReq in, one TimeStampResp out, signed by the bench TSA
+# of the OpenSSL section TSA_SECTION (bench_tsa by default).
 set -eu
 
 PKI_DIR="${NACRE_PKI_STATE:-/run/nacre-pki}"
@@ -17,9 +18,12 @@ length="${CONTENT_LENGTH:-0}"
 case "$length" in '' | *[!0-9]*) fail "400 Bad Request" "bad Content-Length" ;; esac
 [ "$length" -le 65536 ] || fail "413 Payload Too Large" "request over 64 KiB"
 
+section="${TSA_SECTION:-bench_tsa}"
 head -c "$length" > "$work/query.tsq"
-openssl ts -reply -config "$PKI_DIR/openssl.cnf" -queryfile "$work/query.tsq" \
-  -out "$work/reply.tsr" 2> "$work/err" || fail "500 Internal Server Error" "$(cat "$work/err")"
+# openssl ts truncates then rewrites the serial file: a concurrent request reading it in
+# between is answered "rejection, addInfoNotAvailable". One reply per section at a time.
+flock "$PKI_DIR/$section.lock" openssl ts -reply -config "$PKI_DIR/openssl.cnf" -section "$section" \
+  -queryfile "$work/query.tsq" -out "$work/reply.tsr" 2> "$work/err" || fail "500 Internal Server Error" "$(cat "$work/err")"
 
 printf 'Content-Type: application/timestamp-reply\r\nContent-Length: %s\r\n\r\n' \
   "$(wc -c < "$work/reply.tsr" | tr -d ' ')"

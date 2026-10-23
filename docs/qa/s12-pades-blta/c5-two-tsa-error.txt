@@ -1,0 +1,181 @@
+Tree under test: 0d268180e2ffb97fe85675ecd4b6f3ebd6861c5e (story/s12-pades-blta, after b20a2c2). Scenario program: scenario-program.txt.
+
+## one TSA in both roles
+$ cd $QA_TMP/scratch && QA_PKI=$QA_TMP/pki QA_UNSIGNED=crates/nacre-pades/tests/corpus/unsigned.pdf qa-s12 same-tsa
+stdin: (none)
+--- stdout+stderr
+[one TSA for both roles (same instance)] sign_at_level(pdf 744 bytes, signer [signer, root], Level::LTA { tsa, revocation, issuers: 0 item(s), document_tsa })
+  source asked for C=FR,O=Nacre QA,CN=Nacre QA signer (issuer CN=Nacre QA root,O=Nacre QA,C=FR) -> Ocsp, 803 bytes
+  source asked for C=FR,O=Nacre QA,CN=Nacre QA signature TSA (issuer CN=Nacre QA root,O=Nacre QA,C=FR) -> Crl, 211 bytes
+  signer signed 1 time(s); revocation source asked 2 time(s): ["C=FR,O=Nacre QA,CN=Nacre QA signer", "C=FR,O=Nacre QA,CN=Nacre QA signature TSA"]
+  Ok: 73825 bytes
+  revisions: 4 (ends at [744, 37046, 40405, 73825]), file length 73825
+  field 0 'Signature1': /Type /Sig /SubFilter /ETSI.CAdES.detached /M present
+    ByteRange [0, 919, 36469, 577], covers up to byte 37046 (revision end there: true, = file end: false)
+    /Contents 17774 bytes, DER value 2865 bytes, padding 14909 zero bytes; SHA-1 of /Contents F19DCA4EC767017D9D11617DB278AEDB2F1B4753
+    certificates carried: ["CN=Nacre QA root,O=Nacre QA,C=FR", "C=FR,O=Nacre QA,CN=Nacre QA signer"]
+    CMS verifies over ByteRange: true
+    signature-time-stamp token certificates: ["C=FR,O=Nacre QA,CN=Nacre QA signature TSA", "CN=Nacre QA root,O=Nacre QA,C=FR"]
+    signature-time-stamp TSTInfo: Policy OID: tsa_policy1; Serial number: 0x10; Time stamp: Oct 23 11:38:40 2026 GMT
+  field 1 'Signature2': /Type /DocTimeStamp /SubFilter /ETSI.RFC3161 /M absent
+    ByteRange [0, 40543, 73313, 512], covers up to byte 73825 (revision end there: true, = file end: true)
+    /Contents 16384 bytes, DER value 1476 bytes, padding 14908 zero bytes; SHA-1 of /Contents EA27F3B1522D893BB8A9E033C80251FF312AC658
+    certificates carried: ["C=FR,O=Nacre QA,CN=Nacre QA signature TSA", "CN=Nacre QA root,O=Nacre QA,C=FR"]
+    SHA-256 over ByteRange F93D0E962AC8D4FC9187ED74ED8B02AEF7978DD00DA68E6BF96D938B1EE217EE
+    openssl ts -verify (digest over ByteRange, CAfile QA root): Verification: OK
+    TSTInfo: Policy OID: tsa_policy1; Serial number: 0x11; Time stamp: Oct 23 11:38:40 2026 GMT
+  catalog /DSS: 15 0 R
+  /Certs: 3 stream(s): 9 0 R=C=FR,O=Nacre QA,CN=Nacre QA signer | 10 0 R=CN=Nacre QA root,O=Nacre QA,C=FR | 11 0 R=C=FR,O=Nacre QA,CN=Nacre QA signature TSA
+  /CRLs: 1 stream(s): 12 0 R=211 B
+  /OCSPs: 1 stream(s): 13 0 R=803 B
+  /VRI: 1 key(s)
+    /F19DCA4EC767017D9D11617DB278AEDB2F1B4753 -> 14 0 R: /Type=/VRI /Cert=[9 0 R C=FR,O=Nacre QA,CN=Nacre QA signer, 10 0 R CN=Nacre QA root,O=Nacre QA,C=FR, 11 0 R C=FR,O=Nacre QA,CN=Nacre QA signature TSA] /CRL=[12 0 R] /OCSP=[13 0 R]
+  tsa (both roles) (tsa_config) asked 2 time(s), imprints ["BADA5BA3088D115E9DED7C97E147EC7EE991FDC1FCBA5FA702D27E415B86CBF1", "F93D0E962AC8D4FC9187ED74ED8B02AEF7978DD00DA68E6BF96D938B1EE217EE"]
+--- exit code: 0
+
+## document TSA chained to a CA nobody passed
+$ cd $QA_TMP/scratch && QA_PKI=$QA_TMP/pki QA_UNSIGNED=crates/nacre-pades/tests/corpus/unsigned.pdf qa-s12 orphan
+stdin: (none)
+--- stdout+stderr
+[document_tsa issued by a CA nobody passed] sign_at_level(pdf 744 bytes, signer [signer, root], Level::LTA { tsa, revocation, issuers: 0 item(s), document_tsa })
+  source asked for C=FR,O=Nacre QA,CN=Nacre QA signer (issuer CN=Nacre QA root,O=Nacre QA,C=FR) -> Ocsp, 804 bytes
+  source asked for C=FR,O=Nacre QA,CN=Nacre QA signature TSA (issuer CN=Nacre QA root,O=Nacre QA,C=FR) -> Crl, 211 bytes
+  signer signed 1 time(s); revocation source asked 2 time(s): ["C=FR,O=Nacre QA,CN=Nacre QA signer", "C=FR,O=Nacre QA,CN=Nacre QA signature TSA"]
+  Ok: 73826 bytes
+  revisions: 4 (ends at [744, 37046, 40406, 73826]), file length 73826
+  field 0 'Signature1': /Type /Sig /SubFilter /ETSI.CAdES.detached /M present
+    ByteRange [0, 919, 36469, 577], covers up to byte 37046 (revision end there: true, = file end: false)
+    /Contents 17774 bytes, DER value 2863 bytes, padding 14911 zero bytes; SHA-1 of /Contents D5045A7B8FFE6A54C14E96028A9DDAD4F20A2C16
+    certificates carried: ["CN=Nacre QA root,O=Nacre QA,C=FR", "C=FR,O=Nacre QA,CN=Nacre QA signer"]
+    CMS verifies over ByteRange: true
+    signature-time-stamp token certificates: ["C=FR,O=Nacre QA,CN=Nacre QA signature TSA", "CN=Nacre QA root,O=Nacre QA,C=FR"]
+    signature-time-stamp TSTInfo: Policy OID: tsa_policy1; Serial number: 0x12; Time stamp: Oct 23 11:38:40 2026 GMT
+  field 1 'Signature2': /Type /DocTimeStamp /SubFilter /ETSI.RFC3161 /M absent
+    ByteRange [0, 40544, 73314, 512], covers up to byte 73826 (revision end there: true, = file end: true)
+    /Contents 16384 bytes, DER value 1063 bytes, padding 15321 zero bytes; SHA-1 of /Contents B5E7BBC093E05F3835D87578ED6EB877BDC9436D
+    certificates carried: ["CN=Orphan TSA,O=Elsewhere,C=FR"]
+    SHA-256 over ByteRange 8AC01D89A25B95AC7C2641C5B605EE8063979AAAF9BFDAA1ADB1CCBD2DF8A2C6
+    openssl ts -verify (digest over ByteRange, CAfile QA root): Verification: FAILED
+    TSTInfo: Policy OID: 1.2.3.4.3; Serial number: 0x08; Time stamp: Oct 23 11:38:40 2026 GMT
+  catalog /DSS: 15 0 R
+  /Certs: 3 stream(s): 9 0 R=C=FR,O=Nacre QA,CN=Nacre QA signer | 10 0 R=CN=Nacre QA root,O=Nacre QA,C=FR | 11 0 R=C=FR,O=Nacre QA,CN=Nacre QA signature TSA
+  /CRLs: 1 stream(s): 12 0 R=211 B
+  /OCSPs: 1 stream(s): 13 0 R=804 B
+  /VRI: 1 key(s)
+    /D5045A7B8FFE6A54C14E96028A9DDAD4F20A2C16 -> 14 0 R: /Type=/VRI /Cert=[9 0 R C=FR,O=Nacre QA,CN=Nacre QA signer, 10 0 R CN=Nacre QA root,O=Nacre QA,C=FR, 11 0 R C=FR,O=Nacre QA,CN=Nacre QA signature TSA] /CRL=[12 0 R] /OCSP=[13 0 R]
+[extend that file, issuers empty] extend(pdf 73826 bytes, tsa, revocation, issuers: 0 item(s))
+  revocation source asked 0 time(s): []
+  Err
+  Display: the issuer of CN=Orphan TSA,O=Elsewhere,C=FR is in neither the chains nor the issuers given
+  kind(): Indeterminate
+  variant: IssuerMissing
+[extend that file, issuers = [Elsewhere CA]] extend(pdf 73826 bytes, tsa, revocation, issuers: 1 item(s))
+  source asked for CN=Orphan TSA,O=Elsewhere,C=FR (issuer CN=Elsewhere CA,O=Elsewhere,C=FR) -> Crl, 211 bytes
+  revocation source asked 1 time(s): ["CN=Orphan TSA,O=Elsewhere,C=FR"]
+  Ok: 109173 bytes
+  revisions: 6 (ends at [744, 37046, 40406, 73826, 75738, 109173]), file length 109173
+  field 0 'Signature1': /Type /Sig /SubFilter /ETSI.CAdES.detached /M present
+    ByteRange [0, 919, 36469, 577], covers up to byte 37046 (revision end there: true, = file end: false)
+    /Contents 17774 bytes, DER value 2863 bytes, padding 14911 zero bytes; SHA-1 of /Contents D5045A7B8FFE6A54C14E96028A9DDAD4F20A2C16
+    certificates carried: ["CN=Nacre QA root,O=Nacre QA,C=FR", "C=FR,O=Nacre QA,CN=Nacre QA signer"]
+    CMS verifies over ByteRange: true
+    signature-time-stamp token certificates: ["C=FR,O=Nacre QA,CN=Nacre QA signature TSA", "CN=Nacre QA root,O=Nacre QA,C=FR"]
+    signature-time-stamp TSTInfo: Policy OID: tsa_policy1; Serial number: 0x12; Time stamp: Oct 23 11:38:40 2026 GMT
+  field 1 'Signature2': /Type /DocTimeStamp /SubFilter /ETSI.RFC3161 /M absent
+    ByteRange [0, 40544, 73314, 512], covers up to byte 73826 (revision end there: true, = file end: false)
+    /Contents 16384 bytes, DER value 1063 bytes, padding 15321 zero bytes; SHA-1 of /Contents B5E7BBC093E05F3835D87578ED6EB877BDC9436D
+    certificates carried: ["CN=Orphan TSA,O=Elsewhere,C=FR"]
+    SHA-256 over ByteRange 8AC01D89A25B95AC7C2641C5B605EE8063979AAAF9BFDAA1ADB1CCBD2DF8A2C6
+    openssl ts -verify (digest over ByteRange, CAfile QA root): Verification: FAILED
+    TSTInfo: Policy OID: 1.2.3.4.3; Serial number: 0x08; Time stamp: Oct 23 11:38:40 2026 GMT
+  field 2 'Signature3': /Type /DocTimeStamp /SubFilter /ETSI.RFC3161 /M absent
+    ByteRange [0, 75876, 108646, 527], covers up to byte 109173 (revision end there: true, = file end: true)
+    /Contents 16384 bytes, DER value 1477 bytes, padding 14907 zero bytes; SHA-1 of /Contents B815A85584EBBC65FDD86B7A6CCFF39229B0E5B1
+    certificates carried: ["C=FR,O=Nacre QA,CN=Nacre QA signature TSA", "CN=Nacre QA root,O=Nacre QA,C=FR"]
+    SHA-256 over ByteRange 8C7B714C330D148EF28991B3E948A47000B72314671903DF79D1984AC5CE1ABD
+    openssl ts -verify (digest over ByteRange, CAfile QA root): Verification: OK
+    TSTInfo: Policy OID: tsa_policy1; Serial number: 0x13; Time stamp: Oct 23 11:38:40 2026 GMT
+  catalog /DSS: 22 0 R
+  /Certs: 5 stream(s): 9 0 R=C=FR,O=Nacre QA,CN=Nacre QA signer | 10 0 R=CN=Nacre QA root,O=Nacre QA,C=FR | 11 0 R=C=FR,O=Nacre QA,CN=Nacre QA signature TSA | 18 0 R=CN=Orphan TSA,O=Elsewhere,C=FR | 19 0 R=CN=Elsewhere CA,O=Elsewhere,C=FR
+  /CRLs: 2 stream(s): 12 0 R=211 B | 20 0 R=211 B
+  /OCSPs: 1 stream(s): 13 0 R=804 B
+  /VRI: 2 key(s)
+    /D5045A7B8FFE6A54C14E96028A9DDAD4F20A2C16 -> 14 0 R: /Type=/VRI /Cert=[9 0 R C=FR,O=Nacre QA,CN=Nacre QA signer, 10 0 R CN=Nacre QA root,O=Nacre QA,C=FR, 11 0 R C=FR,O=Nacre QA,CN=Nacre QA signature TSA] /CRL=[12 0 R] /OCSP=[13 0 R]
+    /B5E7BBC093E05F3835D87578ED6EB877BDC9436D -> 21 0 R: /Type=/VRI /Cert=[18 0 R CN=Orphan TSA,O=Elsewhere,C=FR, 19 0 R CN=Elsewhere CA,O=Elsewhere,C=FR] /CRL=[20 0 R]
+  [extend that file, issuers = [Elsewhere CA]] output starts with the input (73826 bytes): true; each of the input's 4 revision ends [744, 37046, 40406, 73826] is a byte prefix of the output: true
+  tsa (tsa_config) asked 1 time(s), imprints ["8C7B714C330D148EF28991B3E948A47000B72314671903DF79D1984AC5CE1ABD"]
+--- exit code: 0
+
+## replay
+$ cd $QA_TMP/scratch && QA_PKI=$QA_TMP/pki QA_UNSIGNED=crates/nacre-pades/tests/corpus/unsigned.pdf qa-s12 orphan
+stdin: (none)
+--- stdout+stderr
+[document_tsa issued by a CA nobody passed] sign_at_level(pdf 744 bytes, signer [signer, root], Level::LTA { tsa, revocation, issuers: 0 item(s), document_tsa })
+  source asked for C=FR,O=Nacre QA,CN=Nacre QA signer (issuer CN=Nacre QA root,O=Nacre QA,C=FR) -> Ocsp, 805 bytes
+  source asked for C=FR,O=Nacre QA,CN=Nacre QA signature TSA (issuer CN=Nacre QA root,O=Nacre QA,C=FR) -> Crl, 211 bytes
+  signer signed 1 time(s); revocation source asked 2 time(s): ["C=FR,O=Nacre QA,CN=Nacre QA signer", "C=FR,O=Nacre QA,CN=Nacre QA signature TSA"]
+  Ok: 73827 bytes
+  revisions: 4 (ends at [744, 37046, 40407, 73827]), file length 73827
+  field 0 'Signature1': /Type /Sig /SubFilter /ETSI.CAdES.detached /M present
+    ByteRange [0, 919, 36469, 577], covers up to byte 37046 (revision end there: true, = file end: false)
+    /Contents 17774 bytes, DER value 2865 bytes, padding 14909 zero bytes; SHA-1 of /Contents 834BC73494B06DAA4DD7CBB2A4E764770738E73C
+    certificates carried: ["CN=Nacre QA root,O=Nacre QA,C=FR", "C=FR,O=Nacre QA,CN=Nacre QA signer"]
+    CMS verifies over ByteRange: true
+    signature-time-stamp token certificates: ["C=FR,O=Nacre QA,CN=Nacre QA signature TSA", "CN=Nacre QA root,O=Nacre QA,C=FR"]
+    signature-time-stamp TSTInfo: Policy OID: tsa_policy1; Serial number: 0x1A; Time stamp: Oct 23 11:39:11 2026 GMT
+  field 1 'Signature2': /Type /DocTimeStamp /SubFilter /ETSI.RFC3161 /M absent
+    ByteRange [0, 40545, 73315, 512], covers up to byte 73827 (revision end there: true, = file end: true)
+    /Contents 16384 bytes, DER value 1062 bytes, padding 15322 zero bytes; SHA-1 of /Contents 41299AF0D74ED799D8990432035BB2FFF30FC451
+    certificates carried: ["CN=Orphan TSA,O=Elsewhere,C=FR"]
+    SHA-256 over ByteRange 4905351AF94D3DEC2292FE60250704657723DDD4AD2F9C71FEECD197AFC46AC8
+    openssl ts -verify (digest over ByteRange, CAfile QA root): Verification: FAILED
+    TSTInfo: Policy OID: 1.2.3.4.3; Serial number: 0x0D; Time stamp: Oct 23 11:39:11 2026 GMT
+  catalog /DSS: 15 0 R
+  /Certs: 3 stream(s): 9 0 R=C=FR,O=Nacre QA,CN=Nacre QA signer | 10 0 R=CN=Nacre QA root,O=Nacre QA,C=FR | 11 0 R=C=FR,O=Nacre QA,CN=Nacre QA signature TSA
+  /CRLs: 1 stream(s): 12 0 R=211 B
+  /OCSPs: 1 stream(s): 13 0 R=805 B
+  /VRI: 1 key(s)
+    /834BC73494B06DAA4DD7CBB2A4E764770738E73C -> 14 0 R: /Type=/VRI /Cert=[9 0 R C=FR,O=Nacre QA,CN=Nacre QA signer, 10 0 R CN=Nacre QA root,O=Nacre QA,C=FR, 11 0 R C=FR,O=Nacre QA,CN=Nacre QA signature TSA] /CRL=[12 0 R] /OCSP=[13 0 R]
+[extend that file, issuers empty] extend(pdf 73827 bytes, tsa, revocation, issuers: 0 item(s))
+  revocation source asked 0 time(s): []
+  Err
+  Display: the issuer of CN=Orphan TSA,O=Elsewhere,C=FR is in neither the chains nor the issuers given
+  kind(): Indeterminate
+  variant: IssuerMissing
+[extend that file, issuers = [Elsewhere CA]] extend(pdf 73827 bytes, tsa, revocation, issuers: 1 item(s))
+  source asked for CN=Orphan TSA,O=Elsewhere,C=FR (issuer CN=Elsewhere CA,O=Elsewhere,C=FR) -> Crl, 211 bytes
+  revocation source asked 1 time(s): ["CN=Orphan TSA,O=Elsewhere,C=FR"]
+  Ok: 109174 bytes
+  revisions: 6 (ends at [744, 37046, 40407, 73827, 75739, 109174]), file length 109174
+  field 0 'Signature1': /Type /Sig /SubFilter /ETSI.CAdES.detached /M present
+    ByteRange [0, 919, 36469, 577], covers up to byte 37046 (revision end there: true, = file end: false)
+    /Contents 17774 bytes, DER value 2865 bytes, padding 14909 zero bytes; SHA-1 of /Contents 834BC73494B06DAA4DD7CBB2A4E764770738E73C
+    certificates carried: ["CN=Nacre QA root,O=Nacre QA,C=FR", "C=FR,O=Nacre QA,CN=Nacre QA signer"]
+    CMS verifies over ByteRange: true
+    signature-time-stamp token certificates: ["C=FR,O=Nacre QA,CN=Nacre QA signature TSA", "CN=Nacre QA root,O=Nacre QA,C=FR"]
+    signature-time-stamp TSTInfo: Policy OID: tsa_policy1; Serial number: 0x1A; Time stamp: Oct 23 11:39:11 2026 GMT
+  field 1 'Signature2': /Type /DocTimeStamp /SubFilter /ETSI.RFC3161 /M absent
+    ByteRange [0, 40545, 73315, 512], covers up to byte 73827 (revision end there: true, = file end: false)
+    /Contents 16384 bytes, DER value 1062 bytes, padding 15322 zero bytes; SHA-1 of /Contents 41299AF0D74ED799D8990432035BB2FFF30FC451
+    certificates carried: ["CN=Orphan TSA,O=Elsewhere,C=FR"]
+    SHA-256 over ByteRange 4905351AF94D3DEC2292FE60250704657723DDD4AD2F9C71FEECD197AFC46AC8
+    openssl ts -verify (digest over ByteRange, CAfile QA root): Verification: FAILED
+    TSTInfo: Policy OID: 1.2.3.4.3; Serial number: 0x0D; Time stamp: Oct 23 11:39:11 2026 GMT
+  field 2 'Signature3': /Type /DocTimeStamp /SubFilter /ETSI.RFC3161 /M absent
+    ByteRange [0, 75877, 108647, 527], covers up to byte 109174 (revision end there: true, = file end: true)
+    /Contents 16384 bytes, DER value 1477 bytes, padding 14907 zero bytes; SHA-1 of /Contents 65DCCD0A6589604452F8AEDE0761B8687EE0434A
+    certificates carried: ["C=FR,O=Nacre QA,CN=Nacre QA signature TSA", "CN=Nacre QA root,O=Nacre QA,C=FR"]
+    SHA-256 over ByteRange 6ED2ED9F110B11AC74A605EEB1053448197C06E2F1266A84808C7A789A1164A7
+    openssl ts -verify (digest over ByteRange, CAfile QA root): Verification: OK
+    TSTInfo: Policy OID: tsa_policy1; Serial number: 0x1B; Time stamp: Oct 23 11:39:11 2026 GMT
+  catalog /DSS: 22 0 R
+  /Certs: 5 stream(s): 9 0 R=C=FR,O=Nacre QA,CN=Nacre QA signer | 10 0 R=CN=Nacre QA root,O=Nacre QA,C=FR | 11 0 R=C=FR,O=Nacre QA,CN=Nacre QA signature TSA | 18 0 R=CN=Orphan TSA,O=Elsewhere,C=FR | 19 0 R=CN=Elsewhere CA,O=Elsewhere,C=FR
+  /CRLs: 2 stream(s): 12 0 R=211 B | 20 0 R=211 B
+  /OCSPs: 1 stream(s): 13 0 R=805 B
+  /VRI: 2 key(s)
+    /834BC73494B06DAA4DD7CBB2A4E764770738E73C -> 14 0 R: /Type=/VRI /Cert=[9 0 R C=FR,O=Nacre QA,CN=Nacre QA signer, 10 0 R CN=Nacre QA root,O=Nacre QA,C=FR, 11 0 R C=FR,O=Nacre QA,CN=Nacre QA signature TSA] /CRL=[12 0 R] /OCSP=[13 0 R]
+    /41299AF0D74ED799D8990432035BB2FFF30FC451 -> 21 0 R: /Type=/VRI /Cert=[18 0 R CN=Orphan TSA,O=Elsewhere,C=FR, 19 0 R CN=Elsewhere CA,O=Elsewhere,C=FR] /CRL=[20 0 R]
+  [extend that file, issuers = [Elsewhere CA]] output starts with the input (73827 bytes): true; each of the input's 4 revision ends [744, 37046, 40407, 73827] is a byte prefix of the output: true
+  tsa (tsa_config) asked 1 time(s), imprints ["6ED2ED9F110B11AC74A605EEB1053448197C06E2F1266A84808C7A789A1164A7"]
+--- exit code: 0
+

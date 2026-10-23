@@ -17,7 +17,7 @@ the test certificates work both for DSS inside its container and for tests on th
 | Port | Service |
 | --- | --- |
 | `18080` | DSS: web application and REST services (`/services/rest/validation/validateSignature`) |
-| `18081` | `GET /crl/root.crl`, `GET /crl/intermediate.crl`, `POST /cgi-bin/tsa` (RFC 3161), `POST /cgi-bin/ocsp` |
+| `18081` | `GET /crl/root.crl`, `GET /crl/intermediate.crl`, `POST /cgi-bin/tsa` and `POST /cgi-bin/tsa2` (RFC 3161, two distinct TSAs), `POST /cgi-bin/ocsp` |
 
 ## Run
 
@@ -38,8 +38,8 @@ one-shot service to finish. Hence the `down` first: a DSS still running from the
 start would keep the previous anchors and judge every new signature `INDETERMINATE`.
 
 `check.sh` waits up to 300 s for DSS and the CRL server, then checks with OpenSSL that the
-chain verifies, that the CRL lists the revoked certificate, that the TSA returns a verifiable
-token and that OCSP says `good` for `signer` and `revoked` for `revoked`. It ends with
+chain verifies, that the CRL lists the revoked certificate, that each TSA returns a verifiable
+token signed by its own certificate and that OCSP says `good` for `signer` and `revoked` for `revoked`. It ends with
 `bench ready`, or stops at the first failure. `reference/generate.sh` then signs
 `reference/unsigned.pdf` with the new `signer` and `revoked` keys into `reference/out/`.
 

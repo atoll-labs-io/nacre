@@ -24,6 +24,7 @@ done
 echo 1000 > root.serial
 echo 2000 > intermediate.serial
 echo 01 > tsa.serial
+echo 01 > tsa2.serial
 
 key() {
   openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "$1.key.pem"
@@ -52,6 +53,7 @@ leaf() {
 
 leaf signer "Nacre Test Signer" v3_signer
 leaf tsa "Nacre Test TSA" v3_tsa
+leaf tsa2 "Nacre Test Document TSA" v3_tsa
 leaf revoked "Nacre Test Revoked Signer" v3_signer
 
 openssl ca -batch -config "$CNF" -name intermediate_ca -revoke revoked.cert.pem \

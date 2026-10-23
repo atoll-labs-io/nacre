@@ -99,3 +99,20 @@ ordering = no
 tsa_name = yes
 ess_cert_id_chain = no
 ess_cert_id_alg = sha256
+
+# A second, distinct TSA, so a signature and its document timestamp can come from two
+# authorities (s12). Same profile as bench_tsa, under the same intermediate.
+[ bench_tsa2 ]
+serial = $PKI_DIR/tsa2.serial
+crypto_device = builtin
+signer_cert = $PKI_DIR/tsa2.cert.pem
+certs = $PKI_DIR/intermediate.cert.pem
+signer_key = $PKI_DIR/tsa2.key.pem
+signer_digest = sha256
+default_policy = 2.999.1.2
+digests = sha256, sha384, sha512
+accuracy = secs:1
+ordering = no
+tsa_name = yes
+ess_cert_id_chain = no
+ess_cert_id_alg = sha256

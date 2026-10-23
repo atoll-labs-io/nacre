@@ -18,11 +18,12 @@ Generated in `out/` by `generate.sh`:
 | `intermediate.{key,cert}.pem` | CA issued by the root; CRL distribution point `http://127.0.0.1:18081/crl/root.crl` |
 | `signer.{key,cert}.pem` | Signing certificate (`digitalSignature`, `nonRepudiation`) |
 | `tsa.{key,cert}.pem` | TSA certificate (critical `extendedKeyUsage` `timeStamping`) |
+| `tsa2.{key,cert}.pem` | A second TSA certificate, same profile, subject `Nacre Test Document TSA` |
 | `revoked.{key,cert}.pem` | Same profile as `signer`, revoked (`keyCompromise`) |
 | `root.crl`, `intermediate.crl` | DER CRLs; the intermediate's lists `revoked`; `nextUpdate` 7300 days after generation |
-| `*.index`, `*.serial`, `*.crlnumber`, `tsa.serial` | `openssl ca` and `openssl ts` state; the OCSP responder reads `intermediate.index` |
+| `*.index`, `*.serial`, `*.crlnumber`, `tsa.serial`, `tsa2.serial` | `openssl ca` and `openssl ts` state; the OCSP responder reads `intermediate.index` |
 | `anchors.p12` | PKCS#12 trust store for DSS: the root only, password `nacre-anchors` |
-| `openssl.cnf` | A copy of the configuration of the CAs, the extensions and the TSA, read by the responders |
+| `openssl.cnf` | A copy of the configuration of the CAs, the extensions and the two TSAs, read by the responders |
 
 All keys are ECDSA P-256, and they change, with every serial, on each run: nothing may
 depend on a fixed key, serial or fingerprint. Every certificate is valid from `2026-01-01T00:00:00Z` to
@@ -38,6 +39,8 @@ depend on a fixed key, serial or fingerprint. Every certificate is valid from `2
 - `GET /crl/root.crl`, `GET /crl/intermediate.crl`: the CRLs;
 - `POST /cgi-bin/tsa`: RFC 3161 time-stamping (`application/timestamp-query` in,
   `application/timestamp-reply` out), signed by `tsa`, policy `2.999.1.1`;
+- `POST /cgi-bin/tsa2`: the same service signed by `tsa2`, policy `2.999.1.2`, so a
+  signature and its document timestamp can come from two distinct authorities;
 - `POST /cgi-bin/ocsp`: OCSP for certificates issued by the intermediate, signed by the
   intermediate, `nextUpdate` five minutes ahead, nonce echoed.
 
