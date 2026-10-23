@@ -261,6 +261,7 @@ fn oversized_signature_is_refused_whole() {
 fn no_change_certification_refuses_a_signature() {
     let original = support::revision::certified_no_changes();
     let doc = Document::parse(&original).unwrap();
+    assert_eq!(doc.doc_mdp_level().unwrap(), Some(1));
 
     let err = doc.update().sign(spec("Nacre1", 64)).unwrap_err();
     assert!(matches!(err, Error::CertifiedNoChanges), "{err:?}");
@@ -273,6 +274,57 @@ fn no_change_certification_refuses_a_signature() {
     let out = doc.update().sign(timestamp).unwrap().embed(&[]).unwrap();
     let after = Document::parse(&out).unwrap();
     assert_eq!(after.signature_fields().last().unwrap().name, "Nacre1");
+}
+
+#[test]
+fn doc_mdp_level_reads_the_certification() {
+    let certified = real("certified-dss.pdf");
+    assert_eq!(
+        Document::parse(&certified)
+            .unwrap()
+            .doc_mdp_level()
+            .unwrap(),
+        Some(3)
+    );
+    let plain = real("chrome-print.pdf");
+    assert_eq!(
+        Document::parse(&plain).unwrap().doc_mdp_level().unwrap(),
+        None
+    );
+}
+
+#[test]
+fn doc_mdp_references_over_the_cap_are_refused() {
+    let certified = |count: usize| {
+        let entry = "<< /Type /SigRef /TransformMethod /FieldMDP >> ".repeat(count);
+        support::Pdf::new(support::Xref::Table)
+            .object(
+                1,
+                "<< /Type /Catalog /Pages 2 0 R /Perms << /DocMDP 4 0 R >> >>",
+            )
+            .object(2, support::revision::ONE_PAGE)
+            .object(3, support::revision::PAGE)
+            .object(4, format!("<< /Type /Sig /Reference [{entry}] >>"))
+            .build()
+    };
+    let at_cap = certified(32);
+    assert_eq!(
+        Document::parse(&at_cap).unwrap().doc_mdp_level().unwrap(),
+        None
+    );
+
+    let over = certified(33);
+    let err = Document::parse(&over).unwrap().doc_mdp_level().unwrap_err();
+    assert!(
+        matches!(
+            err,
+            Error::Limit {
+                what: "signature references",
+                ..
+            }
+        ),
+        "{err:?}"
+    );
 }
 
 #[test]

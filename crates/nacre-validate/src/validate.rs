@@ -3,22 +3,25 @@ use nacre_cms::SignedData;
 use nacre_pdf::{Dictionary, Document, Object};
 use sha2::{Digest, Sha256};
 
-use crate::{Defect, Error, SignatureValidation};
+use crate::revisions::{Qualified, qualify};
+use crate::{Defect, Error, LaterRevision, RevisionVerdict, SignatureValidation};
 
 /// Bounds the hashing one call may do to 64 times the largest accepted input (50 MB).
 const MAX_SIGNATURES: usize = 64;
 
 const SUB_FILTERS: [&[u8]; 2] = [b"ETSI.CAdES.detached", b"adbe.pkcs7.detached"];
 
-/// Validates the integrity of every signature of `pdf`, in field order.
+/// Validates the integrity of every signature of `pdf`, in field order, and qualifies each
+/// revision appended after it.
 ///
 /// An empty signature field and a document timestamp (`/SubFilter /ETSI.RFC3161`) are left
-/// out. A signature whose bytes and CMS verify ends `INDETERMINATE` /
-/// `NO_CERTIFICATE_CHAIN_FOUND`, since its chain is not judged yet; any defect ends
-/// `TOTAL_FAILED` or `INDETERMINATE` with its sub-indication, named in
+/// out. A signature whose bytes and CMS verify, and whose later revisions are all allowed,
+/// ends `INDETERMINATE` / `NO_CERTIFICATE_CHAIN_FOUND`, since its chain is not judged yet;
+/// any defect ends `TOTAL_FAILED` or `INDETERMINATE` with its sub-indication, named in
 /// [`SignatureValidation::defect`].
 ///
-/// An unreadable PDF, or one holding more than 64 signatures, is an [`Error`].
+/// An unreadable PDF, one holding more than 64 signatures, or more than 64 revisions after
+/// its oldest signed one, is an [`Error`].
 pub fn validate(pdf: &[u8]) -> Result<Vec<SignatureValidation>, Error> {
     validate_with(pdf, MAX_SIGNATURES)
 }
@@ -37,7 +40,7 @@ fn validate_with(pdf: &[u8], max_signatures: usize) -> Result<Vec<SignatureValid
         if dict.as_ref().is_some_and(is_document_timestamp) {
             continue;
         }
-        signatures.push((field.name.clone(), dict));
+        signatures.push((field.name.clone(), value, dict));
     }
     if signatures.len() > max_signatures {
         return Err(Error::TooManySignatures {
@@ -45,11 +48,57 @@ fn validate_with(pdf: &[u8], max_signatures: usize) -> Result<Vec<SignatureValid
             max: max_signatures,
         });
     }
-    Ok(signatures
+
+    let revision_of = |end: usize| doc.revisions().iter().position(|r| r.end == end);
+    let checked: Vec<_> = signatures
         .into_iter()
-        .map(|(field, dict)| match check(&doc, pdf, dict) {
-            Ok(()) => SignatureValidation::sound(field),
-            Err(defect) => SignatureValidation::defective(field, defect),
+        .map(|(field, value, dict)| {
+            let (end, result) = check(&doc, pdf, dict);
+            (field, value, end.and_then(revision_of), result)
+        })
+        .collect();
+    let first = checked.iter().filter_map(|(_, _, at, _)| *at).min();
+    let later = match first {
+        Some(first) => qualify(pdf, &doc, first)?,
+        None => Vec::new(),
+    };
+
+    Ok(checked
+        .into_iter()
+        .map(|(field, value, at, result)| {
+            let (own, mine): (Option<&Qualified>, Vec<LaterRevision>) = match (at, first) {
+                (Some(at), Some(first)) => (
+                    (at - first).checked_sub(1).and_then(|i| later.get(i)),
+                    later
+                        .iter()
+                        .skip(at - first)
+                        .map(|q| q.revision.clone())
+                        .collect(),
+                ),
+                _ => (None, Vec::new()),
+            };
+            // A signature its own revision refuses as a signature (SSA, DocMDP 1) would
+            // otherwise read as sound, nothing being appended after it. One added beside a
+            // change refused for another reason is judged on its own signed bytes.
+            let added_by = own
+                .filter(|q| q.refused_signatures.contains(&value))
+                .map(|q| q.revision.end);
+            let refused = mine
+                .iter()
+                .find(|r| !matches!(r.verdict, RevisionVerdict::Allowed(_)))
+                .map(|r| r.end);
+            match (result, added_by, refused) {
+                (Err(defect), _, _) => SignatureValidation::defective(field, defect, mine),
+                (Ok(()), Some(end), _) => SignatureValidation::defective(
+                    field,
+                    Defect::AddedByRevisionNotAllowed { end },
+                    mine,
+                ),
+                (Ok(()), None, Some(end)) => {
+                    SignatureValidation::defective(field, Defect::RevisionNotAllowed { end }, mine)
+                }
+                (Ok(()), None, None) => SignatureValidation::sound(field, mine),
+            }
         })
         .collect())
 }
@@ -58,9 +107,26 @@ fn is_document_timestamp(dict: &Dictionary) -> bool {
     matches!(dict.get(b"SubFilter"), Some(Object::Name(n)) if n == b"ETSI.RFC3161")
 }
 
+/// Runs the checks on one signature: where its signed bytes end, once known, and the first
+/// defect. The revisions after it are judged by the caller, last.
+fn check(
+    doc: &Document<'_>,
+    pdf: &[u8],
+    dict: Option<Dictionary>,
+) -> (Option<usize>, Result<(), Defect>) {
+    match signed_bytes(doc, pdf, dict) {
+        Ok((end, contents, [b, c])) => (Some(end), verify(pdf, &contents, [b, c, end])),
+        Err(defect) => (None, Err(defect)),
+    }
+}
+
 // The order of the checks is part of the contract: each case of the attack corpus must
 // reach the rule that names it.
-fn check(doc: &Document<'_>, pdf: &[u8], dict: Option<Dictionary>) -> Result<(), Defect> {
+fn signed_bytes(
+    doc: &Document<'_>,
+    pdf: &[u8],
+    dict: Option<Dictionary>,
+) -> Result<(usize, Vec<u8>, [usize; 2]), Defect> {
     let dict = dict.ok_or(Defect::NotASignatureDictionary)?;
 
     match dict.get(b"SubFilter") {
@@ -90,11 +156,11 @@ fn check(doc: &Document<'_>, pdf: &[u8], dict: Option<Dictionary>) -> Result<(),
     if !doc.revisions().iter().any(|r| r.end == end) {
         return Err(Defect::ByteRangeNotWholeFile);
     }
-    if !covers_last_revision(doc, end) {
-        return Err(Defect::LaterRevision);
-    }
+    Ok((end, contents, [b, c]))
+}
 
-    let der = der_prefix(&contents).ok_or(Defect::ContentsNotDer)?;
+fn verify(pdf: &[u8], contents: &[u8], [b, c, end]: [usize; 3]) -> Result<(), Defect> {
+    let der = der_prefix(contents).ok_or(Defect::ContentsNotDer)?;
 
     let mut hasher = Sha256::new();
     hasher.update(pdf.get(..b).unwrap_or_default());
@@ -105,12 +171,6 @@ fn check(doc: &Document<'_>, pdf: &[u8], dict: Option<Dictionary>) -> Result<(),
         .map_err(Defect::Cms)
 }
 
-/// Whether the signed bytes end with the file. This is the one place where a later
-/// revision is judged; qualifying what such a revision changes will replace it.
-fn covers_last_revision(doc: &Document<'_>, end: usize) -> bool {
-    doc.revisions().last().is_some_and(|r| r.end == end)
-}
-
 /// The value of an entry, one reference followed.
 fn follow_once(doc: &Document<'_>, value: Option<&Object>) -> Option<Object> {
     match value? {
@@ -119,7 +179,7 @@ fn follow_once(doc: &Document<'_>, value: Option<&Object>) -> Option<Object> {
     }
 }
 
-fn byte_range(doc: &Document<'_>, dict: &Dictionary) -> Option<[usize; 4]> {
+pub(crate) fn byte_range(doc: &Document<'_>, dict: &Dictionary) -> Option<[usize; 4]> {
     let Object::Array(items) = follow_once(doc, dict.get(b"ByteRange"))? else {
         return None;
     };
@@ -189,6 +249,30 @@ mod tests {
 
         assert!(
             matches!(error, Error::TooManySignatures { count: 2, max: 1 }),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn too_many_revisions_are_refused() {
+        let signer = TestSigner::from_secret(&[0x11; 32]).unwrap();
+        let time = DateTime::new(2026, 10, 22, 8, 0, 0).unwrap();
+        let mut pdf = sign(
+            include_bytes!("../tests/corpus/unsigned.pdf"),
+            &signer,
+            time,
+        )
+        .unwrap();
+        for _ in 0..64 {
+            pdf = Document::parse(&pdf).unwrap().update().finish().unwrap();
+        }
+        assert!(validate(&pdf).is_ok());
+
+        pdf = Document::parse(&pdf).unwrap().update().finish().unwrap();
+        let error = validate(&pdf).unwrap_err();
+
+        assert!(
+            matches!(error, Error::TooManyRevisions { count: 65, max: 64 }),
             "{error}"
         );
     }

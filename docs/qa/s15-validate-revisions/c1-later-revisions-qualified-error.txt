@@ -1,0 +1,246 @@
+# Criterion 1 - invalid inputs: no argument, missing file, empty file, not a PDF, an empty xref-only revision, 64 then 66 revisions after the signature (cap 64), a later revision pointing DocMDP at a /Reference array of 32 then 40 entries (bound 32), and a form fill appended after each of those two
+# Scenario program: qa-scen, a scratch binary crate under the QA temp dir depending on crates/nacre-validate by path; it calls nacre_validate::validate on the file named in argv[1] and prints every SignatureValidation. Source quoted whole at the end.
+# Tree under test: 01c707683773d66253d174bb8c4da4216606d9f1 (copy of git ls-files; cargo fetch: exit 0; cargo build --workspace --all-features: exit 0)
+# Every run below was replayed once with identical output.
+
+# Inputs built in <tmp>/work from certified-form-fill.pdf (DocMDP P=2, already holding one form-fill revision): one-empty.pdf (+1 xref-only revision), max-empty.pdf (+63, 64 revisions in all), many-empty.pdf (+65, 66 in all) by tools/append.sh; refs-32.pdf and refs-40.pdf by tools/hostile-refs.sh; refill-p2.pdf, refill-after-refs32.pdf, refill-after-unreadable.pdf by tools/refill.sh on certified-form-fill.pdf, refs-32.pdf, refs-40.pdf; empty.pdf (0 bytes), text.pdf ('this is not a pdf'). The tools are quoted at the end.
+# stderr of the first max-empty.pdf run is discarded: qa-scen's println! panics with 'Broken pipe' once head closes the pipe, which is the scenario program's, not nacre-validate's.
+
+$ qa-scen   (no argument)
+usage: qa-scen <file.pdf>
+[exit code: 2]
+
+$ cd <tmp>/work && qa-scen missing.pdf   (stdin: none)
+read error: No such file or directory (os error 2)
+[exit code: 2]
+
+$ cd <tmp>/work && qa-scen empty.pdf   (stdin: none)
+file: empty.pdf (0 bytes)
+error: the PDF cannot be read: the input does not start with %PDF- (kind InvalidInput)
+debug: Pdf(MissingHeader)
+[exit code: 1]
+
+$ cd <tmp>/work && qa-scen text.pdf   (stdin: none)
+file: text.pdf (17 bytes)
+error: the PDF cannot be read: the input does not start with %PDF- (kind InvalidInput)
+debug: Pdf(MissingHeader)
+[exit code: 1]
+
+$ cd <tmp>/work && qa-scen one-empty.pdf   (stdin: none)
+file: one-empty.pdf (11116 bytes)
+signatures: 1
+- field "Certification"
+  indication: INDETERMINATE / Some("NO_CERTIFICATE_CHAIN_FOUND")
+  digest_verified=true signature_verified=true
+  defect: None
+  later_revisions: 2
+    end=11037 changed=[ObjectId { number: 7, generation: 0 }, ObjectId { number: 11, generation: 0 }]
+      verdict=Allowed([FormFill])
+    end=11116 changed=[]
+      verdict=Allowed([])
+[exit code: 0]
+
+$ cd <tmp>/work && qa-scen max-empty.pdf | head -6; qa-scen max-empty.pdf | grep -c verdict=   (stdin: none)
+file: max-empty.pdf (16014 bytes)
+signatures: 1
+- field "Certification"
+  indication: INDETERMINATE / Some("NO_CERTIFICATE_CHAIN_FOUND")
+  digest_verified=true signature_verified=true
+  defect: None
+64
+[exit code: 0]
+
+$ cd <tmp>/work && qa-scen many-empty.pdf   (stdin: none)
+file: many-empty.pdf (16172 bytes)
+error: 66 revisions after the oldest signed one, at most 64 are qualified (kind InvalidInput)
+debug: TooManyRevisions { count: 66, max: 64 }
+[exit code: 1]
+
+$ cd <tmp>/work && qa-scen refs-32.pdf   (stdin: none)
+file: refs-32.pdf (13717 bytes)
+signatures: 1
+- field "Certification"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(RevisionNotAllowed { end: 13638 })
+  later_revisions: 3
+    end=11037 changed=[ObjectId { number: 7, generation: 0 }, ObjectId { number: 11, generation: 0 }]
+      verdict=Allowed([FormFill])
+    end=13638 changed=[ObjectId { number: 1, generation: 0 }, ObjectId { number: 20, generation: 0 }]
+      verdict=NotAllowed { refused: [ObjectId { number: 1, generation: 0 }, ObjectId { number: 20, generation: 0 }] }
+    end=13717 changed=[]
+      verdict=Allowed([])
+[exit code: 0]
+
+$ cd <tmp>/work && qa-scen refs-40.pdf   (stdin: none)
+file: refs-40.pdf (14301 bytes)
+signatures: 1
+- field "Certification"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(RevisionNotAllowed { end: 14222 })
+  later_revisions: 3
+    end=11037 changed=[ObjectId { number: 7, generation: 0 }, ObjectId { number: 11, generation: 0 }]
+      verdict=Allowed([FormFill])
+    end=14222 changed=[ObjectId { number: 1, generation: 0 }, ObjectId { number: 20, generation: 0 }]
+      verdict=Unreadable
+    end=14301 changed=[]
+      verdict=Allowed([])
+[exit code: 0]
+
+$ cd <tmp>/work && qa-scen refill-p2.pdf   (stdin: none)
+file: refill-p2.pdf (11473 bytes)
+signatures: 1
+- field "Certification"
+  indication: INDETERMINATE / Some("NO_CERTIFICATE_CHAIN_FOUND")
+  digest_verified=true signature_verified=true
+  defect: None
+  later_revisions: 2
+    end=11037 changed=[ObjectId { number: 7, generation: 0 }, ObjectId { number: 11, generation: 0 }]
+      verdict=Allowed([FormFill])
+    end=11473 changed=[ObjectId { number: 7, generation: 0 }, ObjectId { number: 21, generation: 0 }]
+      verdict=Allowed([FormFill])
+[exit code: 0]
+
+$ cd <tmp>/work && qa-scen refill-after-refs32.pdf   (stdin: none)
+file: refill-after-refs32.pdf (14153 bytes)
+signatures: 1
+- field "Certification"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(RevisionNotAllowed { end: 13638 })
+  later_revisions: 4
+    end=11037 changed=[ObjectId { number: 7, generation: 0 }, ObjectId { number: 11, generation: 0 }]
+      verdict=Allowed([FormFill])
+    end=13638 changed=[ObjectId { number: 1, generation: 0 }, ObjectId { number: 20, generation: 0 }]
+      verdict=NotAllowed { refused: [ObjectId { number: 1, generation: 0 }, ObjectId { number: 20, generation: 0 }] }
+    end=13717 changed=[]
+      verdict=Allowed([])
+    end=14153 changed=[ObjectId { number: 7, generation: 0 }, ObjectId { number: 21, generation: 0 }]
+      verdict=Allowed([FormFill])
+[exit code: 0]
+
+$ cd <tmp>/work && qa-scen refill-after-unreadable.pdf   (stdin: none)
+file: refill-after-unreadable.pdf (14737 bytes)
+signatures: 1
+- field "Certification"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(RevisionNotAllowed { end: 14222 })
+  later_revisions: 4
+    end=11037 changed=[ObjectId { number: 7, generation: 0 }, ObjectId { number: 11, generation: 0 }]
+      verdict=Allowed([FormFill])
+    end=14222 changed=[ObjectId { number: 1, generation: 0 }, ObjectId { number: 20, generation: 0 }]
+      verdict=Unreadable
+    end=14301 changed=[]
+      verdict=Allowed([])
+    end=14737 changed=[ObjectId { number: 7, generation: 0 }, ObjectId { number: 21, generation: 0 }]
+      verdict=NotAllowed { refused: [ObjectId { number: 7, generation: 0 }, ObjectId { number: 21, generation: 0 }] }
+[exit code: 0]
+
+----- scen/Cargo.toml -----
+[package]
+name = "qa-scen"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+nacre-validate = { path = "../copy/crates/nacre-validate" }
+----- scen/src/main.rs -----
+use std::process::ExitCode;
+
+fn main() -> ExitCode {
+    let Some(path) = std::env::args().nth(1) else {
+        eprintln!("usage: qa-scen <file.pdf>");
+        return ExitCode::from(2);
+    };
+    let pdf = match std::fs::read(&path) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("read error: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    println!("file: {path} ({} bytes)", pdf.len());
+    match nacre_validate::validate(&pdf) {
+        Ok(sigs) => {
+            println!("signatures: {}", sigs.len());
+            for s in &sigs {
+                println!("- field {:?}", s.field);
+                println!("  indication: {} / {:?}", s.report.indication().as_str(),
+                    s.report.sub_indication().map(|x| x.as_str()));
+                println!("  digest_verified={} signature_verified={}", s.digest_verified, s.signature_verified);
+                println!("  defect: {:?}", s.defect);
+                println!("  later_revisions: {}", s.later_revisions.len());
+                for r in &s.later_revisions {
+                    println!("    end={} changed={:?}", r.end, r.changed);
+                    println!("      verdict={:?}", r.verdict);
+                }
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            println!("error: {e} (kind {:?})", e.kind());
+            println!("debug: {e:?}");
+            ExitCode::from(1)
+        }
+    }
+}
+----- tools/run.sh -----
+#!/bin/sh
+# usage: run.sh <dir-label> <dir> <file>
+label=$1; dir=$2; f=$3
+echo "\$ cd $label && qa-scen $f   (stdin: none)"
+cd "$dir" && <tmp>/scen/target/release/qa-scen "$f" 2>&1
+echo "[exit code: $?]"
+echo
+----- tools/append.sh -----
+#!/bin/sh
+# usage: append.sh in out count size root
+in=$1; out=$2; n=$3; size=$4; root=$5
+cp "$in" "$out"
+prev=$(tail -c 64 "$in" | grep -a -A1 startxref | tail -1)
+i=0
+while [ $i -lt $n ]; do
+  off=$(stat -c %s "$out")
+  printf '\nxref\n0 0\ntrailer\n<< /Size %s /Prev %s /Root %s >>\nstartxref\n%s\n%%%%EOF\n' "$size" "$prev" "$root" "$((off+1))" >> "$out"
+  prev=$((off+1)); i=$((i+1))
+done
+----- tools/hostile-refs.sh -----
+#!/bin/sh
+# usage: hostile-refs.sh in out nrefs
+# Appends one revision redefining the catalog (1 0) with /Perms /DocMDP 20 0 R, where
+# 20 0 is a signature dictionary whose /Reference array holds nrefs DocMDP entries,
+# then one empty xref-only revision judged under that hostile state.
+in=$1; out=$2; n=$3
+cp "$in" "$out"
+prev=$(tail -c 64 "$in" | grep -a -A1 startxref | tail -1)
+printf '\n' >> "$out"
+o1=$(stat -c %s "$out")
+printf '1 0 obj\n<< /Type /Catalog /Pages 2 0 R /AcroForm 6 0 R /Perms << /DocMDP 20 0 R >> >>\nendobj\n' >> "$out"
+o20=$(stat -c %s "$out")
+refs=""; i=0
+while [ $i -lt $n ]; do refs="$refs<< /Type /SigRef /TransformMethod /DocMDP /TransformParams << /P 2 >> >> "; i=$((i+1)); done
+printf '20 0 obj\n<< /Type /Sig /Reference [ %s] >>\nendobj\n' "$refs" >> "$out"
+x=$(stat -c %s "$out")
+printf 'xref\n1 1\n%010d 00000 n \n20 1\n%010d 00000 n \ntrailer\n<< /Size 21 /Prev %s /Root 1 0 R >>\nstartxref\n%s\n%%%%EOF\n' "$o1" "$o20" "$prev" "$x" >> "$out"
+off=$(stat -c %s "$out")
+printf '\nxref\n0 0\ntrailer\n<< /Size 21 /Prev %s /Root 1 0 R >>\nstartxref\n%s\n%%%%EOF\n' "$x" "$((off+1))" >> "$out"
+----- tools/refill.sh -----
+#!/bin/sh
+# usage: refill.sh in out size
+# Appends one revision that fills field 7 again with the value "Eve": a new appearance
+# stream 21 0 and the widget 7 0 rewritten to point at it, as a form-filling tool saves it.
+in=$1; out=$2; size=$3
+cp "$in" "$out"
+prev=$(tail -c 64 "$in" | grep -a -A1 startxref | tail -1)
+printf '\n' >> "$out"
+o21=$(stat -c %s "$out")
+printf '21 0 obj\n<< /Type /XObject /Subtype /Form /BBox [0 0 228 20] /Resources << /Font << /F1 5 0 R >> >> /Length 31 >>\nstream\nBT /F1 12 Tf 2 6 Td (Eve) Tj ET\nendstream\nendobj\n' >> "$out"
+o7=$(stat -c %s "$out")
+printf '7 0 obj\n<< /Type /Annot /Subtype /Widget /FT /Tx /T <4E616D65> /V <457665> /Rect [72 600 300 620] /F 4 /P 3 0 R /AP << /N 21 0 R >> >>\nendobj\n' >> "$out"
+x=$(stat -c %s "$out")
+printf 'xref\n7 1\n%010d 00000 n \n21 1\n%010d 00000 n \ntrailer\n<< /Size %s /Prev %s /Root 1 0 R >>\nstartxref\n%s\n%%%%EOF\n' "$o7" "$o21" "$size" "$prev" "$x" >> "$out"

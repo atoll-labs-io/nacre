@@ -1,0 +1,78 @@
+# Criterion 4 - a B-LTA adding /DSS and /DocTimeStamp after the signature is not flagged (pyHanko's LTA file; s12 has not shipped)
+# Scenario program: qa-scen, a scratch binary crate under the QA temp dir depending on crates/nacre-validate by path; it calls nacre_validate::validate on the file named in argv[1] and prints every SignatureValidation. Source quoted whole at the end.
+# Tree under test: 01c707683773d66253d174bb8c4da4216606d9f1 (copy of git ls-files; cargo fetch: exit 0; cargo build --workspace --all-features: exit 0)
+# Every run below was replayed once with identical output.
+
+$ cd <tmp>/copy/crates/nacre-validate/tests/corpus && qa-scen signed-lta-pyhanko.pdf   (stdin: none)
+file: signed-lta-pyhanko.pdf (46884 bytes)
+signatures: 1
+- field "Sig1"
+  indication: INDETERMINATE / Some("NO_CERTIFICATE_CHAIN_FOUND")
+  digest_verified=true signature_verified=true
+  defect: None
+  later_revisions: 2
+    end=46212 changed=[ObjectId { number: 1, generation: 0 }, ObjectId { number: 3, generation: 0 }, ObjectId { number: 6, generation: 0 }, ObjectId { number: 12, generation: 0 }, ObjectId { number: 13, generation: 0 }, ObjectId { number: 14, generation: 0 }, ObjectId { number: 15, generation: 0 }, ObjectId { number: 16, generation: 0 }, ObjectId { number: 17, generation: 0 }, ObjectId { number: 18, generation: 0 }, ObjectId { number: 19, generation: 0 }, ObjectId { number: 20, generation: 0 }, ObjectId { number: 21, generation: 0 }, ObjectId { number: 22, generation: 0 }, ObjectId { number: 23, generation: 0 }, ObjectId { number: 24, generation: 0 }, ObjectId { number: 25, generation: 0 }, ObjectId { number: 26, generation: 0 }]
+      verdict=Allowed([Dss, DocumentTimestamp])
+    end=46884 changed=[ObjectId { number: 24, generation: 0 }, ObjectId { number: 29, generation: 0 }, ObjectId { number: 30, generation: 0 }, ObjectId { number: 31, generation: 0 }, ObjectId { number: 32, generation: 0 }]
+      verdict=Allowed([Dss])
+[exit code: 0]
+
+----- scen/Cargo.toml -----
+[package]
+name = "qa-scen"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+nacre-validate = { path = "../copy/crates/nacre-validate" }
+----- scen/src/main.rs -----
+use std::process::ExitCode;
+
+fn main() -> ExitCode {
+    let Some(path) = std::env::args().nth(1) else {
+        eprintln!("usage: qa-scen <file.pdf>");
+        return ExitCode::from(2);
+    };
+    let pdf = match std::fs::read(&path) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("read error: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    println!("file: {path} ({} bytes)", pdf.len());
+    match nacre_validate::validate(&pdf) {
+        Ok(sigs) => {
+            println!("signatures: {}", sigs.len());
+            for s in &sigs {
+                println!("- field {:?}", s.field);
+                println!("  indication: {} / {:?}", s.report.indication().as_str(),
+                    s.report.sub_indication().map(|x| x.as_str()));
+                println!("  digest_verified={} signature_verified={}", s.digest_verified, s.signature_verified);
+                println!("  defect: {:?}", s.defect);
+                println!("  later_revisions: {}", s.later_revisions.len());
+                for r in &s.later_revisions {
+                    println!("    end={} changed={:?}", r.end, r.changed);
+                    println!("      verdict={:?}", r.verdict);
+                }
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            println!("error: {e} (kind {:?})", e.kind());
+            println!("debug: {e:?}");
+            ExitCode::from(1)
+        }
+    }
+}
+----- tools/run.sh -----
+#!/bin/sh
+# usage: run.sh <dir-label> <dir> <file>
+label=$1; dir=$2; f=$3
+echo "\$ cd $label && qa-scen $f   (stdin: none)"
+cd "$dir" && <tmp>/scen/target/release/qa-scen "$f" 2>&1
+echo "[exit code: $?]"
+echo

@@ -13,6 +13,8 @@ pub(crate) struct Limits {
     pub(crate) max_total_decoded: usize,
     pub(crate) max_field_depth: usize,
     pub(crate) max_fields: usize,
+    pub(crate) max_reachable: usize,
+    pub(crate) max_signature_references: usize,
 }
 
 impl Limits {
@@ -26,5 +28,7 @@ impl Limits {
         max_total_decoded: 256 * 1024 * 1024,
         max_field_depth: 32,
         max_fields: 65_536,
+        max_reachable: 1_000_000,
+        max_signature_references: 32,
     };
 }
