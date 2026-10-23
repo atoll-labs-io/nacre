@@ -277,7 +277,7 @@ Risque principal : distinguer une révision légitime d'une révision malveillan
 **As** développeur Rust (Patelle d'abord) **I want** que la validation construise la chaîne du signataire jusqu'à une ancre de confiance que je fournis **so that** une signature n'est « valide » que rattachée à une racine explicitement acceptée.
 
 - **Complexity**: 3
-- **Depends on**: s15-validate-revisions
+- **Depends on**: s15-validate-revisions, s40-validate-ssa-by-effect
 - **Surface**: `endpoint`
 - **Owns**: `crates/nacre-validate/`
 
@@ -678,3 +678,21 @@ Story contrat (ADR-0012) : `nacre-core` est gelé après s01 et ne change que pa
 
 ### Notes for the agent
 Story contrat (ADR-0016, qui précise l'ADR-0012) : `nacre-core` est gelé et ne change que par une story contrat. Ne pas deviner le kind par downcast dans `nacre-core`. Jamais de TSA publique en test.
+
+## s40-validate-ssa-by-effect — Refuser toute signature qui rend visible sur un PDF certifié une apparence absente à la certification
+**As** développeur d'une application qui montre chaque signature d'un PDF **I want** qu'une signature ajoutée après certification et visible sur la page soit marquée comme ajoutée par une révision interdite, quelle que soit la forme du champ **so that** la signature d'un attaquant (*sneaky signature attack*) ne se lise jamais comme saine.
+
+- **Complexity**: 3
+- **Depends on**: s15-validate-revisions
+- **Surface**: `endpoint`
+- **Owns**: `crates/nacre-validate/`, `docs/security/attacks/pades.md`
+
+### Acceptance criteria
+- [ ] Sur un PDF certifié (DocMDP P=1, 2 ou 3), une signature dont une apparence est visible sur la page alors qu'aucune apparence de ce champ ne l'était dans l'état certifié porte le défaut `AddedByRevisionNotAllowed`, et la signature de certification `RevisionNotAllowed`.
+- [ ] La règle vaut pour chaque forme : champ et widget fusionnés ou séparés (`/Kids`), champ ajouté puis signé plus tard, champ déjà présent mais invisible à la certification (`/Rect` nul, widget caché) rendu visible en signant, `/Rect` indirect ou widget enfant modifié ; un cas de corpus et un test de rejet par forme.
+- [ ] Un champ de signature déjà visible dans l'état certifié et signé ensuite sans autre changement reste sain (`Allowed([Signature])`, aucun défaut) ; un second signataire invisible sur un PDF non certifié aussi.
+- [ ] `docs/security/attacks/pades.md` décrit la règle par son effet, avec la liste des formes couvertes.
+
+### Notes for the agent
+Né de la revue de s15 (fix loops 0 à 3) : trois correctifs successifs ont fermé chacun une forme syntaxique et laissé la suivante. Poser la règle par l'effet visible (apparence du champ et de ses widgets, avant et après), pas par la structure. Nacre ne rend pas les PDF : « visible » se juge sur `/Rect`, les drapeaux `/F` (Hidden, NoView) et la présence d'un `/AP` non vide, jamais sur un rendu. Avant s16 : une fois les chaînes jugées, la signature d'un attaquant sans défaut pourrait se lire valide.
+
