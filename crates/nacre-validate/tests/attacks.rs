@@ -12,8 +12,8 @@ use nacre_core::{ErrorKind, Indication, SubIndication};
 use std::time::SystemTime;
 
 use nacre_validate::{
-    ChainDefect, Defect, Error, ObjectId, RevisionVerdict, SignatureValidation, TrustAnchors,
-    validate, validate_with_anchors,
+    ChainDefect, Defect, Error, ObjectId, RevisionVerdict, RevocationDefect, SignatureValidation,
+    TrustAnchors, validate, validate_with_anchors,
 };
 
 /// The single signature of `file`, checked to be refused as a format failure.
@@ -435,12 +435,19 @@ fn chain_malformed_extension_is_rejected() {
 }
 
 /// `chain-cms.pdf` given an appended `/DSS` of 300 unreadable streams: the unsigned pool is
-/// a hint, so the chain the CMS proves still stands.
+/// a hint, so the chain the CMS proves still stands, its revocation left without data.
 #[test]
 fn chain_dss_junk_does_not_hide_the_chain() {
     let result = with_chain_root(include_bytes!("corpus/attacks/chain-dss-junk.pdf"));
 
-    assert!(result.defect.is_none(), "{:?}", result.defect);
+    assert!(
+        matches!(
+            result.defect,
+            Some(Defect::Revocation(RevocationDefect::Missing { depth: 0 }))
+        ),
+        "{:?}",
+        result.defect
+    );
     let chain = result.chain.expect("the CMS chain");
     let expected: [&[u8]; 3] = [
         include_bytes!("corpus/chain/leaf.der"),
@@ -451,6 +458,6 @@ fn chain_dss_junk_does_not_hide_the_chain() {
     assert_eq!(result.report.indication(), Indication::Indeterminate);
     assert_eq!(
         result.report.sub_indication(),
-        Some(SubIndication::TryLater)
+        Some(SubIndication::CertificateChainGeneralFailure)
     );
 }

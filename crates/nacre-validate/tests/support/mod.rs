@@ -1,3 +1,8 @@
+// Each test file uses its own part of this module.
+#![allow(dead_code)]
+
+pub mod forge;
+
 use std::path::Path;
 
 use nacre_core::{SignatureAlgorithm, Signer};
@@ -14,14 +19,25 @@ pub struct BenchSigner {
 
 impl BenchSigner {
     pub fn load() -> Self {
-        let dir = nacre_conformance::pki_dir();
-        let key = SigningKey::from_pkcs8_pem(&read(&dir, "signer.key.pem")).unwrap();
-        let chain = ["signer.cert.pem", "intermediate.cert.pem"]
-            .iter()
-            .map(|name| bench_certificate(name))
-            .collect();
+        Self::load_as("signer")
+    }
+
+    /// The bench certificate `name` (`signer`, `revoked`) with its key.
+    pub fn load_as(name: &str) -> Self {
+        let key = bench_key(name);
+        let chain = vec![
+            bench_certificate(&format!("{name}.cert.pem")),
+            bench_certificate("intermediate.cert.pem"),
+        ];
         Self { key, chain }
     }
+}
+
+/// The private key of the bench's `name` (`intermediate`, `signer`, `revoked`), read from
+/// the PKI the bench generates at start; never committed.
+pub fn bench_key(name: &str) -> SigningKey {
+    let dir = nacre_conformance::pki_dir();
+    SigningKey::from_pkcs8_pem(&read(&dir, &format!("{name}.key.pem"))).unwrap()
 }
 
 /// The DER of the bench certificate `name`, read from its PEM file in the bench's PKI.
