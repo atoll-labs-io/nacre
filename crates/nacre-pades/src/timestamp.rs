@@ -49,12 +49,17 @@ pub(crate) fn timestamp_signature(
     let token = tsa
         .timestamp(DigestAlgorithm::Sha256, &imprint)
         .map_err(Error::Timestamp)?;
+    let parsed = check_token(&token)?;
+    Ok((with_token(cms, parsed)?, token))
+}
+
+/// `token` parsed as one DER value, refused when it is larger than the room reserved for it.
+pub(crate) fn check_token(token: &[u8]) -> Result<Any, Error> {
     if token.len() > TIMESTAMP_TOKEN_MAX {
         return Err(Error::TimestampTooLarge {
             len: token.len(),
             max: TIMESTAMP_TOKEN_MAX,
         });
     }
-    let parsed = Any::from_der(&token).map_err(Error::TimestampToken)?;
-    Ok((with_token(cms, parsed)?, token))
+    Any::from_der(token).map_err(Error::TimestampToken)
 }

@@ -13,7 +13,7 @@ use nacre_core::{
     DigestAlgorithm, ErrorKind, RevocationData, RevocationSource, SignatureAlgorithm, Signer,
     TestSigner, TimestampAuthority,
 };
-use nacre_pades::{DateTime, Error, Level, TIMESTAMP_TOKEN_MAX, sign, sign_at_level};
+use nacre_pades::{DateTime, Error, Level, TIMESTAMP_TOKEN_MAX, extend, sign, sign_at_level};
 use nacre_pdf::{Dictionary, Document, Object, ObjectId};
 use sha1::Sha1;
 use sha2::{Digest, Sha256};
@@ -697,4 +697,418 @@ fn second_lt_signature_keeps_the_earlier_dss() {
         assert!(ids(after).starts_with(&ids(before)));
         assert!(after.len() > before.len());
     }
+}
+
+/// Counts the questions put to `inner`, which records the last one.
+struct Counted {
+    inner: FakeTsa,
+    calls: Cell<usize>,
+}
+
+fn counted(inner: FakeTsa) -> Counted {
+    Counted {
+        inner,
+        calls: Cell::new(0),
+    }
+}
+
+impl Counted {
+    fn token(&self) -> Vec<u8> {
+        self.inner.answer.clone().unwrap()
+    }
+
+    fn seen(&self) -> Option<(DigestAlgorithm, Vec<u8>)> {
+        self.inner.seen.borrow().clone()
+    }
+}
+
+impl TimestampAuthority for Counted {
+    fn timestamp(
+        &self,
+        algorithm: DigestAlgorithm,
+        imprint: &[u8],
+    ) -> Result<Vec<u8>, nacre_core::Error> {
+        self.calls.set(self.calls.get() + 1);
+        self.inner.timestamp(algorithm, imprint)
+    }
+}
+
+fn sign_lta(
+    pdf: &[u8],
+    signer: &Chained,
+    tsa: &Counted,
+    document_tsa: &Counted,
+    source: &Recording,
+) -> Result<Vec<u8>, Error> {
+    sign_at_level(
+        pdf,
+        signer,
+        time(),
+        Level::LTA {
+            tsa,
+            revocation: source,
+            issuers: &[],
+            document_tsa,
+        },
+    )
+}
+
+fn is_document_timestamp(read: &Read) -> bool {
+    read.sig.get(b"SubFilter") == Some(&Object::Name(b"ETSI.RFC3161".to_vec()))
+}
+
+/// The document timestamps of `pdf`, the one whose `/ByteRange` ends latest last.
+fn document_timestamps(pdf: &[u8]) -> Vec<Read> {
+    let mut stamps: Vec<Read> = signatures(pdf)
+        .into_iter()
+        .filter(is_document_timestamp)
+        .collect();
+    stamps.sort_by_key(|read| read.byte_range[2] + read.byte_range[3]);
+    stamps
+}
+
+fn upper_hex_sha1(bytes: &[u8]) -> Vec<u8> {
+    Sha1::digest(bytes)
+        .iter()
+        .map(|b| format!("{b:02X}"))
+        .collect::<String>()
+        .into_bytes()
+}
+
+fn revision_count(pdf: &[u8]) -> usize {
+    Document::parse(pdf).unwrap().revisions().len()
+}
+
+fn lta() -> Vec<u8> {
+    sign_lta(
+        UNSIGNED,
+        &chained(&[LEAF, EC_CA]),
+        &counted(cms_token(&[REVOKED, EC_CA])),
+        &counted(cms_token(&[LEAF, EC_CA])),
+        &recording(None),
+    )
+    .unwrap()
+}
+
+#[test]
+fn level_lta_adds_a_document_timestamp_after_dss() {
+    let tsa = counted(cms_token(&[REVOKED, EC_CA]));
+    let document_tsa = counted(cms_token(&[LEAF, EC_CA]));
+
+    let out = sign_lta(
+        UNSIGNED,
+        &chained(&[LEAF, EC_CA]),
+        &tsa,
+        &document_tsa,
+        &recording(None),
+    )
+    .unwrap();
+
+    assert!(out.starts_with(UNSIGNED));
+    let reads = signatures(&out);
+    assert_eq!(reads.len(), 2);
+    let stamp = reads.last().unwrap();
+    assert_eq!(
+        stamp.sig.get(b"Type"),
+        Some(&Object::Name(b"DocTimeStamp".to_vec()))
+    );
+    assert!(is_document_timestamp(stamp));
+    assert_eq!(stamp.sig.get(b"M"), None);
+    assert_eq!(stamp.cms, document_tsa.token());
+    let [_, _, c, d] = stamp.byte_range;
+    assert_eq!(c + d, out.len());
+    assert_eq!(
+        document_tsa.seen(),
+        Some((
+            DigestAlgorithm::Sha256,
+            range_digest(&out, stamp.byte_range)
+        ))
+    );
+    assert_eq!(tsa.calls.get(), 1);
+    assert_eq!(document_tsa.calls.get(), 1);
+
+    let revisions = Document::parse(&out).unwrap().revisions().to_vec();
+    assert_eq!(revisions.len(), revision_count(UNSIGNED) + 3);
+    let before_stamp = &out[..revisions[revisions.len() - 2].end];
+    assert!(dss(before_stamp).is_some());
+    assert_eq!(signatures(before_stamp).len(), 1);
+}
+
+#[test]
+fn document_timestamp_failure_returns_the_lt_file() {
+    let document_tsa = counted(FakeTsa {
+        answer: Err("down"),
+        seen: RefCell::new(None),
+    });
+
+    let error = sign_lta(
+        UNSIGNED,
+        &chained(&[LEAF, EC_CA]),
+        &counted(cms_token(&[REVOKED, EC_CA])),
+        &document_tsa,
+        &recording(None),
+    )
+    .unwrap_err();
+
+    assert_eq!(error.kind(), ErrorKind::Unavailable);
+    let Error::Archive { signed, source } = error else {
+        panic!("not Archive: {error}");
+    };
+    assert!(matches!(*source, Error::Timestamp(_)), "{source}");
+    assert!(dss(&signed.0).is_some());
+    let reads = signatures(&signed.0);
+    assert_eq!(reads.len(), 1);
+    assert!(!is_document_timestamp(&reads[0]));
+}
+
+/// Checks one `extend` from `before` to `after`: the newest document timestamp of `before`
+/// got a `/VRI` entry listing `token_certificates` and the revocation data asked for
+/// `asked`, then a new document timestamp from `tsa` covers the whole file.
+fn assert_renewed(
+    before: &[u8],
+    after: &[u8],
+    tsa: &Counted,
+    source: &Recording,
+    token_certificates: &[&[u8]],
+    asked: &[u8],
+) {
+    assert!(after.starts_with(before));
+    let newest = document_timestamps(before).pop().unwrap();
+    let key = upper_hex_sha1(&newest.contents);
+    let earlier = dss(before).unwrap();
+    let later = dss(after).unwrap();
+    assert_eq!(later.vri.len(), earlier.vri.len() + 1);
+    assert!(earlier.vri.iter().all(|(k, _, _)| k != &key));
+    for (k, entry, _) in &earlier.vri {
+        assert!(later.vri.iter().any(|(l, e, _)| l == k && e == entry));
+    }
+
+    let (_, _, [cert, crl, ocsp]) = later.vri.iter().find(|(k, _, _)| k == &key).unwrap();
+    let pick = |streams: &[(ObjectId, Vec<u8>)], wanted: &[ObjectId]| -> Vec<Vec<u8>> {
+        wanted
+            .iter()
+            .map(|id| streams.iter().find(|(s, _)| s == id).unwrap().1.clone())
+            .collect()
+    };
+    let mut certs = pick(&later.certs, cert);
+    certs.sort();
+    let mut expected: Vec<Vec<u8>> = token_certificates.iter().map(|c| c.to_vec()).collect();
+    expected.sort();
+    assert_eq!(certs, expected);
+    let mut revocation = pick(&later.crls, crl);
+    revocation.extend(pick(&later.ocsps, ocsp));
+    let answer = if asked == LEAF { GOOD_OCSP } else { EC_CA_CRL };
+    assert_eq!(revocation, vec![answer.to_vec()]);
+    assert_eq!(*source.asked.borrow(), vec![asked.to_vec()]);
+
+    let stamps = document_timestamps(after);
+    assert_eq!(stamps.len(), document_timestamps(before).len() + 1);
+    let renewed = stamps.last().unwrap();
+    let [_, _, c, d] = renewed.byte_range;
+    assert_eq!(c + d, after.len());
+    assert_eq!(renewed.cms, tsa.token());
+    assert_eq!(
+        tsa.seen(),
+        Some((
+            DigestAlgorithm::Sha256,
+            range_digest(after, renewed.byte_range)
+        ))
+    );
+    assert_eq!(tsa.calls.get(), 1);
+    assert_eq!(revision_count(after), revision_count(before) + 2);
+}
+
+#[test]
+fn extend_renews_the_newest_document_timestamp() {
+    let lta = lta();
+
+    // Each authority's token carries a different chain, so a renewal that picked an older
+    // timestamp would store the wrong certificates under the wrong key.
+    let first_tsa = counted(cms_token(&[REVOKED, EC_CA]));
+    let first_source = recording(None);
+    let once = extend(&lta, &first_tsa, &first_source, &[]).unwrap();
+    assert_renewed(&lta, &once, &first_tsa, &first_source, &[LEAF, EC_CA], LEAF);
+
+    let second_tsa = counted(cms_token(&[LEAF, EC_CA]));
+    let second_source = recording(None);
+    let twice = extend(&once, &second_tsa, &second_source, &[]).unwrap();
+    assert_renewed(
+        &once,
+        &twice,
+        &second_tsa,
+        &second_source,
+        &[REVOKED, EC_CA],
+        REVOKED,
+    );
+}
+
+#[test]
+fn extend_refuses_a_pdf_without_document_timestamp() {
+    let lt = sign_lt(
+        UNSIGNED,
+        &chained(&[LEAF, EC_CA]),
+        &cms_token(&[REVOKED, EC_CA]),
+        &recording(None),
+        &[],
+    )
+    .unwrap();
+    let tsa = counted(cms_token(&[REVOKED, EC_CA]));
+    let source = recording(None);
+
+    let error = extend(&lt, &tsa, &source, &[]).unwrap_err();
+
+    assert!(matches!(error, Error::NotArchived), "{error}");
+    assert_eq!(error.kind(), ErrorKind::InvalidInput);
+    assert_eq!(tsa.calls.get(), 0);
+    assert!(source.asked.borrow().is_empty());
+}
+
+#[test]
+fn extend_refuses_a_malformed_document_timestamp() {
+    let mut lta = lta();
+    let stamp = document_timestamps(&lta).pop().unwrap();
+    // `b` of `/ByteRange [a b c d]` is the offset of the `<` that opens the `/Contents` hex
+    // string: its first byte becomes 0x00 in place.
+    let open = stamp.byte_range[1];
+    lta[open + 1..open + 3].copy_from_slice(b"00");
+    let tsa = counted(cms_token(&[REVOKED, EC_CA]));
+    let source = recording(None);
+
+    let error = extend(&lta, &tsa, &source, &[]).unwrap_err();
+
+    assert!(matches!(error, Error::DocumentTimestamp(_)), "{error}");
+    assert_eq!(error.kind(), ErrorKind::InvalidInput);
+    assert_eq!(tsa.calls.get(), 0);
+    assert!(source.asked.borrow().is_empty());
+}
+
+#[test]
+fn extend_refuses_a_document_timestamp_padded_with_non_zero_bytes() {
+    let mut lta = lta();
+    let stamp = document_timestamps(&lta).pop().unwrap();
+    // `c` is just after the `>` that closes `/Contents`: its last byte, padding, becomes 0x01.
+    let close = stamp.byte_range[2] - 1;
+    lta[close - 2..close].copy_from_slice(b"01");
+    let tsa = counted(cms_token(&[REVOKED, EC_CA]));
+    let source = recording(None);
+
+    let error = extend(&lta, &tsa, &source, &[]).unwrap_err();
+
+    assert!(matches!(error, Error::DocumentTimestamp(_)), "{error}");
+    assert_eq!(tsa.calls.get(), 0);
+    assert!(source.asked.borrow().is_empty());
+}
+
+#[test]
+fn renewing_tsa_failure_returns_the_file_with_its_dss() {
+    let lta = lta();
+    let tsa = counted(FakeTsa {
+        answer: Err("down"),
+        seen: RefCell::new(None),
+    });
+
+    let error = extend(&lta, &tsa, &recording(None), &[]).unwrap_err();
+
+    assert_eq!(error.kind(), ErrorKind::Unavailable);
+    let Error::Archive { signed, source } = error else {
+        panic!("not Archive: {error}");
+    };
+    assert!(matches!(*source, Error::Timestamp(_)), "{source}");
+    assert!(signed.0.starts_with(&lta));
+    assert_eq!(revision_count(&signed.0), revision_count(&lta) + 1);
+    let key = upper_hex_sha1(&document_timestamps(&lta).pop().unwrap().contents);
+    assert!(
+        dss(&signed.0)
+            .unwrap()
+            .vri
+            .iter()
+            .any(|(k, _, _)| k == &key)
+    );
+    assert_eq!(document_timestamps(&signed.0).len(), 1);
+}
+
+/// A TSA whose token, signed for `chain[0]`, carries no certificate at all.
+fn certificate_less_token(chain: &[&[u8]]) -> Counted {
+    let mut token = SignedData::from_der(&cms_token(chain).answer.unwrap()).unwrap();
+    token.certificates.clear();
+    counted(FakeTsa::answering(token.to_der().unwrap()))
+}
+
+/// An LTA file whose `/DSS` holds `[LEAF, EC_CA]` and whose document timestamp token,
+/// signed for `document_signer`, carries no certificate.
+fn lta_with_certificate_less_stamp(document_signer: &[u8]) -> Vec<u8> {
+    sign_lta(
+        UNSIGNED,
+        &chained(&[LEAF, EC_CA]),
+        &counted(cms_token(&[LEAF, EC_CA])),
+        &certificate_less_token(&[document_signer, EC_CA]),
+        &recording(None),
+    )
+    .unwrap()
+}
+
+#[test]
+fn extend_needs_the_certificate_of_a_certificate_less_token_signer() {
+    let lta = lta_with_certificate_less_stamp(REVOKED);
+    let tsa = counted(cms_token(&[LEAF, EC_CA]));
+    let source = recording(None);
+
+    let error = extend(&lta, &tsa, &source, &[]).unwrap_err();
+
+    assert!(matches!(error, Error::TimestampSignerMissing), "{error}");
+    assert_eq!(error.kind(), ErrorKind::Indeterminate);
+    assert_eq!(tsa.calls.get(), 0);
+    assert!(source.asked.borrow().is_empty());
+
+    // Given by the caller, the signer is renewed; its issuer comes from `/DSS`.
+    let out = extend(&lta, &tsa, &source, &[REVOKED.to_vec()]).unwrap();
+    assert_renewed(&lta, &out, &tsa, &source, &[REVOKED, EC_CA], REVOKED);
+}
+
+#[test]
+fn extend_finds_a_certificate_less_token_signer_in_dss() {
+    let lta = lta_with_certificate_less_stamp(LEAF);
+    let tsa = counted(cms_token(&[REVOKED, EC_CA]));
+    let source = recording(None);
+
+    let out = extend(&lta, &tsa, &source, &[]).unwrap();
+
+    assert_renewed(&lta, &out, &tsa, &source, &[LEAF, EC_CA], LEAF);
+}
+
+/// `pdf` with one more revision whose `/DSS /Certs` starts with a FlateDecode stream, which
+/// nacre does not decode, before the certificates already there.
+fn with_filtered_dss_certificate(pdf: &[u8]) -> Vec<u8> {
+    let doc = Document::parse(pdf).unwrap();
+    let Some(Object::Reference(id)) = doc.catalog().get(b"DSS") else {
+        panic!("no /DSS reference");
+    };
+    let mut dss = dictionary_at(&doc, *id);
+    let mut update = doc.update();
+    let mut filtered = Dictionary::new();
+    filtered.insert(b"Filter", Object::Name(b"FlateDecode".to_vec()));
+    let stream = update
+        .add_stream(filtered, b"x\x9c\x03\x00\x00\x00\x00\x01".to_vec())
+        .unwrap();
+    let mut certs = vec![Object::Reference(stream)];
+    certs.extend(
+        references(dss.get(b"Certs"))
+            .into_iter()
+            .map(Object::Reference),
+    );
+    dss.insert(b"Certs", Object::Array(certs));
+    let dss = update.add(Object::Dictionary(dss)).unwrap();
+    update.set_catalog(b"DSS", Object::Reference(dss));
+    update.finish().unwrap()
+}
+
+#[test]
+fn extend_leaves_out_a_dss_stream_that_is_not_a_certificate() {
+    let lta = with_filtered_dss_certificate(&lta_with_certificate_less_stamp(LEAF));
+    let tsa = counted(cms_token(&[REVOKED, EC_CA]));
+    let source = recording(None);
+
+    let out = extend(&lta, &tsa, &source, &[]).unwrap();
+
+    assert_renewed(&lta, &out, &tsa, &source, &[LEAF, EC_CA], LEAF);
 }
