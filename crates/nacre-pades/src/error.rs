@@ -58,6 +58,28 @@ pub enum Error {
         #[source]
         source: Box<Error>,
     },
+    /// The `/DSS` revision was written but the document timestamp after it could not be
+    /// added. `signed` is the file up to that revision: the signer has already signed and
+    /// the revocation data is fetched.
+    #[error("the document timestamp could not be added: {source}")]
+    Archive {
+        /// From `sign_at_level`, the B-LT file; from `extend`, its input with the new `/DSS`
+        /// revision. Either has no new document timestamp.
+        signed: SignedPdf,
+        /// Why the document timestamp failed.
+        #[source]
+        source: Box<Error>,
+    },
+    /// `extend` was given a PDF that holds no document timestamp.
+    #[error("the PDF holds no document timestamp to extend")]
+    NotArchived,
+    /// A document timestamp of the PDF cannot be read: which one, and what is wrong with it.
+    #[error("malformed document timestamp: {0}")]
+    DocumentTimestamp(&'static str),
+    /// The newest document timestamp's token names a signer whose certificate is in neither
+    /// the token, the issuers given nor `/DSS`, so its validation data cannot be stored.
+    #[error("the signer certificate of the newest document timestamp could not be found")]
+    TimestampSignerMissing,
 }
 
 /// A signed PDF handed back inside an error. Its `Debug` prints only the length, so a
@@ -80,13 +102,15 @@ impl Error {
             Self::Cms(inner) => inner.kind(),
             Self::Timestamp(inner) => inner.kind(),
             Self::Revocation { source, .. } => source.kind(),
-            Self::LongTerm { source, .. } => source.kind(),
-            Self::TimestampToken(_) | Self::TimestampTooLarge { .. } | Self::Certificate(_) => {
-                nacre_core::ErrorKind::InvalidInput
-            }
-            Self::IssuerMissing { .. } | Self::RevocationUnsupported { .. } => {
-                nacre_core::ErrorKind::Indeterminate
-            }
+            Self::LongTerm { source, .. } | Self::Archive { source, .. } => source.kind(),
+            Self::TimestampToken(_)
+            | Self::TimestampTooLarge { .. }
+            | Self::Certificate(_)
+            | Self::NotArchived
+            | Self::DocumentTimestamp(_) => nacre_core::ErrorKind::InvalidInput,
+            Self::IssuerMissing { .. }
+            | Self::RevocationUnsupported { .. }
+            | Self::TimestampSignerMissing => nacre_core::ErrorKind::Indeterminate,
         }
     }
 }
@@ -155,6 +179,18 @@ mod tests {
                 },
                 Indeterminate,
             ),
+            (
+                Error::Archive {
+                    signed: SignedPdf(Vec::new()),
+                    source: Box::new(Error::IssuerMissing {
+                        certificate: "CN=x".into(),
+                    }),
+                },
+                Indeterminate,
+            ),
+            (Error::NotArchived, InvalidInput),
+            (Error::DocumentTimestamp("no /ByteRange"), InvalidInput),
+            (Error::TimestampSignerMissing, Indeterminate),
         ];
         for (error, kind) in rows {
             assert_eq!(error.kind(), kind, "{error}");

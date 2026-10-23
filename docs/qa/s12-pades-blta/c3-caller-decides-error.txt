@@ -1,0 +1,20 @@
+Tree under test: 0d268180e2ffb97fe85675ecd4b6f3ebd6861c5e (story/s12-pades-blta, after b20a2c2). Scenario program: scenario-program.txt.
+
+$ cd $QA_TMP/scratch && QA_PKI=$QA_TMP/pki QA_UNSIGNED=crates/nacre-pades/tests/corpus/unsigned.pdf qa-s12 nodecide-invalid
+stdin: (none)
+--- stdout+stderr
+[a B-B PDF] extend(pdf 4227 bytes, tsa, revocation, issuers: 0 item(s))
+  revocation source asked 0 time(s): []
+  Err
+  Display: the PDF holds no document timestamp to extend
+  kind(): InvalidInput
+  variant: NotArchived
+[a B-T PDF] extend(pdf 37046 bytes, tsa, revocation, issuers: 0 item(s))
+  revocation source asked 0 time(s): []
+  Err
+  Display: the PDF holds no document timestamp to extend
+  kind(): InvalidInput
+  variant: NotArchived
+  tsa (tsa_config) asked 0 time(s), imprints []
+--- exit code: 0
+

@@ -1,0 +1,3 @@
+#!/bin/sh
+# The bench's second TSA: the same RFC 3161 service as tsa, signed by tsa2.
+TSA_SECTION=bench_tsa2 exec "$(dirname "$0")/tsa"

@@ -1,0 +1,29 @@
+Tree under test: 0d268180e2ffb97fe85675ecd4b6f3ebd6861c5e (story/s12-pades-blta, after b20a2c2). Scenario program: scenario-program.txt.
+
+$ cd $QA_TMP/scratch && QA_PKI=$QA_TMP/pki QA_UNSIGNED=crates/nacre-pades/tests/corpus/unsigned.pdf qa-s12 two-tsa
+stdin: (none)
+--- stdout+stderr
+  TSA certificates of this QA: tsa.der C=FR,O=Nacre QA,CN=Nacre QA signature TSA SHA-256 FE3EDB3066AB929B; tsa2.der C=FR,O=Nacre QA,CN=Nacre QA document TSA SHA-256 BCE323CBEEFD6895
+  revisions: 4 (ends at [744, 37046, 40406, 73826]), file length 73826
+  field 0 'Signature1': /Type /Sig /SubFilter /ETSI.CAdES.detached /M present
+    ByteRange [0, 919, 36469, 577], covers up to byte 37046 (revision end there: true, = file end: false)
+    /Contents 17774 bytes, DER value 2864 bytes, padding 14910 zero bytes; SHA-1 of /Contents 32951BD2B0979761CA6347397597AFB06F3357BD
+    certificates carried: ["CN=Nacre QA root,O=Nacre QA,C=FR", "C=FR,O=Nacre QA,CN=Nacre QA signer"]
+    CMS verifies over ByteRange: true
+    signature-time-stamp token certificates: ["C=FR,O=Nacre QA,CN=Nacre QA signature TSA", "CN=Nacre QA root,O=Nacre QA,C=FR"]
+    signature-time-stamp TSTInfo: Policy OID: tsa_policy1; Serial number: 0x02; Time stamp: Oct 23 11:38:39 2026 GMT
+  field 1 'Signature2': /Type /DocTimeStamp /SubFilter /ETSI.RFC3161 /M absent
+    ByteRange [0, 40544, 73314, 512], covers up to byte 73826 (revision end there: true, = file end: true)
+    /Contents 16384 bytes, DER value 1475 bytes, padding 14909 zero bytes; SHA-1 of /Contents 2BAA7C1C71758B93BC1863AC94621E74EA27B91D
+    certificates carried: ["C=FR,O=Nacre QA,CN=Nacre QA document TSA", "CN=Nacre QA root,O=Nacre QA,C=FR"]
+    SHA-256 over ByteRange 8170B35FCA2DE88F5D475CA86A9A467656F399DE1A18F69F2E2B44ECE65F4A42
+    openssl ts -verify (digest over ByteRange, CAfile QA root): Verification: OK
+    TSTInfo: Policy OID: 1.2.3.4.2; Serial number: 0x02; Time stamp: Oct 23 11:38:39 2026 GMT
+  catalog /DSS: 15 0 R
+  /Certs: 3 stream(s): 9 0 R=C=FR,O=Nacre QA,CN=Nacre QA signer | 10 0 R=CN=Nacre QA root,O=Nacre QA,C=FR | 11 0 R=C=FR,O=Nacre QA,CN=Nacre QA signature TSA
+  /CRLs: 1 stream(s): 12 0 R=211 B
+  /OCSPs: 1 stream(s): 13 0 R=804 B
+  /VRI: 1 key(s)
+    /32951BD2B0979761CA6347397597AFB06F3357BD -> 14 0 R: /Type=/VRI /Cert=[9 0 R C=FR,O=Nacre QA,CN=Nacre QA signer, 10 0 R CN=Nacre QA root,O=Nacre QA,C=FR, 11 0 R C=FR,O=Nacre QA,CN=Nacre QA signature TSA] /CRL=[12 0 R] /OCSP=[13 0 R]
+--- exit code: 0
+

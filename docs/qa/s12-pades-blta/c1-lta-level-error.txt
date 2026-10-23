@@ -1,0 +1,73 @@
+Tree under test: 0d268180e2ffb97fe85675ecd4b6f3ebd6861c5e (story/s12-pades-blta, after b20a2c2). Scenario program: scenario-program.txt.
+
+$ cd $QA_TMP/scratch && QA_PKI=$QA_TMP/pki QA_UNSIGNED=crates/nacre-pades/tests/corpus/unsigned.pdf qa-s12 lta-invalid
+stdin: (none)
+--- stdout+stderr
+[document_tsa is down] sign_at_level(pdf 744 bytes, signer [signer, root], Level::LTA { tsa, revocation, issuers: 0 item(s), document_tsa })
+  source asked for C=FR,O=Nacre QA,CN=Nacre QA signer (issuer CN=Nacre QA root,O=Nacre QA,C=FR) -> Ocsp, 804 bytes
+  source asked for C=FR,O=Nacre QA,CN=Nacre QA signature TSA (issuer CN=Nacre QA root,O=Nacre QA,C=FR) -> Crl, 211 bytes
+  signer signed 1 time(s); revocation source asked 2 time(s): ["C=FR,O=Nacre QA,CN=Nacre QA signer", "C=FR,O=Nacre QA,CN=Nacre QA signature TSA"]
+  Err
+  Display: the document timestamp could not be added: the timestamp authority failed
+  caused by: the timestamp authority failed
+  caused by: the timestamp authority failed
+  caused by: TSA down (QA)
+  kind(): Unavailable
+  variant: Archive
+  source variant: Timestamp
+  Debug of signed: SignedPdf { len: 40406 }
+  --- file handed back (40406 bytes):
+  revisions: 3 (ends at [744, 37046, 40406]), file length 40406
+  field 0 'Signature1': /Type /Sig /SubFilter /ETSI.CAdES.detached /M present
+    ByteRange [0, 919, 36469, 577], covers up to byte 37046 (revision end there: true, = file end: false)
+    /Contents 17774 bytes, DER value 2863 bytes, padding 14911 zero bytes; SHA-1 of /Contents 257789B544BF0C0ADF8695B85567838E7749D324
+    certificates carried: ["CN=Nacre QA root,O=Nacre QA,C=FR", "C=FR,O=Nacre QA,CN=Nacre QA signer"]
+    CMS verifies over ByteRange: true
+    signature-time-stamp token certificates: ["C=FR,O=Nacre QA,CN=Nacre QA signature TSA", "CN=Nacre QA root,O=Nacre QA,C=FR"]
+    signature-time-stamp TSTInfo: Policy OID: tsa_policy1; Serial number: 0x03; Time stamp: Oct 23 11:38:39 2026 GMT
+  catalog /DSS: 15 0 R
+  /Certs: 3 stream(s): 9 0 R=C=FR,O=Nacre QA,CN=Nacre QA signer | 10 0 R=CN=Nacre QA root,O=Nacre QA,C=FR | 11 0 R=C=FR,O=Nacre QA,CN=Nacre QA signature TSA
+  /CRLs: 1 stream(s): 12 0 R=211 B
+  /OCSPs: 1 stream(s): 13 0 R=804 B
+  /VRI: 1 key(s)
+    /257789B544BF0C0ADF8695B85567838E7749D324 -> 14 0 R: /Type=/VRI /Cert=[9 0 R C=FR,O=Nacre QA,CN=Nacre QA signer, 10 0 R CN=Nacre QA root,O=Nacre QA,C=FR, 11 0 R C=FR,O=Nacre QA,CN=Nacre QA signature TSA] /CRL=[12 0 R] /OCSP=[13 0 R]
+  tsa (tsa_config) asked 1 time(s), imprints ["BADA5BA3088D115E9DED7C97E147EC7EE991FDC1FCBA5FA702D27E415B86CBF1"]
+  document_tsa asked 1 time(s)
+[document_tsa answers bytes that are not a token] sign_at_level(pdf 744 bytes, signer [signer, root], Level::LTA { tsa, revocation, issuers: 0 item(s), document_tsa })
+  source asked for C=FR,O=Nacre QA,CN=Nacre QA signer (issuer CN=Nacre QA root,O=Nacre QA,C=FR) -> Ocsp, 803 bytes
+  source asked for C=FR,O=Nacre QA,CN=Nacre QA signature TSA (issuer CN=Nacre QA root,O=Nacre QA,C=FR) -> Crl, 211 bytes
+  signer signed 1 time(s); revocation source asked 2 time(s): ["C=FR,O=Nacre QA,CN=Nacre QA signer", "C=FR,O=Nacre QA,CN=Nacre QA signature TSA"]
+  Err
+  Display: the document timestamp could not be added: the timestamp authority returned a token that is not DER
+  caused by: the timestamp authority returned a token that is not DER
+  caused by: ASN.1 DER message is incomplete: expected 12, actual 11 at DER byte 11
+  kind(): InvalidInput
+  variant: Archive
+  source variant: TimestampToken
+  Debug of signed: SignedPdf { len: 40405 }
+  --- file handed back (40405 bytes):
+  revisions: 3 (ends at [744, 37046, 40405]), file length 40405
+  field 0 'Signature1': /Type /Sig /SubFilter /ETSI.CAdES.detached /M present
+    ByteRange [0, 919, 36469, 577], covers up to byte 37046 (revision end there: true, = file end: false)
+    /Contents 17774 bytes, DER value 2864 bytes, padding 14910 zero bytes; SHA-1 of /Contents 1134E6FBFD22036A6394165BC355EBE97708634D
+    certificates carried: ["CN=Nacre QA root,O=Nacre QA,C=FR", "C=FR,O=Nacre QA,CN=Nacre QA signer"]
+    CMS verifies over ByteRange: true
+    signature-time-stamp token certificates: ["C=FR,O=Nacre QA,CN=Nacre QA signature TSA", "CN=Nacre QA root,O=Nacre QA,C=FR"]
+    signature-time-stamp TSTInfo: Policy OID: tsa_policy1; Serial number: 0x04; Time stamp: Oct 23 11:38:39 2026 GMT
+  catalog /DSS: 15 0 R
+  /Certs: 3 stream(s): 9 0 R=C=FR,O=Nacre QA,CN=Nacre QA signer | 10 0 R=CN=Nacre QA root,O=Nacre QA,C=FR | 11 0 R=C=FR,O=Nacre QA,CN=Nacre QA signature TSA
+  /CRLs: 1 stream(s): 12 0 R=211 B
+  /OCSPs: 1 stream(s): 13 0 R=803 B
+  /VRI: 1 key(s)
+    /1134E6FBFD22036A6394165BC355EBE97708634D -> 14 0 R: /Type=/VRI /Cert=[9 0 R C=FR,O=Nacre QA,CN=Nacre QA signer, 10 0 R CN=Nacre QA root,O=Nacre QA,C=FR, 11 0 R C=FR,O=Nacre QA,CN=Nacre QA signature TSA] /CRL=[12 0 R] /OCSP=[13 0 R]
+[not a PDF] sign_at_level(pdf 16 bytes, signer [signer, root], Level::LTA { tsa, revocation, issuers: 0 item(s), document_tsa })
+  signer signed 0 time(s); revocation source asked 0 time(s): []
+  Err
+  Display: PDF: the input does not start with %PDF-
+  caused by: the input does not start with %PDF-
+  kind(): InvalidInput
+  variant: Pdf
+  tsa (tsa_config) asked 0 time(s), imprints []
+  document_tsa (tsa2_config) asked 0 time(s), imprints []
+--- exit code: 0
+
