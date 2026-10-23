@@ -1,0 +1,102 @@
+# Criterion 1 - invalid input: files a user could plausibly hand over by mistake, and three certified attack files truncated mid-revision
+# orphan-truncated.pdf / outside-truncated.pdf / unreadable-truncated.pdf = head -c 15000 of <corpus>/attacks/ssa-orphan-widget.pdf / ssa-outside-fields.pdf / ssa-unreadable-rect.pdf; empty.pdf = an empty file; not-a-pdf.txt = one line of plain text; missing.pdf = a path that does not exist
+# Scenario program: qa-scen, a scratch binary crate under the QA temp dir depending on crates/nacre-validate by path; it calls the public nacre_validate::validate on the file named in argv[1] and prints every SignatureValidation. Source quoted whole at the end.
+# Tree under test: fa962eba87b4f60a363208383cce9838b3b30760 (copy of git ls-files, no .env* file to copy; cargo fetch: exit 0; cargo build --workspace --all-features: exit 0)
+# Every run below was replayed once with identical output (cmp).
+
+$ cd <tmp>/work && qa-scen orphan-truncated.pdf   (stdin: none)
+file: orphan-truncated.pdf (15000 bytes)
+error: the PDF cannot be read: no startxref statement in the last 1024 bytes (kind InvalidInput)
+debug: Pdf(MissingStartxref)
+[exit code: 1]
+
+$ cd <tmp>/work && qa-scen outside-truncated.pdf   (stdin: none)
+file: outside-truncated.pdf (15000 bytes)
+error: the PDF cannot be read: no startxref statement in the last 1024 bytes (kind InvalidInput)
+debug: Pdf(MissingStartxref)
+[exit code: 1]
+
+$ cd <tmp>/work && qa-scen unreadable-truncated.pdf   (stdin: none)
+file: unreadable-truncated.pdf (15000 bytes)
+error: the PDF cannot be read: no startxref statement in the last 1024 bytes (kind InvalidInput)
+debug: Pdf(MissingStartxref)
+[exit code: 1]
+
+$ cd <tmp>/work && qa-scen empty.pdf   (stdin: none)
+file: empty.pdf (0 bytes)
+error: the PDF cannot be read: the input does not start with %PDF- (kind InvalidInput)
+debug: Pdf(MissingHeader)
+[exit code: 1]
+
+$ cd <tmp>/work && qa-scen not-a-pdf.txt   (stdin: none)
+file: not-a-pdf.txt (37 bytes)
+error: the PDF cannot be read: the input does not start with %PDF- (kind InvalidInput)
+debug: Pdf(MissingHeader)
+[exit code: 1]
+
+$ cd <tmp>/work && qa-scen missing.pdf   (stdin: none)
+read error: No such file or directory (os error 2)
+[exit code: 2]
+
+$ cd <tmp>/work && qa-scen   (no argument, stdin: none)
+usage: qa-scen <file.pdf>
+[exit code: 2]
+
+----- scen/Cargo.toml -----
+[package]
+name = "qa-scen"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+nacre-validate = { path = "../copy/crates/nacre-validate" }
+----- scen/src/main.rs -----
+use std::process::ExitCode;
+
+fn main() -> ExitCode {
+    let Some(path) = std::env::args().nth(1) else {
+        eprintln!("usage: qa-scen <file.pdf>");
+        return ExitCode::from(2);
+    };
+    let pdf = match std::fs::read(&path) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("read error: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    println!("file: {path} ({} bytes)", pdf.len());
+    match nacre_validate::validate(&pdf) {
+        Ok(sigs) => {
+            println!("signatures: {}", sigs.len());
+            for s in &sigs {
+                println!("- field {:?}", s.field);
+                println!("  indication: {} / {:?}", s.report.indication().as_str(),
+                    s.report.sub_indication().map(|x| x.as_str()));
+                println!("  digest_verified={} signature_verified={}", s.digest_verified, s.signature_verified);
+                println!("  defect: {:?}", s.defect);
+                println!("  later_revisions: {}", s.later_revisions.len());
+                for r in &s.later_revisions {
+                    println!("    end={} changed={:?}", r.end, r.changed);
+                    println!("      verdict={:?}", r.verdict);
+                }
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            println!("error: {e} (kind {:?})", e.kind());
+            println!("debug: {e:?}");
+            ExitCode::from(1)
+        }
+    }
+}
+----- tools/run.sh -----
+#!/bin/sh
+label=$1; dir=$2; f=$3
+echo "\$ cd $label && qa-scen $f   (stdin: none)"
+cd "$dir" && "$QA_T"/scen/target/release/qa-scen "$f" 2>&1
+echo "[exit code: $?]"
+echo

@@ -1,0 +1,298 @@
+# Criterion 2 - each shape refused: merged (ssa-visible-signature), split /Kids (ssa-split-widget), field added then signed later (ssa-empty-field-signed), zero /Rect made visible (ssa-zero-rect-shown), Hidden widget made visible (ssa-hidden-widget-shown), indirect /Rect (ssa-indirect-rect), kid widget changed (ssa-kid-widget-shown); shapes of the fix runs: orphan widget, unlisted widget, layer (/OC) widget, moved rect, unreadable rect, NoView with ToggleNoView (ssa-toggle-noview-shown, third fix run), signature outside /Fields.
+# Scenario program: qa-scen, a scratch binary crate under the QA temp dir depending on crates/nacre-validate by path; it calls the public nacre_validate::validate on the file named in argv[1] and prints every SignatureValidation. Source quoted whole at the end.
+# Tree under test: fa962eba87b4f60a363208383cce9838b3b30760 (copy of git ls-files, no .env* file to copy; cargo fetch: exit 0; cargo build --workspace --all-features: exit 0)
+# Every run below was replayed once with identical output (cmp).
+
+$ cd <tmp>/copy/crates/nacre-validate/tests/corpus && qa-scen attacks/ssa-visible-signature.pdf   (stdin: none)
+file: attacks/ssa-visible-signature.pdf (18961 bytes)
+signatures: 2
+- field "Certification"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(RevisionNotAllowed { end: 18961 })
+  later_revisions: 1
+    end=18961 changed=[ObjectId { number: 3, generation: 0 }, ObjectId { number: 8, generation: 0 }, ObjectId { number: 9, generation: 0 }, ObjectId { number: 10, generation: 0 }, ObjectId { number: 11, generation: 0 }]
+      verdict=NotAllowed { refused: [ObjectId { number: 3, generation: 0 }, ObjectId { number: 8, generation: 0 }, ObjectId { number: 9, generation: 0 }, ObjectId { number: 10, generation: 0 }, ObjectId { number: 11, generation: 0 }] }
+- field "Sneaky"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(AddedByRevisionNotAllowed { end: 18961 })
+  later_revisions: 0
+[exit code: 0]
+
+$ cd <tmp>/copy/crates/nacre-validate/tests/corpus && qa-scen attacks/ssa-split-widget.pdf   (stdin: none)
+file: attacks/ssa-split-widget.pdf (19038 bytes)
+signatures: 2
+- field "Certification"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(RevisionNotAllowed { end: 19038 })
+  later_revisions: 1
+    end=19038 changed=[ObjectId { number: 3, generation: 0 }, ObjectId { number: 8, generation: 0 }, ObjectId { number: 9, generation: 0 }, ObjectId { number: 10, generation: 0 }, ObjectId { number: 11, generation: 0 }, ObjectId { number: 12, generation: 0 }]
+      verdict=NotAllowed { refused: [ObjectId { number: 3, generation: 0 }, ObjectId { number: 8, generation: 0 }, ObjectId { number: 9, generation: 0 }, ObjectId { number: 10, generation: 0 }, ObjectId { number: 11, generation: 0 }, ObjectId { number: 12, generation: 0 }] }
+- field "Sneaky"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(AddedByRevisionNotAllowed { end: 19038 })
+  later_revisions: 0
+[exit code: 0]
+
+$ cd <tmp>/copy/crates/nacre-validate/tests/corpus && qa-scen attacks/ssa-empty-field-signed.pdf   (stdin: none)
+file: attacks/ssa-empty-field-signed.pdf (19195 bytes)
+signatures: 2
+- field "Certification"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(RevisionNotAllowed { end: 10562 })
+  later_revisions: 2
+    end=10562 changed=[ObjectId { number: 3, generation: 0 }, ObjectId { number: 8, generation: 0 }, ObjectId { number: 9, generation: 0 }, ObjectId { number: 10, generation: 0 }]
+      verdict=NotAllowed { refused: [ObjectId { number: 3, generation: 0 }, ObjectId { number: 8, generation: 0 }, ObjectId { number: 9, generation: 0 }, ObjectId { number: 10, generation: 0 }] }
+    end=19195 changed=[ObjectId { number: 10, generation: 0 }, ObjectId { number: 11, generation: 0 }]
+      verdict=NotAllowed { refused: [ObjectId { number: 10, generation: 0 }, ObjectId { number: 11, generation: 0 }] }
+- field "Sneaky"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(AddedByRevisionNotAllowed { end: 19195 })
+  later_revisions: 0
+[exit code: 0]
+
+$ cd <tmp>/copy/crates/nacre-validate/tests/corpus && qa-scen attacks/ssa-zero-rect-shown.pdf   (stdin: none)
+file: attacks/ssa-zero-rect-shown.pdf (19932 bytes)
+signatures: 2
+- field "Sneaky"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(AddedByRevisionNotAllowed { end: 19932 })
+  later_revisions: 0
+- field "Certification"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(RevisionNotAllowed { end: 19932 })
+  later_revisions: 1
+    end=19932 changed=[ObjectId { number: 9, generation: 0 }, ObjectId { number: 12, generation: 0 }, ObjectId { number: 13, generation: 0 }]
+      verdict=NotAllowed { refused: [ObjectId { number: 9, generation: 0 }, ObjectId { number: 12, generation: 0 }, ObjectId { number: 13, generation: 0 }] }
+[exit code: 0]
+
+$ cd <tmp>/copy/crates/nacre-validate/tests/corpus && qa-scen attacks/ssa-hidden-widget-shown.pdf   (stdin: none)
+file: attacks/ssa-hidden-widget-shown.pdf (19959 bytes)
+signatures: 2
+- field "Sneaky"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(AddedByRevisionNotAllowed { end: 19959 })
+  later_revisions: 0
+- field "Certification"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(RevisionNotAllowed { end: 19959 })
+  later_revisions: 1
+    end=19959 changed=[ObjectId { number: 9, generation: 0 }, ObjectId { number: 13, generation: 0 }]
+      verdict=NotAllowed { refused: [ObjectId { number: 9, generation: 0 }, ObjectId { number: 13, generation: 0 }] }
+[exit code: 0]
+
+$ cd <tmp>/copy/crates/nacre-validate/tests/corpus && qa-scen attacks/ssa-indirect-rect.pdf   (stdin: none)
+file: attacks/ssa-indirect-rect.pdf (20030 bytes)
+signatures: 2
+- field "Sneaky"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(AddedByRevisionNotAllowed { end: 20030 })
+  later_revisions: 0
+- field "Certification"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(RevisionNotAllowed { end: 20030 })
+  later_revisions: 1
+    end=20030 changed=[ObjectId { number: 9, generation: 0 }, ObjectId { number: 10, generation: 0 }, ObjectId { number: 13, generation: 0 }, ObjectId { number: 14, generation: 0 }]
+      verdict=NotAllowed { refused: [ObjectId { number: 9, generation: 0 }, ObjectId { number: 10, generation: 0 }, ObjectId { number: 13, generation: 0 }, ObjectId { number: 14, generation: 0 }] }
+[exit code: 0]
+
+$ cd <tmp>/copy/crates/nacre-validate/tests/corpus && qa-scen attacks/ssa-kid-widget-shown.pdf   (stdin: none)
+file: attacks/ssa-kid-widget-shown.pdf (20086 bytes)
+signatures: 2
+- field "Sneaky"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(AddedByRevisionNotAllowed { end: 20086 })
+  later_revisions: 0
+- field "Certification"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(RevisionNotAllowed { end: 20086 })
+  later_revisions: 1
+    end=20086 changed=[ObjectId { number: 9, generation: 0 }, ObjectId { number: 10, generation: 0 }, ObjectId { number: 13, generation: 0 }, ObjectId { number: 14, generation: 0 }]
+      verdict=NotAllowed { refused: [ObjectId { number: 9, generation: 0 }, ObjectId { number: 10, generation: 0 }, ObjectId { number: 13, generation: 0 }, ObjectId { number: 14, generation: 0 }] }
+[exit code: 0]
+
+$ cd <tmp>/copy/crates/nacre-validate/tests/corpus && qa-scen attacks/ssa-orphan-widget.pdf   (stdin: none)
+file: attacks/ssa-orphan-widget.pdf (19873 bytes)
+signatures: 2
+- field "Certification"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(RevisionNotAllowed { end: 19873 })
+  later_revisions: 1
+    end=19873 changed=[ObjectId { number: 3, generation: 0 }, ObjectId { number: 6, generation: 0 }, ObjectId { number: 11, generation: 0 }, ObjectId { number: 12, generation: 0 }, ObjectId { number: 13, generation: 0 }, ObjectId { number: 14, generation: 0 }]
+      verdict=NotAllowed { refused: [ObjectId { number: 3, generation: 0 }, ObjectId { number: 6, generation: 0 }, ObjectId { number: 11, generation: 0 }, ObjectId { number: 12, generation: 0 }, ObjectId { number: 13, generation: 0 }, ObjectId { number: 14, generation: 0 }] }
+- field "Sneaky"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(AddedByRevisionNotAllowed { end: 19873 })
+  later_revisions: 0
+[exit code: 0]
+
+$ cd <tmp>/copy/crates/nacre-validate/tests/corpus && qa-scen attacks/ssa-unlisted-widget-shown.pdf   (stdin: none)
+file: attacks/ssa-unlisted-widget-shown.pdf (20106 bytes)
+signatures: 2
+- field "Sneaky"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(AddedByRevisionNotAllowed { end: 20106 })
+  later_revisions: 0
+- field "Certification"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(RevisionNotAllowed { end: 20106 })
+  later_revisions: 1
+    end=20106 changed=[ObjectId { number: 3, generation: 0 }, ObjectId { number: 9, generation: 0 }, ObjectId { number: 12, generation: 0 }, ObjectId { number: 13, generation: 0 }]
+      verdict=NotAllowed { refused: [ObjectId { number: 3, generation: 0 }, ObjectId { number: 9, generation: 0 }, ObjectId { number: 12, generation: 0 }, ObjectId { number: 13, generation: 0 }] }
+[exit code: 0]
+
+$ cd <tmp>/copy/crates/nacre-validate/tests/corpus && qa-scen attacks/ssa-layer-widget-shown.pdf   (stdin: none)
+file: attacks/ssa-layer-widget-shown.pdf (20242 bytes)
+signatures: 2
+- field "Sneaky"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(AddedByRevisionNotAllowed { end: 20242 })
+  later_revisions: 0
+- field "Certification"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(RevisionNotAllowed { end: 20242 })
+  later_revisions: 1
+    end=20242 changed=[ObjectId { number: 11, generation: 0 }, ObjectId { number: 14, generation: 0 }]
+      verdict=NotAllowed { refused: [ObjectId { number: 11, generation: 0 }, ObjectId { number: 14, generation: 0 }] }
+[exit code: 0]
+
+$ cd <tmp>/copy/crates/nacre-validate/tests/corpus && qa-scen attacks/ssa-moved-rect.pdf   (stdin: none)
+file: attacks/ssa-moved-rect.pdf (19939 bytes)
+signatures: 2
+- field "Sneaky"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(AddedByRevisionNotAllowed { end: 19939 })
+  later_revisions: 0
+- field "Certification"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(RevisionNotAllowed { end: 19939 })
+  later_revisions: 1
+    end=19939 changed=[ObjectId { number: 9, generation: 0 }, ObjectId { number: 12, generation: 0 }, ObjectId { number: 13, generation: 0 }]
+      verdict=NotAllowed { refused: [ObjectId { number: 9, generation: 0 }, ObjectId { number: 12, generation: 0 }, ObjectId { number: 13, generation: 0 }] }
+[exit code: 0]
+
+$ cd <tmp>/copy/crates/nacre-validate/tests/corpus && qa-scen attacks/ssa-unreadable-rect.pdf   (stdin: none)
+file: attacks/ssa-unreadable-rect.pdf (19745 bytes)
+signatures: 2
+- field "Certification"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(RevisionNotAllowed { end: 19745 })
+  later_revisions: 1
+    end=19745 changed=[ObjectId { number: 3, generation: 0 }, ObjectId { number: 6, generation: 0 }, ObjectId { number: 11, generation: 0 }, ObjectId { number: 12, generation: 0 }, ObjectId { number: 13, generation: 0 }]
+      verdict=NotAllowed { refused: [ObjectId { number: 3, generation: 0 }, ObjectId { number: 6, generation: 0 }, ObjectId { number: 11, generation: 0 }, ObjectId { number: 12, generation: 0 }, ObjectId { number: 13, generation: 0 }] }
+- field "Sneaky"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(AddedByRevisionNotAllowed { end: 19745 })
+  later_revisions: 0
+[exit code: 0]
+
+$ cd <tmp>/copy/crates/nacre-validate/tests/corpus && qa-scen attacks/ssa-toggle-noview-shown.pdf   (stdin: none)
+file: attacks/ssa-toggle-noview-shown.pdf (19744 bytes)
+signatures: 2
+- field "Certification"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(RevisionNotAllowed { end: 19744 })
+  later_revisions: 1
+    end=19744 changed=[ObjectId { number: 3, generation: 0 }, ObjectId { number: 6, generation: 0 }, ObjectId { number: 11, generation: 0 }, ObjectId { number: 12, generation: 0 }, ObjectId { number: 13, generation: 0 }]
+      verdict=NotAllowed { refused: [ObjectId { number: 3, generation: 0 }, ObjectId { number: 6, generation: 0 }, ObjectId { number: 11, generation: 0 }, ObjectId { number: 12, generation: 0 }, ObjectId { number: 13, generation: 0 }] }
+- field "Sneaky"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(AddedByRevisionNotAllowed { end: 19744 })
+  later_revisions: 0
+[exit code: 0]
+
+$ cd <tmp>/copy/crates/nacre-validate/tests/corpus && qa-scen attacks/ssa-outside-fields.pdf   (stdin: none)
+file: attacks/ssa-outside-fields.pdf (19655 bytes)
+signatures: 1
+- field "Certification"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(RevisionNotAllowed { end: 19655 })
+  later_revisions: 1
+    end=19655 changed=[ObjectId { number: 3, generation: 0 }, ObjectId { number: 11, generation: 0 }, ObjectId { number: 12, generation: 0 }, ObjectId { number: 13, generation: 0 }]
+      verdict=NotAllowed { refused: [ObjectId { number: 3, generation: 0 }, ObjectId { number: 11, generation: 0 }, ObjectId { number: 12, generation: 0 }, ObjectId { number: 13, generation: 0 }] }
+[exit code: 0]
+
+----- scen/Cargo.toml -----
+[package]
+name = "qa-scen"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+nacre-validate = { path = "../copy/crates/nacre-validate" }
+----- scen/src/main.rs -----
+use std::process::ExitCode;
+
+fn main() -> ExitCode {
+    let Some(path) = std::env::args().nth(1) else {
+        eprintln!("usage: qa-scen <file.pdf>");
+        return ExitCode::from(2);
+    };
+    let pdf = match std::fs::read(&path) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("read error: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    println!("file: {path} ({} bytes)", pdf.len());
+    match nacre_validate::validate(&pdf) {
+        Ok(sigs) => {
+            println!("signatures: {}", sigs.len());
+            for s in &sigs {
+                println!("- field {:?}", s.field);
+                println!("  indication: {} / {:?}", s.report.indication().as_str(),
+                    s.report.sub_indication().map(|x| x.as_str()));
+                println!("  digest_verified={} signature_verified={}", s.digest_verified, s.signature_verified);
+                println!("  defect: {:?}", s.defect);
+                println!("  later_revisions: {}", s.later_revisions.len());
+                for r in &s.later_revisions {
+                    println!("    end={} changed={:?}", r.end, r.changed);
+                    println!("      verdict={:?}", r.verdict);
+                }
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            println!("error: {e} (kind {:?})", e.kind());
+            println!("debug: {e:?}");
+            ExitCode::from(1)
+        }
+    }
+}
+----- tools/run.sh -----
+#!/bin/sh
+label=$1; dir=$2; f=$3
+echo "\$ cd $label && qa-scen $f   (stdin: none)"
+cd "$dir" && "$QA_T"/scen/target/release/qa-scen "$f" 2>&1
+echo "[exit code: $?]"
+echo

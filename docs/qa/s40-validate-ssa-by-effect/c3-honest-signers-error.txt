@@ -1,0 +1,144 @@
+# Criterion 3 - invalid input: the prepared visible field signed at another /Rect (same-length edit, tools/mutate.py), and the signing program given a non-PDF, an empty file, no argument
+# Scenario program: qa-scen, a scratch binary crate under the QA temp dir depending on crates/nacre-validate by path; it calls the public nacre_validate::validate on the file named in argv[1] and prints every SignatureValidation. Source quoted whole at the end.
+# Tree under test: fa962eba87b4f60a363208383cce9838b3b30760 (copy of git ls-files, no .env* file to copy; cargo fetch: exit 0; cargo build --workspace --all-features: exit 0)
+# Every run below was replayed once with identical output (cmp).
+# mutation:
+#   $ python3 -I tools/mutate.py <corpus>/certified-visible-field-signed.pdf approver-rect-moved.pdf '/Rect [72 650 400 700]' '/Rect [72 600 400 700]'
+#   approver-rect-moved.pdf: replaced last b'/Rect [72 650 400 700]' at offset 19720 with b'/Rect [72 600 400 700]'
+
+$ cd <tmp>/work && qa-scen approver-rect-moved.pdf   (stdin: none)
+file: approver-rect-moved.pdf (19947 bytes)
+signatures: 2
+- field "Approver"
+  indication: TOTAL_FAILED / Some("HASH_FAILURE")
+  digest_verified=false signature_verified=false
+  defect: Some(Cms(MessageDigestMismatch))
+  later_revisions: 0
+- field "Certification"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(RevisionNotAllowed { end: 19947 })
+  later_revisions: 1
+    end=19947 changed=[ObjectId { number: 9, generation: 0 }, ObjectId { number: 12, generation: 0 }, ObjectId { number: 13, generation: 0 }]
+      verdict=NotAllowed { refused: [ObjectId { number: 9, generation: 0 }, ObjectId { number: 12, generation: 0 }, ObjectId { number: 13, generation: 0 }] }
+[exit code: 0]
+
+$ cd <tmp>/work && qa-sign not-a-pdf.txt x.pdf ; qa-sign empty.pdf x.pdf ; qa-sign   (stdin: none)
+sign error: PDF: the input does not start with %PDF-
+[exit code: 1]
+sign error: PDF: the input does not start with %PDF-
+[exit code: 1]
+usage: qa-sign <in.pdf> <out.pdf>
+[exit code: 2]
+
+----- scen/Cargo.toml -----
+[package]
+name = "qa-scen"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+nacre-validate = { path = "../copy/crates/nacre-validate" }
+----- scen/src/main.rs -----
+use std::process::ExitCode;
+
+fn main() -> ExitCode {
+    let Some(path) = std::env::args().nth(1) else {
+        eprintln!("usage: qa-scen <file.pdf>");
+        return ExitCode::from(2);
+    };
+    let pdf = match std::fs::read(&path) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("read error: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    println!("file: {path} ({} bytes)", pdf.len());
+    match nacre_validate::validate(&pdf) {
+        Ok(sigs) => {
+            println!("signatures: {}", sigs.len());
+            for s in &sigs {
+                println!("- field {:?}", s.field);
+                println!("  indication: {} / {:?}", s.report.indication().as_str(),
+                    s.report.sub_indication().map(|x| x.as_str()));
+                println!("  digest_verified={} signature_verified={}", s.digest_verified, s.signature_verified);
+                println!("  defect: {:?}", s.defect);
+                println!("  later_revisions: {}", s.later_revisions.len());
+                for r in &s.later_revisions {
+                    println!("    end={} changed={:?}", r.end, r.changed);
+                    println!("      verdict={:?}", r.verdict);
+                }
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            println!("error: {e} (kind {:?})", e.kind());
+            println!("debug: {e:?}");
+            ExitCode::from(1)
+        }
+    }
+}
+----- scen2/Cargo.toml -----
+[package]
+name = "qa-sign"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+nacre-pades = { path = "../copy/crates/nacre-pades" }
+nacre-core = { path = "../copy/crates/nacre-core", features = ["test-signer"] }
+----- scen2/src/main.rs -----
+// Appends one invisible signature made with nacre_pades::sign to argv[1] and writes argv[2].
+use std::process::ExitCode;
+use nacre_core::TestSigner;
+use nacre_pades::{DateTime, sign};
+
+fn main() -> ExitCode {
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() != 3 {
+        eprintln!("usage: qa-sign <in.pdf> <out.pdf>");
+        return ExitCode::from(2);
+    }
+    let pdf = match std::fs::read(&args[1]) {
+        Ok(b) => b,
+        Err(e) => { eprintln!("read error: {e}"); return ExitCode::from(2); }
+    };
+    let signer = match TestSigner::from_secret(&[0x22; 32]) {
+        Ok(s) => s,
+        Err(e) => { eprintln!("signer error: {e}"); return ExitCode::from(1); }
+    };
+    let time = match DateTime::new(2026, 10, 23, 9, 0, 0) {
+        Ok(t) => t,
+        Err(e) => { eprintln!("time error: {e}"); return ExitCode::from(1); }
+    };
+    match sign(&pdf, &signer, time) {
+        Ok(out) => {
+            if let Err(e) = std::fs::write(&args[2], &out) { eprintln!("write error: {e}"); return ExitCode::from(2); }
+            println!("wrote {} ({} bytes)", args[2], out.len());
+            ExitCode::SUCCESS
+        }
+        Err(e) => { println!("sign error: {e}"); ExitCode::from(1) }
+    }
+}
+----- tools/mutate.py -----
+import sys
+src, dst, old, new = sys.argv[1], sys.argv[2], sys.argv[3].encode(), sys.argv[4].encode()
+assert len(old) == len(new)
+b = open(src, 'rb').read()
+i = b.rindex(old)
+open(dst, 'wb').write(b[:i] + new + b[i+len(old):])
+print(f"{dst}: replaced last {old!r} at offset {i} with {new!r}")
+----- tools/run.sh -----
+#!/bin/sh
+label=$1; dir=$2; f=$3
+echo "\$ cd $label && qa-scen $f   (stdin: none)"
+cd "$dir" && "$QA_T"/scen/target/release/qa-scen "$f" 2>&1
+echo "[exit code: $?]"
+echo

@@ -226,6 +226,8 @@ fn later_revisions(dir: &Path, signer: &TestSigner) {
         "ssa-empty-field-signed",
         &sneaky_two_steps(&certified, signer),
     );
+    ssa_by_effect(dir, &form, signer);
+    ssa_by_page(dir, &form, signer);
 
     let corpus = dir.parent().unwrap();
     write(
@@ -647,9 +649,419 @@ fn sneaky_two_steps(pdf: &[u8], signer: &TestSigner) -> Vec<u8> {
     seal(out, signer)
 }
 
+/// The sneaky signature shapes in which a signature field present in the certified state
+/// is made to show only while being signed, and the honest signing of a field the
+/// certified state already placed on the page.
+fn ssa_by_effect(dir: &Path, form: &[u8], signer: &TestSigner) {
+    let n = next_free(form);
+
+    let base = prepared(
+        form,
+        &[(n, merged_sig("Sneaky", "/Rect [0 0 0 0] /F 4"))],
+        n,
+        n,
+    );
+    let certified = certify(&base, 2, signer);
+    let sig = next_free(&certified);
+    let field = edited(
+        &certified,
+        n,
+        &[
+            (b"V", Object::Reference(id(sig))),
+            (b"Rect", rect()),
+            (b"AP", ap(sig + 1)),
+        ],
+    );
+    write(
+        dir,
+        "ssa-zero-rect-shown",
+        &sign_prepared(
+            &certified,
+            signer,
+            &[(sig + 1, overlay_appearance()), (n, field)],
+            sig,
+        ),
+    );
+
+    let hidden = format!("/Rect [72 650 400 700] /F 6 /AP << /N {} 0 R >>", n + 1);
+    let base = prepared(
+        form,
+        &[
+            (n + 1, overlay_appearance()),
+            (n, merged_sig("Sneaky", &hidden)),
+        ],
+        n,
+        n,
+    );
+    let certified = certify(&base, 3, signer);
+    let sig = next_free(&certified);
+    let field = edited(
+        &certified,
+        n,
+        &[
+            (b"V", Object::Reference(id(sig))),
+            (b"F", Object::Integer(4)),
+        ],
+    );
+    write(
+        dir,
+        "ssa-hidden-widget-shown",
+        &sign_prepared(&certified, signer, &[(n, field)], sig),
+    );
+
+    let (r, f) = (n, n + 1);
+    let indirect = format!("/Rect {r} 0 R /F 4");
+    let base = prepared(
+        form,
+        &[
+            (r, b"[0 0 0 0]".to_vec()),
+            (f, merged_sig("Sneaky", &indirect)),
+        ],
+        f,
+        f,
+    );
+    let certified = certify(&base, 2, signer);
+    let sig = next_free(&certified);
+    let field = edited(
+        &certified,
+        f,
+        &[(b"V", Object::Reference(id(sig))), (b"AP", ap(sig + 1))],
+    );
+    write(
+        dir,
+        "ssa-indirect-rect",
+        &sign_prepared(
+            &certified,
+            signer,
+            &[
+                (sig + 1, overlay_appearance()),
+                (r, b"[72 650 400 700]".to_vec()),
+                (f, field),
+            ],
+            sig,
+        ),
+    );
+
+    let (w, f) = (n, n + 1);
+    let base = prepared(
+        form,
+        &[
+            (
+                w,
+                format!(
+                    "<< /Type /Annot /Subtype /Widget /Parent {f} 0 R /Rect [0 0 0 0] /F 4 /P 3 0 R >>"
+                )
+                .into_bytes(),
+            ),
+            (
+                f,
+                format!("<< /FT /Sig /T (Sneaky) /Kids [{w} 0 R] >>").into_bytes(),
+            ),
+        ],
+        f,
+        w,
+    );
+    let certified = certify(&base, 2, signer);
+    let sig = next_free(&certified);
+    let widget = edited(&certified, w, &[(b"Rect", rect()), (b"AP", ap(sig + 1))]);
+    let field = edited(&certified, f, &[(b"V", Object::Reference(id(sig)))]);
+    write(
+        dir,
+        "ssa-kid-widget-shown",
+        &sign_prepared(
+            &certified,
+            signer,
+            &[(sig + 1, overlay_appearance()), (w, widget), (f, field)],
+            sig,
+        ),
+    );
+
+    let base = prepared(
+        form,
+        &[(n, merged_sig("Approver", "/Rect [72 650 400 700] /F 4"))],
+        n,
+        n,
+    );
+    let certified = certify(&base, 2, signer);
+    let sig = next_free(&certified);
+    let field = edited(
+        &certified,
+        n,
+        &[
+            (b"V", Object::Reference(id(sig))),
+            (b"AP", ap(sig + 1)),
+            (b"F", Object::Integer(132)),
+        ],
+    );
+    write(
+        dir.parent().unwrap(),
+        "certified-visible-field-signed",
+        &sign_prepared(
+            &certified,
+            signer,
+            &[(sig + 1, overlay_appearance()), (n, field)],
+            sig,
+        ),
+    );
+}
+
+/// The sneaky signature shapes in which what the page draws, not the field's own entries,
+/// makes a signature show, a signature whose rectangle cannot be read, and a placed field
+/// whose rectangle moves while it is signed.
+fn ssa_by_page(dir: &Path, form: &[u8], signer: &TestSigner) {
+    let certified = certify(form, 2, signer);
+
+    // A widget whose `/Parent` is the invisible merged field, listed by the page only.
+    let sig = next_free(&certified);
+    let (look, widget, field) = (sig + 1, sig + 2, sig + 3);
+    let mut objects = vec![
+        (sig, sig_placeholder()),
+        (look, overlay_appearance()),
+        (
+            widget,
+            format!(
+                "<< /Type /Annot /Subtype /Widget /Parent {field} 0 R /Rect [72 650 400 700] /F 4 /P 3 0 R /AP << /N {look} 0 R >> >>"
+            )
+            .into_bytes(),
+        ),
+        (
+            field,
+            merged_sig("Sneaky", &format!("/V {sig} 0 R /Rect [0 0 0 0] /F 132")),
+        ),
+    ];
+    objects.extend(register_all(&certified, field, &[field, widget]));
+    write(
+        dir,
+        "ssa-orphan-widget",
+        &seal(append(&certified, &objects, &[], None).0, signer),
+    );
+
+    // A visible merged signature that only the page lists, outside `/Fields`.
+    let sig = next_free(&certified);
+    let (look, field) = (sig + 1, sig + 2);
+    let page = object(&certified, 3);
+    let Some(Object::Array(mut annots)) = page.get(b"Annots").cloned() else {
+        panic!("page 3 has no direct /Annots");
+    };
+    annots.push(Object::Reference(id(field)));
+    let objects = [
+        (sig, sig_placeholder()),
+        (look, overlay_appearance()),
+        (
+            field,
+            merged_sig(
+                "Sneaky",
+                &format!("/V {sig} 0 R /Rect [72 650 400 700] /F 4 /AP << /N {look} 0 R >>"),
+            ),
+        ),
+        (3, ser(&with(&page, b"Annots", Object::Array(annots)))),
+    ];
+    write(
+        dir,
+        "ssa-outside-fields",
+        &seal(append(&certified, &objects, &[], None).0, signer),
+    );
+
+    // A visible merged signature whose `/Rect` cannot be read: one item refers to an
+    // object the file never defines.
+    let sig = next_free(&certified);
+    let (look, field) = (sig + 1, sig + 2);
+    let missing = sig + 3;
+    let mut objects = vec![
+        (sig, sig_placeholder()),
+        (look, overlay_appearance()),
+        (
+            field,
+            merged_sig(
+                "Sneaky",
+                &format!(
+                    "/V {sig} 0 R /Rect [72 650 400 {missing} 0 R] /F 4 /AP << /N {look} 0 R >>"
+                ),
+            ),
+        ),
+    ];
+    objects.extend(register(&certified, field, field));
+    write(
+        dir,
+        "ssa-unreadable-rect",
+        &seal(append(&certified, &objects, &[], None).0, signer),
+    );
+
+    // A visible merged signature flagged NoView and ToggleNoView, so it shows on hover.
+    let sig = next_free(&certified);
+    let (look, field) = (sig + 1, sig + 2);
+    let mut objects = vec![
+        (sig, sig_placeholder()),
+        (look, overlay_appearance()),
+        (
+            field,
+            merged_sig(
+                "Sneaky",
+                &format!("/V {sig} 0 R /Rect [72 650 400 700] /F 292 /AP << /N {look} 0 R >>"),
+            ),
+        ),
+    ];
+    objects.extend(register(&certified, field, field));
+    write(
+        dir,
+        "ssa-toggle-noview-shown",
+        &seal(append(&certified, &objects, &[], None).0, signer),
+    );
+
+    let n = next_free(form);
+
+    // A placed field the page does not list in the certified state, listed while signed.
+    let mut objects = vec![(n, merged_sig("Sneaky", "/Rect [72 650 400 700] /F 4"))];
+    objects.extend(register_all(form, n, &[]));
+    let certified = certify(&append(form, &objects, &[], None).0, 2, signer);
+    let sig = next_free(&certified);
+    let field = edited(
+        &certified,
+        n,
+        &[(b"V", Object::Reference(id(sig))), (b"AP", ap(sig + 1))],
+    );
+    let page = object(&certified, 3);
+    let Some(Object::Array(mut annots)) = page.get(b"Annots").cloned() else {
+        panic!("page 3 has no direct /Annots");
+    };
+    annots.push(Object::Reference(id(n)));
+    write(
+        dir,
+        "ssa-unlisted-widget-shown",
+        &sign_prepared(
+            &certified,
+            signer,
+            &[
+                (sig + 1, overlay_appearance()),
+                (3, ser(&with(&page, b"Annots", Object::Array(annots)))),
+                (n, field),
+            ],
+            sig,
+        ),
+    );
+
+    // A placed field with its appearance, in an optional content group the document's
+    // default configuration turns off; signing takes it out of the group.
+    let (g, ap_n, f) = (n, n + 1, n + 2);
+    let mut layers = Dictionary::new();
+    layers.insert(b"OCGs", refs(&[g]));
+    let mut off = Dictionary::new();
+    off.insert(b"OFF", refs(&[g]));
+    layers.insert(b"D", Object::Dictionary(off));
+    let catalog = with(
+        &object(form, 1),
+        b"OCProperties",
+        Object::Dictionary(layers),
+    );
+    let entries = format!("/Rect [72 650 400 700] /F 4 /AP << /N {ap_n} 0 R >>");
+    let base = prepared(
+        form,
+        &[
+            (1, ser(&catalog)),
+            (g, b"<< /Type /OCG /Name (Layer) >>".to_vec()),
+            (ap_n, overlay_appearance()),
+            (f, merged_sig("Sneaky", &format!("{entries} /OC {g} 0 R"))),
+        ],
+        f,
+        f,
+    );
+    let certified = certify(&base, 2, signer);
+    let sig = next_free(&certified);
+    write(
+        dir,
+        "ssa-layer-widget-shown",
+        &sign_prepared(
+            &certified,
+            signer,
+            &[(f, merged_sig("Sneaky", &format!("{entries} /V {sig} 0 R")))],
+            sig,
+        ),
+    );
+
+    // A field placed in the certified state, signed with its rectangle moved.
+    let base = prepared(
+        form,
+        &[(n, merged_sig("Sneaky", "/Rect [72 650 400 700] /F 4"))],
+        n,
+        n,
+    );
+    let certified = certify(&base, 2, signer);
+    let sig = next_free(&certified);
+    let field = edited(
+        &certified,
+        n,
+        &[
+            (b"V", Object::Reference(id(sig))),
+            (b"AP", ap(sig + 1)),
+            (
+                b"Rect",
+                Object::Array([72, 100, 400, 150].map(Object::Integer).to_vec()),
+            ),
+        ],
+    );
+    write(
+        dir,
+        "ssa-moved-rect",
+        &sign_prepared(
+            &certified,
+            signer,
+            &[(sig + 1, overlay_appearance()), (n, field)],
+            sig,
+        ),
+    );
+}
+
+/// An empty signature field `title` merged with its widget on page 3, with `entries`.
+fn merged_sig(title: &str, entries: &str) -> Vec<u8> {
+    format!("<< /Type /Annot /Subtype /Widget /FT /Sig /T ({title}) {entries} /P 3 0 R >>")
+        .into_bytes()
+}
+
+/// `base` given `objects` and `field` registered, its widget `widget` on page 3, in one
+/// revision.
+fn prepared(base: &[u8], objects: &[(u32, Vec<u8>)], field: u32, widget: u32) -> Vec<u8> {
+    let mut objects = objects.to_vec();
+    objects.extend(register(base, field, widget));
+    append(base, &objects, &[], None).0
+}
+
+/// `pdf` signed in a field it already has: one revision writing the signature dictionary
+/// `sig` and `edits`, then sealed.
+fn sign_prepared(pdf: &[u8], signer: &TestSigner, edits: &[(u32, Vec<u8>)], sig: u32) -> Vec<u8> {
+    let mut objects = vec![(sig, sig_placeholder())];
+    objects.extend_from_slice(edits);
+    seal(append(pdf, &objects, &[], None).0, signer)
+}
+
+/// The dictionary `number` of `pdf` with `entries` set, serialized.
+fn edited(pdf: &[u8], number: u32, entries: &[(&[u8], Object)]) -> Vec<u8> {
+    let mut dict = object(pdf, number);
+    for (key, value) in entries {
+        dict.insert(key, value.clone());
+    }
+    ser(&dict)
+}
+
+fn rect() -> Object {
+    Object::Array([72, 650, 400, 700].map(Object::Integer).to_vec())
+}
+
+/// An appearance dictionary whose normal appearance is `number`.
+fn ap(number: u32) -> Object {
+    let mut n = Dictionary::new();
+    n.insert(b"N", Object::Reference(id(number)));
+    Object::Dictionary(n)
+}
+
 /// The AcroForm of `pdf` with `field` added to its `/Fields`, and page 3 with `widget` added
 /// to its `/Annots`.
 fn register(pdf: &[u8], field: u32, widget: u32) -> [(u32, Vec<u8>); 2] {
+    register_all(pdf, field, &[widget])
+}
+
+/// The AcroForm of `pdf` with `field` added to its `/Fields`, and page 3 with `widgets`
+/// added to its `/Annots`.
+fn register_all(pdf: &[u8], field: u32, widgets: &[u32]) -> [(u32, Vec<u8>); 2] {
     let doc = Document::parse(pdf).unwrap();
     let Some(Object::Reference(form_id)) = doc.catalog().get(b"AcroForm").cloned() else {
         panic!("no indirect AcroForm");
@@ -664,7 +1076,7 @@ fn register(pdf: &[u8], field: u32, widget: u32) -> [(u32, Vec<u8>); 2] {
     let Some(Object::Array(mut annots)) = page.get(b"Annots").cloned() else {
         panic!("page 3 has no direct /Annots");
     };
-    annots.push(Object::Reference(id(widget)));
+    annots.extend(widgets.iter().map(|w| Object::Reference(id(*w))));
     let page = with(&page, b"Annots", Object::Array(annots));
     [(form_id.number, ser(&form)), (3, ser(&page))]
 }
