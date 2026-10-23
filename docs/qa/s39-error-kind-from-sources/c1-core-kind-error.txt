@@ -1,0 +1,31 @@
+Criterion 1, invalid input — a caller passes a boxed error to the constructor, which the
+rustdoc of Error::timestamp warns against ("a Box<E> would be boxed a second time").
+Programs: program.txt (scenario "core-error", and the second program "qa-s39-box").
+
+--- 1. Box<dyn Error + Send + Sync> (already the BoxError type)
+cwd:     $QA_TMP/run
+command: $QA_TMP/target/debug/qa-s39 core-error
+stdin:   none
+stderr:  (empty)
+stdout:
+Error::timestamp(Box<io::Error>): Err(nacre_core::Error::Timestamp { .. })
+  kind()    = Unavailable ("service unavailable")
+  Display   = the timestamp authority failed
+  source    = tsa down
+source downcasts to io::Error: true
+exit code: 0
+
+--- 2. Box<io::Error> (a concrete box)
+cwd:     $QA_TMP/box
+command: CARGO_TARGET_DIR=$QA_TMP/target cargo run -q
+stdin:   none
+stderr:  (empty)
+stdout:
+kind() = Unavailable
+source downcasts to io::Error: false
+source downcasts to Box<io::Error>: true
+exit code: 0
+
+Reading: a BoxError passes through unchanged; a concrete Box<E> is boxed again and the
+source is then the box, exactly as the rustdoc says. Compiles silently in both cases (no
+compiler error to read); the warning lives in the rustdoc only.

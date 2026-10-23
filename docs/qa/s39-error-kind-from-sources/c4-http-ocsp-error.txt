@@ -1,0 +1,34 @@
+Criterion 4, invalid input — certificate bytes that are not DER, a certificate with no OCSP
+responder, a responder answering bytes that are not an OCSP response, an unreachable
+responder.
+Program: program.txt (scenario "ocsp-error"). Run twice, outputs byte-identical.
+
+cwd:     $QA_TMP/run
+command: $QA_TMP/target/debug/qa-s39 ocsp-error
+stdin:   none
+stderr:  (empty)
+stdout:
+certificate bytes that are not DER: Err(nacre_core::Error::Revocation { .. })
+  kind()    = InvalidInput ("invalid input")
+  Display   = the revocation source failed
+  source    = invalid certificate
+  source    = unexpected ASN.1 DER tag: expected SEQUENCE, got APPLICATION [14] (constructed)
+  downcast  = nacre_revocation::Error, its kind() = InvalidInput
+certificate without an OCSP responder: Err(nacre_core::Error::Revocation { .. })
+  kind()    = Indeterminate ("indeterminate")
+  Display   = the revocation source failed
+  source    = no usable OCSP responder
+  downcast  = nacre_revocation::Error, its kind() = Indeterminate
+responder answers garbage: Err(nacre_core::Error::Revocation { .. })
+  kind()    = InvalidInput ("invalid input")
+  Display   = the revocation source failed
+  source    = invalid DER
+  source    = unexpected ASN.1 DER tag: expected SEQUENCE, got APPLICATION [14] (constructed)
+  downcast  = nacre_revocation::Error, its kind() = InvalidInput
+unreachable responder (closed port): Err(nacre_core::Error::Revocation { .. })
+  kind()    = Unavailable ("service unavailable")
+  Display   = the revocation source failed
+  source    = the revocation download failed
+  source    = io: Connection refused (os error 111)
+  downcast  = nacre_revocation::Error, its kind() = Unavailable
+exit code: 0

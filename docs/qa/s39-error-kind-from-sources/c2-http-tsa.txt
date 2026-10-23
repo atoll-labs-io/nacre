@@ -1,0 +1,32 @@
+Criterion 2 — HttpTsa: a forged or replayed token gives InvalidSignature; a wrong-length
+imprint gives InvalidInput; an unreachable TSA gives Unavailable.
+Program: program.txt (scenario "tsa"). Local TSA on 127.0.0.1 answering 200 with the
+corpus files of crates/nacre-tsp/tests/corpus/attacks/; imprint = SHA-256 of
+corpus/recorded/data.bin. Run twice, outputs byte-identical.
+
+cwd:     $QA_TMP/run
+command: $QA_TMP/target/debug/qa-s39 tsa
+stdin:   none
+stderr:  (empty)
+stdout:
+forged token (signature-invalid.tsr): Err(nacre_core::Error::Timestamp { .. })
+  kind()    = InvalidSignature ("invalid signature")
+  Display   = the timestamp authority failed
+  source    = token signature: the signature is invalid
+  source    = the signature is invalid
+  downcast  = nacre_tsp::Error, its kind() = InvalidSignature
+replayed token (valid.tsr, recorded nonce): Err(nacre_core::Error::Timestamp { .. })
+  kind()    = InvalidSignature ("invalid signature")
+  Display   = the timestamp authority failed
+  source    = the token carries another nonce
+  downcast  = nacre_tsp::Error, its kind() = InvalidSignature
+imprint of 31 bytes for SHA-256: Err(nacre_core::Error::DigestLength { .. })
+  kind()    = InvalidInput ("invalid input")
+  Display   = digest length is 31 bytes, the signature algorithm expects 32
+unreachable TSA (closed port): Err(nacre_core::Error::Timestamp { .. })
+  kind()    = Unavailable ("service unavailable")
+  Display   = the timestamp authority failed
+  source    = TSA request failed: io: Connection refused (os error 111)
+  source    = io: Connection refused (os error 111)
+  downcast  = nacre_tsp::Error, its kind() = Unavailable
+exit code: 0

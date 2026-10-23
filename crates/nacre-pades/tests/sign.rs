@@ -222,9 +222,7 @@ impl TimestampAuthority for FakeTsa {
         imprint: &[u8],
     ) -> Result<Vec<u8>, nacre_core::Error> {
         *self.seen.borrow_mut() = Some((algorithm, imprint.to_vec()));
-        self.answer
-            .clone()
-            .map_err(|message| nacre_core::Error::Timestamp(message.into()))
+        self.answer.clone().map_err(nacre_core::Error::timestamp)
     }
 }
 
@@ -403,7 +401,7 @@ impl RevocationSource for Recording {
     ) -> Result<RevocationData, nacre_core::Error> {
         self.asked.borrow_mut().push(certificate.to_vec());
         if self.failing == Some(certificate) {
-            return Err(nacre_core::Error::Revocation("down".into()));
+            return Err(nacre_core::Error::revocation("down"));
         }
         Ok(if certificate == LEAF {
             RevocationData::Ocsp(GOOD_OCSP.to_vec())

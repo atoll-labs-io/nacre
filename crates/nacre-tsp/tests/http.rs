@@ -10,9 +10,14 @@ use std::net::TcpListener;
 
 use nacre_core::{DigestAlgorithm, ErrorKind, TimestampAuthority};
 use nacre_tsp::HttpTsa;
+use sha2::{Digest, Sha256};
 
-/// Reads one HTTP request, answers 500, and returns its lowercased head and its body.
-fn serve_once(listener: TcpListener) -> (String, Vec<u8>) {
+const DATA: &[u8] = include_bytes!("corpus/recorded/data.bin");
+const SERVER_ERROR: &str = "500 Internal Server Error";
+
+/// Reads one HTTP request, answers `status` with `body`, and returns the request's
+/// lowercased head and its body.
+fn serve_once(listener: TcpListener, status: &str, body: &[u8]) -> (String, Vec<u8>) {
     let (mut stream, _) = listener.accept().unwrap();
     let mut received = Vec::new();
     let mut buffer = [0u8; 4096];
@@ -37,11 +42,12 @@ fn serve_once(listener: TcpListener) -> (String, Vec<u8>) {
         assert!(n > 0, "connection closed before the request body");
         received.extend_from_slice(&buffer[..n]);
     }
-    stream
-        .write_all(
-            b"HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
-        )
-        .unwrap();
+    let response_head = format!(
+        "HTTP/1.1 {status}\r\nContent-Type: application/timestamp-reply\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    stream.write_all(response_head.as_bytes()).unwrap();
+    stream.write_all(body).unwrap();
     (head, received[head_end..head_end + length].to_vec())
 }
 
@@ -49,7 +55,7 @@ fn serve_once(listener: TcpListener) -> (String, Vec<u8>) {
 fn http_tsa_sends_only_the_request_and_reports_failure() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}/tsa", listener.local_addr().unwrap());
-    let server = std::thread::spawn(move || serve_once(listener));
+    let server = std::thread::spawn(move || serve_once(listener, SERVER_ERROR, b""));
 
     let imprint = [0x5au8; 32];
     let error = HttpTsa::new(&url)
@@ -86,4 +92,52 @@ fn http_tsa_sends_only_the_request_and_reports_failure() {
         .timestamp(DigestAlgorithm::Sha256, &imprint[..31])
         .unwrap_err();
     assert_eq!(short.kind(), ErrorKind::InvalidInput);
+}
+
+/// Asks a local TSA that answers `response` for a token over the SHA-256 of `DATA`.
+fn timestamp_answered(response: &'static [u8]) -> nacre_core::Error {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}/tsa", listener.local_addr().unwrap());
+    let server = std::thread::spawn(move || serve_once(listener, "200 OK", response));
+    let error = HttpTsa::new(&url)
+        .timestamp(DigestAlgorithm::Sha256, &Sha256::digest(DATA))
+        .unwrap_err();
+    server.join().unwrap();
+    error
+}
+
+#[test]
+fn forged_token_is_invalid_signature() {
+    let error = timestamp_answered(include_bytes!("corpus/attacks/signature-invalid.tsr"));
+    assert!(
+        matches!(error, nacre_core::Error::Timestamp { .. }),
+        "{error}"
+    );
+    assert_eq!(error.kind(), ErrorKind::InvalidSignature);
+}
+
+#[test]
+fn replayed_token_is_invalid_signature() {
+    // The request's random nonce never matches the one recorded in the token.
+    let error = timestamp_answered(include_bytes!("corpus/attacks/valid.tsr"));
+    assert!(
+        matches!(error, nacre_core::Error::Timestamp { .. }),
+        "{error}"
+    );
+    assert_eq!(error.kind(), ErrorKind::InvalidSignature);
+}
+
+#[test]
+fn unreachable_tsa_is_unavailable() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}/tsa", listener.local_addr().unwrap());
+    drop(listener);
+    let error = HttpTsa::new(&url)
+        .timestamp(DigestAlgorithm::Sha256, &Sha256::digest(DATA))
+        .unwrap_err();
+    assert!(
+        matches!(error, nacre_core::Error::Timestamp { .. }),
+        "{error}"
+    );
+    assert_eq!(error.kind(), ErrorKind::Unavailable);
 }
