@@ -4,17 +4,20 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.97"
 license = "MIT OR Apache-2.0"
-description = "Certificate revocation for Nacre: reading, verifying and judging X.509 CRLs, and fetching them over HTTP."
+description = "Certificate revocation for Nacre: reading, verifying and judging X.509 CRLs and OCSP responses, and fetching them over HTTP."
 
 [lints]
 workspace = true
 
 [dependencies]
 nacre-core = { path = "../nacre-core", version = "0.1.0" }
-der = { version = "0.8", features = ["alloc", "oid"] }
+der = { version = "0.8", features = ["alloc", "derive", "oid"] }
 spki = "0.8"
 x509-cert = "0.3"
 sha2 = "0.11"
+# SHA-1 only identifies the certificate in an OCSP `CertID` (RFC 5019 §2.1.1), never signs.
+sha1 = "0.11"
+getrandom = "0.4"
 p256 = { version = "0.14", features = ["ecdsa"] }
 # Pinned: a release candidate, and no lock file is committed.
 rsa = "=0.10.0-rc.19"
@@ -32,7 +35,7 @@ nacre-core = { path = "../nacre-core", features = ["test-signer"] }
 nacre-conformance = { path = "../nacre-conformance" }
 x509-cert = { version = "0.3", features = ["builder"] }
 p256 = { version = "0.14", features = ["ecdsa", "pkcs8"] }
-der = { version = "0.8", features = ["alloc", "oid", "pem"] }
+der = { version = "0.8", features = ["alloc", "derive", "oid", "pem"] }
 # Turns `http` on for the tests, so `cargo test --workspace` runs them without a feature flag.
 nacre-revocation = { path = ".", features = ["http"] }
 
@@ -41,3 +44,7 @@ nacre-revocation = { path = ".", features = ["http"] }
 [[example]]
 name = "forge_crl_attacks"
 path = "examples/forge_attacks.rs"
+
+[[example]]
+name = "forge_ocsp_attacks"
+path = "examples/forge_ocsp_attacks.rs"

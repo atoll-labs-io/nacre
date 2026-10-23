@@ -1,0 +1,159 @@
+## c1 — OcspRequest built, BasicOCSPResponse read and its signature verified (CA and delegated responder)
+cwd: $T/pki (walk PKI made with OpenSSL 3.6.5: P-256 CA 'QA s10 CA', leaf serial 0x1001 good, revoked serial 0x1002 keyCompromise at 2026-10-15T12:00:00Z, delegate 0x2001 EKU OCSPSigning issued by the CA; keys only in the temp dir)
+tool: ocsp-qa = scratch crate on the copied nacre-revocation (feature http); source in c0-scratch-source.txt
+N = 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f; 'at' values are Unix seconds; now=1792748538
+
+$ ocsp-qa req revoked.der ca.der N req-fixed.der
+Ok nonce=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f (32 octets)
+exit=0
+$ openssl ocsp -reqin req-fixed.der -req_text
+OCSP Request Data:
+    Version: 1 (0x0)
+    Requestor List:
+        Certificate ID:
+          Hash Algorithm: sha1
+          Issuer Name Hash: 467CFF9A64B9A0977923130B91E89CE47BBD6DF8
+          Issuer Key Hash: A0433298CDB228F67A5DB64C2D465B69257A9A7B
+          Serial Number: 1002
+    Request Extensions:
+        OCSP Nonce: 
+            0420000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F
+exit=0
+$ openssl asn1parse -inform DER -in req-fixed.der -i
+    0:d=0  hl=2 l= 120 cons: SEQUENCE          
+    2:d=1  hl=2 l= 118 cons:  SEQUENCE          
+    4:d=2  hl=2 l=  63 cons:   SEQUENCE          
+    6:d=3  hl=2 l=  61 cons:    SEQUENCE          
+    8:d=4  hl=2 l=  59 cons:     SEQUENCE          
+   10:d=5  hl=2 l=   9 cons:      SEQUENCE          
+   12:d=6  hl=2 l=   5 prim:       OBJECT            :sha1
+   19:d=6  hl=2 l=   0 prim:       NULL              
+   21:d=5  hl=2 l=  20 prim:      OCTET STRING      [HEX DUMP]:467CFF9A64B9A0977923130B91E89CE47BBD6DF8
+   43:d=5  hl=2 l=  20 prim:      OCTET STRING      [HEX DUMP]:A0433298CDB228F67A5DB64C2D465B69257A9A7B
+   65:d=5  hl=2 l=   2 prim:      INTEGER           :1002
+   69:d=2  hl=2 l=  51 cons:   cont [ 2 ]        
+   71:d=3  hl=2 l=  49 cons:    SEQUENCE          
+   73:d=4  hl=2 l=  47 cons:     SEQUENCE          
+   75:d=5  hl=2 l=   9 prim:      OBJECT            :OCSP Nonce
+   86:d=5  hl=2 l=  34 prim:      OCTET STRING      [HEX DUMP]:0420000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F
+
+# reference: OpenSSL request for the same pair (openssl ocsp -issuer ca.pem -cert revoked.pem -no_nonce), its CertID
+        Certificate ID:
+          Hash Algorithm: sha1
+          Issuer Name Hash: 467CFF9A64B9A0977923130B91E89CE47BBD6DF8
+          Issuer Key Hash: A0433298CDB228F67A5DB64C2D465B69257A9A7B
+          Serial Number: 1002
+
+$ ocsp-qa req leaf.der ca.der random req-r1.der ; ocsp-qa req leaf.der ca.der random req-r2.der
+Ok nonce=9e0871228b5acff8a960397828d01b52f67e993db59c8fc3f3a0ddc5fa2b40c5 (32 octets)
+Ok nonce=c6a4c5cb7a7ecf9c07b9277f2982dd1576ae7d1d5aa668fe40827face783f7a9 (32 octets)
+
+$ openssl ocsp -index index.txt -CA ca.pem -rsigner ca.pem -rkey ca.key -reqin req-revoked.der -respout resp-ca-revoked.der -ndays 30
+exit=0
+    Responder Id: CN = QA s10 CA
+    Produced At: Oct 23 09:42:18 2026 GMT
+    Cert Status: revoked
+    Revocation Time: Oct 15 12:00:00 2026 GMT
+    Revocation Reason: keyCompromise (0x1)
+    This Update: Oct 23 09:42:18 2026 GMT
+        OCSP Nonce: 
+            0420000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F
+$ ocsp-qa judge resp-ca-revoked.der revoked.der ca.der at=now nonce=N tolerance=300
+from_der: Ok produced_at=1792748538 this_update=Some("1792748538") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+check_nonce(000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f): Ok
+check_this_update(at=1792748538, tol=300s): Ok
+status(at=1792748538): Ok(Revoked { date: SystemTime { tv_sec: 1792065600, tv_nsec: 0 }, reason: Some(KeyCompromise) }) date_unix=1792065600
+exit=0
+
+$ openssl ocsp -index index.txt -CA ca.pem -rsigner ca.pem -rkey ca.key -reqin req-leaf.der -respout resp-ca-leaf.der -ndays 30
+exit=0
+    Responder Id: CN = QA s10 CA
+    Produced At: Oct 23 09:42:18 2026 GMT
+    Cert Status: good
+    This Update: Oct 23 09:42:18 2026 GMT
+        OCSP Nonce: 
+            0420000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F
+$ ocsp-qa judge resp-ca-leaf.der leaf.der ca.der at=now nonce=N tolerance=300
+from_der: Ok produced_at=1792748538 this_update=Some("1792748538") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+check_nonce(000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f): Ok
+check_this_update(at=1792748538, tol=300s): Ok
+status(at=1792748538): Ok(Good)
+exit=0
+
+$ openssl ocsp -index index.txt -CA ca.pem -rsigner deleg.pem -rkey deleg.key -reqin req-revoked.der -respout resp-deleg-revoked.der -ndays 30
+exit=0
+    Responder Id: CN = QA s10 delegate
+    Produced At: Oct 23 09:42:18 2026 GMT
+    Cert Status: revoked
+    Revocation Time: Oct 15 12:00:00 2026 GMT
+    Revocation Reason: keyCompromise (0x1)
+    This Update: Oct 23 09:42:18 2026 GMT
+        OCSP Nonce: 
+            0420000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F
+$ ocsp-qa judge resp-deleg-revoked.der revoked.der ca.der at=now nonce=N tolerance=300
+from_der: Ok produced_at=1792748538 this_update=Some("1792748538") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+check_nonce(000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f): Ok
+check_this_update(at=1792748538, tol=300s): Ok
+status(at=1792748538): Ok(Revoked { date: SystemTime { tv_sec: 1792065600, tv_nsec: 0 }, reason: Some(KeyCompromise) }) date_unix=1792065600
+exit=0
+
+$ openssl ocsp -index index.txt -CA ca.pem -rsigner deleg.pem -rkey deleg.key -reqin req-leaf.der -respout resp-deleg-leaf.der -ndays 30
+exit=0
+    Responder Id: CN = QA s10 delegate
+    Produced At: Oct 23 09:42:18 2026 GMT
+    Cert Status: good
+    This Update: Oct 23 09:42:18 2026 GMT
+        OCSP Nonce: 
+            0420000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F
+$ ocsp-qa judge resp-deleg-leaf.der leaf.der ca.der at=now nonce=N tolerance=300
+from_der: Ok produced_at=1792748538 this_update=Some("1792748538") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+check_nonce(000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f): Ok
+check_this_update(at=1792748538, tol=300s): Ok
+status(at=1792748538): Ok(Good)
+exit=0
+
+# ResponderID byKey (openssl -resp_key_id), CA-signed, revoked
+    Responder Id: A0433298CDB228F67A5DB64C2D465B69257A9A7B
+from_der: Ok produced_at=1792748538 this_update=Some("1792748538") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+check_nonce(000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f): Ok
+status(at=1792748538): Ok(Revoked { date: SystemTime { tv_sec: 1792065600, tv_nsec: 0 }, reason: Some(KeyCompromise) }) date_unix=1792065600
+exit=0
+
+# ResponderID byKey, delegate-signed, good
+    Responder Id: 291ACE13AD6B22BCA29D89232557B8148D529039
+from_der: Ok produced_at=1792748538 this_update=Some("1792748538") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+check_nonce(000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f): Ok
+status(at=1792748538): Ok(Good)
+exit=0
+
+# SHA-256 CertID (openssl ocsp -sha256 -issuer ca.pem -cert revoked.pem -no_nonce request), CA-signed, revoked
+      Hash Algorithm: sha256
+    Cert Status: revoked
+from_der: Ok produced_at=1792748538 this_update=Some("1792748538") nonce=None
+status(at=1792748538): Ok(Revoked { date: SystemTime { tv_sec: 1792065600, tv_nsec: 0 }, reason: Some(KeyCompromise) }) date_unix=1792065600
+exit=0
+
+# OpenSSL verifies the responses nacre accepted (openssl ocsp -respin ... -CAfile ca.pem -issuer ca.pem)
+resp-ca-revoked: Response verify OK
+resp-deleg-leaf: Response verify OK
+resp-bykey-deleg: Response verify OK
+resp-sha256: Response verify OK
+
+# committed OpenSSL fixtures (tests/corpus/ocsp-openssl/), judged at their own thisUpdate
+$ ocsp-qa judge ocsp-openssl/good.der leaf.der ca.der at=1792746526
+from_der: Ok produced_at=1792746526 this_update=Some("1792746526") nonce=None
+status(at=1792746526): Ok(Good)
+exit=0
+    Cert Status: good
+$ ocsp-qa judge ocsp-openssl/revoked.der revoked-leaf.der ca.der at=1792746526
+from_der: Ok produced_at=1792746526 this_update=Some("1792746526") nonce=None
+status(at=1792746526): Ok(Revoked { date: SystemTime { tv_sec: 1780272000, tv_nsec: 0 }, reason: Some(KeyCompromise) }) date_unix=1780272000
+exit=0
+    Cert Status: revoked
+    Revocation Time: Jun  1 00:00:00 2026 GMT
+    Revocation Reason: keyCompromise (0x1)
+$ ocsp-qa judge ocsp-openssl/delegated-good.der leaf.der ca.der at=1792746526
+from_der: Ok produced_at=1792746526 this_update=Some("1792746526") nonce=None
+status(at=1792746526): Ok(Good)
+exit=0
+    Cert Status: good

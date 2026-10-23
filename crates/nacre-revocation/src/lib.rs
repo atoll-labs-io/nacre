@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-//! Certificate revocation for Nacre, starting with X.509 CRLs (RFC 5280 §5).
+//! Certificate revocation for Nacre: X.509 CRLs (RFC 5280 §5) and OCSP (RFC 6960).
 //! **Experimental**: not yet fuzzed at length nor cross-checked against a reference crate.
 //!
 //! [`Crl::from_der`] reads a DER CRL: issuer, `thisUpdate`, `nextUpdate` and the revoked
@@ -10,23 +10,43 @@
 //! its own [`Error`], a CRL from another issuer, a bad signature, an unsupported critical
 //! extension, a missing or passed `nextUpdate`.
 //!
-//! Judged here: one CRL against one certificate at one date. Left to the caller (s17): the
-//! certificate chain, and comparing a revocation date with a signing time. A v1 CRL, which
-//! has no version field, is refused as invalid DER.
+//! [`OcspRequest`] builds a DER `OCSPRequest` for a certificate and its issuer, with a
+//! nonce. [`OcspResponse::from_der`] reads a successful basic response, and
+//! [`OcspResponse::status`] judges it at a control date: the single response about the
+//! certificate, no unsupported critical extension, a responder that is the issuer or a
+//! responder it delegated with `id-kp-OCSPSigning`, a signature over the `tbsResponseData`
+//! bytes received, a `nextUpdate` not passed, then `good`, `revoked` or an error for
+//! `unknown`. Two checks stay apart, since `status` cannot know what they need: the nonce,
+//! [`OcspResponse::check_nonce`], against the request that was sent; the freshness of
+//! `thisUpdate`, [`OcspResponse::check_this_update`], against a date and a tolerance the
+//! caller gives. A caller judging a response fetched now checks both (`HttpOcspSource`
+//! already checks the nonce); one judging a past signing time with a later response may
+//! skip the freshness check, as a CRL issued later is accepted.
 //!
-//! Under the `http` feature, `HttpCrlSource` implements [`nacre_core::RevocationSource`] by
-//! downloading the CRL named by a certificate's `http://` distribution point. That URL is
-//! untrusted: the source reaches only public addresses and follows no redirect. No other
-//! code path opens a connection, and nothing reads the system clock.
+//! Judged here: one CRL or one OCSP response against one certificate at one date. Left to
+//! the caller (s17): the certificate chain, and comparing a revocation date with a signing
+//! time. A v1 CRL, which has no version field, is refused as invalid DER.
+//!
+//! [`Fallback`] asks a second source when the first fails, OCSP then CRL for instance.
+//! Under the `http` feature, `HttpCrlSource` downloads the CRL named by a certificate's
+//! `http://` distribution point, and `HttpOcspSource` asks the `http://` OCSP responder of
+//! its `authorityInfoAccess`, with a random nonce it checks. Both implement
+//! [`nacre_core::RevocationSource`]. Those URLs are untrusted: the sources reach only public
+//! addresses and follow no redirect. No other code path opens a connection, and nothing
+//! reads the system clock.
 
 mod crl;
 mod error;
+mod fallback;
 #[cfg(feature = "http")]
 mod http;
+mod ocsp;
 mod verify;
 
 pub use crl::{Crl, CrlStatus, RevokedEntry};
 pub use error::Error;
+pub use fallback::Fallback;
 #[cfg(feature = "http")]
-pub use http::HttpCrlSource;
+pub use http::{HttpCrlSource, HttpOcspSource};
+pub use ocsp::{OcspRequest, OcspResponse, OcspStatus};
 pub use x509_cert::ext::pkix::CrlReason;

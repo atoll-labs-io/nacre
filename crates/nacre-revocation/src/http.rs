@@ -8,13 +8,16 @@ use ureq::http::Uri;
 use ureq::unversioned::resolver::{DefaultResolver, ResolvedSocketAddrs, Resolver};
 use ureq::unversioned::transport::{DefaultConnector, NextTimeout};
 use x509_cert::Certificate;
-use x509_cert::ext::pkix::CrlDistributionPoints;
 use x509_cert::ext::pkix::name::{DistributionPointName, GeneralName};
+use x509_cert::ext::pkix::{AuthorityInfoAccessSyntax, CrlDistributionPoints};
 
-use crate::{Crl, Error};
+use crate::{Crl, Error, OcspRequest, OcspResponse};
 
 const TIMEOUT: Duration = Duration::from_secs(30);
 const BODY_LIMIT: u64 = 16 * 1024 * 1024;
+const OCSP_BODY_LIMIT: u64 = 64 * 1024;
+const ID_AD_OCSP: der::oid::ObjectIdentifier =
+    der::oid::ObjectIdentifier::new_unwrap("1.3.6.1.5.5.7.48.1");
 
 /// A [`RevocationSource`] that downloads the CRL named by a certificate's first `http://`
 /// distribution point.
@@ -34,24 +37,16 @@ impl HttpCrlSource {
     /// A source that refuses loopback, private, link-local and other non-public addresses
     /// with [`Error::NonPublicAddress`].
     pub fn new() -> Self {
-        Self::with_policy(AddressPolicy { loopback: false })
+        Self {
+            agent: with_policy(AddressPolicy { loopback: false }),
+        }
     }
 
     /// A source that also reaches loopback addresses (`127.0.0.0/8`, `::1`), for a test
     /// bench on this machine. Private and link-local addresses stay refused.
     pub fn allowing_loopback() -> Self {
-        Self::with_policy(AddressPolicy { loopback: true })
-    }
-
-    fn with_policy(policy: AddressPolicy) -> Self {
-        let config = ureq::Agent::config_builder()
-            .timeout_global(Some(TIMEOUT))
-            .max_redirects(0)
-            // A proxy would resolve the host itself, out of reach of the address check.
-            .proxy(None)
-            .build();
         Self {
-            agent: ureq::Agent::with_parts(config, DefaultConnector::default(), policy),
+            agent: with_policy(AddressPolicy { loopback: true }),
         }
     }
 
@@ -100,6 +95,115 @@ impl HttpCrlSource {
             .map_err(http_error)?;
         Crl::from_der(&body)?;
         Ok(body)
+    }
+}
+
+/// An agent that connects only where `policy` allows, follows no redirect, ignores proxy
+/// settings and stops after 30 s.
+fn with_policy(policy: AddressPolicy) -> ureq::Agent {
+    let config = ureq::Agent::config_builder()
+        .timeout_global(Some(TIMEOUT))
+        .max_redirects(0)
+        // A proxy would resolve the host itself, out of reach of the address check.
+        .proxy(None)
+        .build();
+    ureq::Agent::with_parts(config, DefaultConnector::default(), policy)
+}
+
+/// A [`RevocationSource`] that asks the OCSP responder named by a certificate's first
+/// `http://` `id-ad-ocsp` access location.
+///
+/// The URL comes from the certificate, so the same address policy as [`HttpCrlSource`]
+/// applies: public addresses only, no redirect, no proxy, 30 s. The request carries a
+/// fresh 32-octet nonce; the response is returned once it reads as a successful basic
+/// response whose nonce, when present, is the request's ([`OcspResponse::check_nonce`]).
+/// Judging it is [`OcspResponse::status`]'s job. The body is limited to 64 KiB.
+#[derive(Debug)]
+pub struct HttpOcspSource {
+    agent: ureq::Agent,
+}
+
+impl HttpOcspSource {
+    /// A source that refuses loopback, private, link-local and other non-public addresses
+    /// with [`Error::NonPublicAddress`].
+    pub fn new() -> Self {
+        Self {
+            agent: with_policy(AddressPolicy { loopback: false }),
+        }
+    }
+
+    /// A source that also reaches loopback addresses (`127.0.0.0/8`, `::1`), for a test
+    /// bench on this machine. Private and link-local addresses stay refused.
+    pub fn allowing_loopback() -> Self {
+        Self {
+            agent: with_policy(AddressPolicy { loopback: true }),
+        }
+    }
+
+    /// The URL this source asks for `certificate`, given as DER: the first `id-ad-ocsp`
+    /// access location of its `authorityInfoAccess` that is a URI starting with `http://`.
+    pub fn responder_url(certificate: &[u8]) -> Result<String, Error> {
+        let certificate = Certificate::from_der(certificate).map_err(Error::Certificate)?;
+        let (_, access) = certificate
+            .tbs_certificate()
+            .get_extension::<AuthorityInfoAccessSyntax>()
+            .map_err(Error::Certificate)?
+            .ok_or(Error::NoOcspResponder)?;
+        access
+            .0
+            .iter()
+            .filter(|description| description.access_method == ID_AD_OCSP)
+            .find_map(|description| match &description.access_location {
+                GeneralName::UniformResourceIdentifier(uri)
+                    if uri.as_str().starts_with("http://") =>
+                {
+                    Some(uri.as_str().to_owned())
+                }
+                _ => None,
+            })
+            .ok_or(Error::NoOcspResponder)
+    }
+
+    fn fetch(&self, certificate: &[u8], issuer: &[u8]) -> Result<Vec<u8>, Error> {
+        let url = Self::responder_url(certificate)?;
+        let request = OcspRequest::with_random_nonce(certificate, issuer)?;
+        let response = self
+            .agent
+            .post(&url)
+            .header("Content-Type", "application/ocsp-request")
+            .send(&request.to_der()?[..])
+            .map_err(http_error)?;
+        let status = response.status();
+        if status.is_redirection() {
+            return Err(Error::Http(ureq::Error::StatusCode(status.as_u16())));
+        }
+        let body = response
+            .into_body()
+            .with_config()
+            .limit(OCSP_BODY_LIMIT)
+            .read_to_vec()
+            .map_err(http_error)?;
+        OcspResponse::from_der(&body)?.check_nonce(&request)?;
+        Ok(body)
+    }
+}
+
+impl Default for HttpOcspSource {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl RevocationSource for HttpOcspSource {
+    /// Asks the responder of `certificate` about it; `issuer` identifies it in the request.
+    fn revocation(
+        &self,
+        certificate: &[u8],
+        issuer: &[u8],
+    ) -> Result<RevocationData, nacre_core::Error> {
+        self.fetch(certificate, issuer)
+            .map(RevocationData::Ocsp)
+            .map_err(|error| nacre_core::Error::Revocation(Box::new(error)))
     }
 }
 

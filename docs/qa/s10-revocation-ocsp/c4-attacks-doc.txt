@@ -1,0 +1,40 @@
+## c4 — the known OCSP attacks are in docs/security/attacks/revocation.md, each with an existing case and test
+cwd: the story worktree, read only
+$ for each test named in the OCSP tables: is it a #[test] fn in tests/ocsp_attacks.rs or tests/http.rs, and does its corpus case exist
+delegate_issued_by_another_key_is_unauthorized -> ocsp_attacks.rs
+delegate_without_ocsp_signing_is_unauthorized -> ocsp_attacks.rs
+delegate_expired_at_produced_at_is_unauthorized -> ocsp_attacks.rs
+response_to_another_nonce_is_rejected -> ocsp_attacks.rs
+this_update_out_of_tolerance_is_rejected -> ocsp_attacks.rs
+changed_byte_after_signing_is_rejected -> ocsp_attacks.rs
+stale_response_is_rejected -> ocsp_attacks.rs
+critical_single_extension_is_rejected -> ocsp_attacks.rs
+response_about_another_serial_is_rejected -> ocsp_attacks.rs
+unknown_status_is_rejected -> ocsp_attacks.rs
+unsuccessful_response_status_is_rejected -> ocsp_attacks.rs
+ocsp_nonce_mismatch_is_rejected -> http.rs
+ocsp_loopback_responder_is_refused_by_default -> http.rs
+case bad-signature.der present
+case base.der present
+case critical-single-extension.der present
+case expired-delegate.der present
+case expired-delegate-response.der present
+case foreign-delegate.der present
+case foreign-delegate-response.der present
+case leaf.der present
+case other-serial.der present
+case plain-delegate.der present
+case plain-delegate-response.der present
+case stale.der present
+case try-later.der present
+case unknown.der present
+$ cargo test -p nacre-revocation --test ocsp_attacks --test ocsp_status --test hostile --test http   (cwd: $T/copy)
+running 3 tests
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+running 5 tests
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+running 11 tests
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+running 3 tests
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+exit=0

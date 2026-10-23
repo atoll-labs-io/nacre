@@ -1,6 +1,6 @@
-# Attaques connues — listes de révocation (CRL)
+# Attaques connues — révocation (CRL et OCSP)
 
-Format : CRL X.509 v2 (RFC 5280 §5), crate `crates/nacre-revocation/`.
+Formats : CRL X.509 v2 (RFC 5280 §5) et réponses OCSP (RFC 6960), crate `crates/nacre-revocation/`. La partie OCSP suit la partie CRL.
 
 Chaque attaque du jugement a son cas dans le corpus `crates/nacre-revocation/tests/corpus/attacks/` et son test de rejet dans `crates/nacre-revocation/tests/attacks.rs`. Chaque CRL est correctement signée, sauf son seul défaut, et liste la feuille `leaf.der` : une règle sautée répondrait « révoqué », jamais l'erreur attendue, et aucune autre règle ne peut répondre à la place de celle qui est visée. Le corpus se régénère par `cargo run -p nacre-revocation --example forge_crl_attacks -- crates/nacre-revocation/tests/corpus/attacks` ; la sortie est déterministe. Les cas sont jugés au 1er janvier 2027.
 
@@ -40,9 +40,52 @@ L'adresse est contrôlée sur les adresses que le nom résout, et la connexion s
 
 La source s'en tient à `http://` (pas d'`https`, pas de LDAP), borne la réponse à 16 Mio et l'appel à 30 s, et refuse ce qui n'est pas une CRL lisible ; un appelant qui veut plus de contrôle injecte sa propre `RevocationSource`. Il reste une requête GET aveugle vers une adresse publique qu'un certificat choisit.
 
+## OCSP : réponses du répondeur
+
+Chaque attaque OCSP a son cas dans `crates/nacre-revocation/tests/corpus/ocsp-attacks/` et son test de rejet dans `crates/nacre-revocation/tests/ocsp_attacks.rs`. Chaque réponse est correctement signée, sauf son seul défaut, porte le nonce `0x4e` × 32 et dit la feuille `leaf.der` révoquée : une règle sautée répondrait « révoqué », jamais l'erreur attendue. `base.der` est la réponse sans défaut, sur laquelle portent les contrôles de nonce et de `thisUpdate`. Le corpus se régénère par `cargo run -p nacre-revocation --example forge_ocsp_attacks -- crates/nacre-revocation/tests/corpus/ocsp-attacks` ; la sortie est déterministe. Les cas sont jugés au 1er janvier 2027 ; `thisUpdate` et `producedAt` sont au 1er octobre 2026.
+
+`OcspResponse::from_der` refuse d'abord (`crates/nacre-revocation/src/ocsp/response.rs`) : DER invalide ou octets en trop (`Error::Der`), `responseStatus` autre que `successful` (`Error::ResponseStatus`), type autre que `id-pkix-ocsp-basic` (`Error::UnsupportedResponseType`), entrée de `certs` qui n'est pas un certificat, extension nonce mal formée (`Error::Der`). Puis `OcspResponse::status` applique ses contrôles dans un ordre fixe, chacun arrêtant l'appel :
+
+1. lecture du certificat (`Error::Certificate`) et du certificat émetteur (`Error::IssuerCertificate`) ;
+2. recherche de la réponse simple dont le `CertID`, recalculé avec son propre condensé (SHA-1 ou SHA-256, sinon `Error::UnsupportedAlgorithm`), est celui du certificat (`Error::CertificateNotInResponse`) ;
+3. extension critique dans `responseExtensions` ou dans les `singleExtensions` de cette réponse (`Error::UnsupportedCriticalExtension`) ;
+4. répondeur : le `ResponderID` désigne l'émetteur (par nom, ou par le SHA-1 de sa clé) ; sinon un certificat de `certs` que le `ResponderID` désigne, émis sous le nom de l'émetteur, signé par sa clé sur les octets reçus du `tbsCertificate`, portant `id-kp-OCSPSigning` et valide à `producedAt` ; tout autre cas (`Error::UnauthorizedResponder`) ;
+5. signature sur les octets reçus du `tbsResponseData` avec la clé du répondeur (`Error::SignatureInvalid`, `Error::AlgorithmMismatch`, `Error::UnsupportedAlgorithm`) ;
+6. `nextUpdate` antérieur à la date de contrôle (`Error::Expired`) ; un `thisUpdate` postérieur est accepté, comme pour une CRL ;
+7. `good` → `OcspStatus::Good`, `revoked` → `OcspStatus::Revoked` avec date et motif, `unknown` → `Error::UnknownCertificate`.
+
+Deux contrôles restent hors de `status`, chacun là où l'information existe : `OcspResponse::check_nonce`, contre la requête envoyée (appelé par `HttpOcspSource`), et `OcspResponse::check_this_update`, contre une date et une tolérance données par l'appelant.
+
+| Attaque | Cas du corpus | Test de rejet | Erreur rendue |
+| --- | --- | --- | --- |
+| Délégué d'une autre clé : certificat de répondeur avec `id-kp-OCSPSigning`, émis sous le nom de l'AC mais signé par une autre clé ; seule sa signature le trahit | `foreign-delegate-response.der` (avec `foreign-delegate.der`) | `delegate_issued_by_another_key_is_unauthorized` | `Error::UnauthorizedResponder` |
+| Délégué non habilité : certificat émis et signé par l'AC, mais dont l'`extendedKeyUsage` ne porte que `clientAuth` | `plain-delegate-response.der` (avec `plain-delegate.der`) | `delegate_without_ocsp_signing_is_unauthorized` | `Error::UnauthorizedResponder` |
+| Délégué périmé : certificat émis et signé par l'AC, avec `id-kp-OCSPSigning`, mais valide du 1er janvier 2025 au 1er janvier 2026, donc expiré à `producedAt` ; une clé de répondeur échue ne signe plus de « bon » | `expired-delegate-response.der` (avec `expired-delegate.der`) | `delegate_expired_at_produced_at_is_unauthorized` | `Error::UnauthorizedResponder` |
+| Rejeu ou réponse à une autre requête : nonce de la réponse différent de celui de la requête | `base.der`, contre une requête de nonce `0x6e` × 32 | `response_to_another_nonce_is_rejected` | `Error::NonceMismatch` |
+| Réponse ancienne présentée comme fraîche : `thisUpdate` à un jour de la date donnée, tolérance de 5 min | `base.der` | `this_update_out_of_tolerance_is_rejected` | `Error::ThisUpdateOutOfTolerance { this_update }` |
+| Signature invalide : la date de révocation avancée d'une minute après signature | `bad-signature.der` | `changed_byte_after_signing_is_rejected` | `Error::SignatureInvalid` |
+| Réponse périmée : `nextUpdate` au 1er juin 2026, rejouée après | `stale.der` | `stale_response_is_rejected` | `Error::Expired { next_update }` |
+| Extension critique inconnue : `id-pkix-ocsp-crl` critique dans la réponse simple | `critical-single-extension.der` | `critical_single_extension_is_rejected` | `Error::UnsupportedCriticalExtension(1.3.6.1.5.5.7.48.1.3)` |
+| Réponse sur un autre certificat : `CertID` d'un autre numéro de série, présentée pour la feuille | `other-serial.der` | `response_about_another_serial_is_rejected` | `Error::CertificateNotInResponse` |
+| Statut `unknown` : ne peut se lire ni « bon » ni « révoqué » | `unknown.der` | `unknown_status_is_rejected` | `Error::UnknownCertificate` |
+| Réponse non signée d'échec : `responseStatus` `tryLater`, sans `responseBytes` (RFC 6960 §2.3 : ces réponses ne sont pas signées) | `try-later.der` | `unsuccessful_response_status_is_rejected` | `Error::ResponseStatus(3)` |
+
+### Source HTTP OCSP
+
+`HttpOcspSource` envoie la requête en POST à l'URL `id-ad-ocsp` de l'`authorityInfoAccess` du certificat, qui peut venir de n'importe qui : même contrôle d'adresse, même refus des redirections et des proxys que `HttpCrlSource`, réponse bornée à 64 Kio. Ses tests, dans `crates/nacre-revocation/tests/http.rs`, forgent un certificat qui nomme l'URL voulue, et un serveur local sert une réponse OCSP valide à nonce fixe.
+
+| Attaque | Test de rejet | Erreur rendue |
+| --- | --- | --- |
+| Répondeur qui ne répond pas à la requête envoyée : nonce fixe, jamais égal au nonce aléatoire de 32 octets de la requête | `ocsp_nonce_mismatch_is_rejected` | `Error::NonceMismatch` (genre `InvalidSignature`) |
+| Répondeur sur la boucle locale, avec le constructeur par défaut ; le message ne cite pas l'URL | `ocsp_loopback_responder_is_refused_by_default` | `Error::NonPublicAddress` |
+
 ## Hors de ce fichier
 
-- **Entrée DER hostile** (tronquée, longueurs fausses, imbrication profonde) : rejetée par le décodage DER strict de `der` (longueurs définies, profondeur bornée), testée dans `crates/nacre-revocation/tests/hostile.rs` et explorée par la cible de fuzzing `crates/nacre-revocation/fuzz/`.
+- **Entrée DER hostile** (tronquée, longueurs fausses, imbrication profonde) : rejetée par le décodage DER strict de `der` (longueurs définies, profondeur bornée), testée dans `crates/nacre-revocation/tests/hostile.rs` (CRL et réponse OCSP) et explorée par les cibles de fuzzing `crl` et `ocsp` de `crates/nacre-revocation/fuzz/`.
+- **Réponse OCSP sans nonce** : acceptée par `check_nonce`, car beaucoup de répondeurs publics servent des réponses pré-signées sans nonce (RFC 8954 §2.1) ; seul un nonce différent est refusé. Une réponse capturée et encore valide peut donc être rejouée jusqu'à son `nextUpdate` : la fraîcheur repose alors sur `check_this_update`, que l'appelant doit appeler. Un refus plus strict (`NonceMissing`) écarterait ces répondeurs.
+- **Statut OCSP `unknown`** : rendu comme `Error::UnknownCertificate`, jamais comme « bon » ; sa traduction en indication de validation relève de s17.
+- **Réponse OCSP sans `nextUpdate`** : acceptée (RFC 6960 §4.2.2.1 : de nouvelles informations sont toujours disponibles) ; sa fraîcheur repose sur `check_this_update`.
 - **CRL v1** (sans champ `version`) : `x509-cert` exige ce champ, une CRL v1 est donc refusée comme DER invalide (`Error::Der`). Limite connue : toute AC actuelle émet des CRL v2.
+- **Révocation du répondeur délégué lui-même** : `status` ne vérifie pas le statut de révocation du certificat du délégué et ne lit pas `id-pkix-ocsp-nocheck` (RFC 6960 §4.2.2.2.1), car elle ne reçoit ni CRL ni réponse pour lui. Ce contrôle revient à l'appelant, et dans Nacre à s17 (`crates/nacre-validate/`), qui juge la révocation de chaque certificat employé, délégué compris, et y traite `id-pkix-ocsp-nocheck`. Jusque-là, un délégué révoqué mais encore valide signe des réponses acceptées.
 - **Révocation dans le temps** : une date de révocation postérieure à la date de contrôle est rendue telle quelle dans `CrlStatus::Revoked` ; la comparer à une heure de signature, et juger une CRL émise après les faits, relève de s17.
 - **Noms comparés à l'identique** : l'émetteur est comparé sur les noms décodés, plus strictement que la comparaison de RFC 5280 §7.1 ; l'écart ne peut produire qu'un `WrongIssuer` à tort, jamais un « non révoqué » à tort.

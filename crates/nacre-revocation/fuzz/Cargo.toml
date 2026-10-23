@@ -22,3 +22,10 @@ path = "fuzz_targets/crl.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "ocsp"
+path = "fuzz_targets/ocsp.rs"
+test = false
+doc = false
+bench = false

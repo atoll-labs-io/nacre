@@ -1,0 +1,9 @@
+## Replay of the finding (second run of its steps, after the walk)
+
+### Finding 1 — through RevocationSource the kind is Unavailable
+$ ocsp-qa fetch leaf.der ca.der loopback   (walk responder at 127.0.0.1:18392 replaying the nonce-N response of c1)
+Err display="the revocation source failed <- the OCSP response nonce does not match the request" kind=Unavailable inner=Err(NonceMismatch) display="the OCSP response nonce does not match the request" kind=InvalidSignature
+$ ocsp-qa fetch privaia.der ca.der public   (HttpOcspSource::new(), responder http://10.1.2.3/)
+Err display="the revocation source failed <- the revocation source address is not public" kind=Unavailable inner=Err(NonPublicAddress) display="the revocation source address is not public" kind=InvalidInput
+$ grep -n "Revocation(_)" crates/nacre-core/src/error.rs   (copy)
+28:            Self::Timestamp(_) | Self::Revocation(_) => ErrorKind::Unavailable,

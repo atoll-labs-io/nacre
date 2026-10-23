@@ -48,11 +48,7 @@ impl Crl {
     /// Reads a DER `CertificateList`. Bytes after it are an error.
     pub fn from_der(bytes: &[u8]) -> Result<Self, Error> {
         let list = CertificateList::from_der(bytes)?;
-        let mut outer = SliceReader::new(bytes)?;
-        let sequence = AnyRef::decode(&mut outer)?;
-        outer.finish()?;
-        let mut inner = SliceReader::new(sequence.value())?;
-        let tbs = inner.tlv_bytes()?.to_vec();
+        let tbs = signed_tbs(bytes)?;
         Ok(Self { list, tbs })
     }
 
@@ -155,7 +151,7 @@ impl Crl {
     }
 }
 
-fn critical(extensions: Option<&Extensions>) -> Result<(), Error> {
+pub(crate) fn critical(extensions: Option<&Extensions>) -> Result<(), Error> {
     match extensions
         .into_iter()
         .flatten()
@@ -164,6 +160,17 @@ fn critical(extensions: Option<&Extensions>) -> Result<(), Error> {
         Some(extension) => Err(Error::UnsupportedCriticalExtension(extension.extn_id)),
         None => Ok(()),
     }
+}
+
+/// The first element of the outer `SEQUENCE` of a signed structure (`tbsCertList`,
+/// `tbsCertificate`, `tbsResponseData`), as received. Bytes after the `SEQUENCE` are an
+/// error.
+pub(crate) fn signed_tbs(bytes: &[u8]) -> Result<Vec<u8>, Error> {
+    let mut outer = SliceReader::new(bytes)?;
+    let sequence = AnyRef::decode(&mut outer)?;
+    outer.finish()?;
+    let mut inner = SliceReader::new(sequence.value())?;
+    Ok(inner.tlv_bytes()?.to_vec())
 }
 
 fn entry(revoked: &RevokedCert) -> Result<RevokedEntry, Error> {
