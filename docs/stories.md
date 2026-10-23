@@ -194,7 +194,7 @@ Même trait `RevocationSource` que s09 : l'appelant choisit OCSP, CRL, ou OCSP p
 - **Owns**: `crates/nacre-pades/`
 
 ### Acceptance criteria
-- [ ] `sign_at_level(…, Level::LT { … })` ajoute après la signature une révision qui porte `/DSS` avec `/Certs`, `/CRLs` et `/OCSPs` ; DSS la déclare `TOTAL_PASSED` au niveau `PAdES-BASELINE-LT`.
+- [ ] `sign_at_level(…, Level::LT { tsa, revocation, issuers })`, où `issuers` fournit les émetteurs absents des chaînes (en général l'ancre de confiance), ajoute après la signature une révision qui porte `/DSS` avec `/Certs`, `/CRLs` et `/OCSPs` ; DSS la déclare `TOTAL_PASSED` au niveau `PAdES-BASELINE-LT`.
 - [ ] `/DSS` couvre la chaîne du signataire et celle de la TSA, chacune avec sa donnée de révocation ; une entrée `/VRI` par signature est écrite.
 - [ ] Rien n'est ajouté dans le CMS : les données de révocation ne vivent que dans `/DSS`.
 - [ ] Un certificat dont la révocation ne peut être obtenue fait échouer le passage au niveau LT avec une erreur qui le nomme ; la signature B-T reste rendue à l'appelant.
@@ -208,7 +208,7 @@ C'est l'écart principal d'`ades-rs` : son « B-LT » rangeait la révocation da
 - **Complexity**: 3
 - **Depends on**: s11-pades-blt
 - **Surface**: `endpoint`
-- **Owns**: `crates/nacre-pades/`
+- **Owns**: `crates/nacre-pades/`, `conformance/pki/`, `conformance/check.sh`, `conformance/README.md`
 
 ### Acceptance criteria
 - [ ] `sign_at_level(…, Level::LTA { … })` ajoute une révision `/DocTimeStamp` (`/SubFilter /ETSI.RFC3161`) après `/DSS` ; DSS déclare le PDF `TOTAL_PASSED` au niveau `PAdES-BASELINE-LTA`.
