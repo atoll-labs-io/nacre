@@ -46,3 +46,16 @@ A decision the person took is not logged here: it is an ADR or a story.
 | 2026-10-22 | s38-error-kind | Implementer on `Model light` (sonnet) | Complexity 2, at `Light up to: 2` |
 | 2026-10-22 | s38-error-kind | Held two review findings mentioning the test signer's secret out of the tracker | Their text bears on a secret (ADR-0077) |
 | 2026-10-22 | — | Closed #44 by hand | Fixed by s02 (PR #58) |
+| 2026-10-22 | s07-tsp-client, s09-revocation-crl, s13-pkcs11-signer | Re-ran QA after each fix run 1, then the review at `Fix loop: 1` | A review blocked on stale QA spends no attempt; the lead had skipped QA once before |
+| 2026-10-22 | s07-tsp-client, s09-revocation-crl, s13-pkcs11-signer, s15-validate-revisions, s08-pades-bt | Wrote the qa subagents' reports to `docs/qa/<id>/report.md` verbatim | The harness refused the subagents' Write on report files; the lead transcribes as it does for reviews |
+| 2026-10-22 | s13-pkcs11-signer | Waited for the `conformance` job before merging PR #79 | The reviewer asked that the SoftHSM 2.6.1 run be read; 7/7 passed |
+| 2026-10-22 | — | Ship script: also hold findings mentioning `unsafe`; read a multi-line `Lenses run:` block | ADR-0013 `deny`/`forbid` finding; s07 issues #82–#85 were filed although its security lens ran |
+| 2026-10-22 | s07-tsp-client | Landing title taken from the story ("Obtain and verify an RFC 3161 time-stamp token") | The first landing commit used a shorter title |
+| 2026-10-22 | s15-validate-revisions | Plan validated without a human; stricter-than-ISO rules kept (annotations under P=3, fill on an uncertified document) | Fails closed; raised to the person |
+| 2026-10-22 | s15-validate-revisions | Held the ship after loop 0 (four majors) and after loop 1 (one major) for the person | Security-relevant verdicts; the person chose a fix run after loop 0 |
+| 2026-10-22 | s08-pades-bt, s10-revocation-ocsp | Opened both lanes; held s39 back | s39's Owns `crates/nacre-revocation/src/` overlaps s10's `crates/nacre-revocation/`; s10 comes first in `docs/stories.md` |
+| 2026-10-22 | s08-pades-bt, s10-revocation-ocsp | Reserved ADR-0017 and ADR-0018, skipping 0015 | 0014 was s15's; 0015 left as a gap rather than risk a collision |
+| 2026-10-22 | s08-pades-bt | Plan validated without a human; implementer on `Model light` (sonnet) | Complexity 2 |
+| 2026-10-22 | s10-revocation-ocsp | Lane sent to the person: ADR-0018 (OCSP structures) | `x509-ocsp` 0.2 is on `der` 0.7; the plan holds `Technical choice: waiting for a human` |
+| 2026-10-23 | s08-pades-bt | Merged PR #87 after reading `bench_signature_is_pades_baseline_t ... ok` in the conformance log | Criterion 1 was seen by neither QA nor the reviewer |
+| 2026-10-23 | s08-pades-bt, s11-pades-blt, s12-pades-blta | Reworded criteria to `sign_at_level`, the TSA designated as the cause, a declared token bound | `sign` keeps its signature for its callers outside s08's Owns (s08 research) |

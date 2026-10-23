@@ -143,10 +143,10 @@ Risque principal : les TSA réelles divergent (statuts, `certReq` ignoré, chaî
 - **Owns**: `crates/nacre-pades/`
 
 ### Acceptance criteria
-- [ ] `sign` au niveau T avec la TSA locale de s02 rend un PDF que DSS déclare `TOTAL_PASSED` au niveau `PAdES-BASELINE-T`.
+- [ ] `sign_at_level(…, Level::T { tsa })` avec la TSA locale de s02 rend un PDF que DSS déclare `TOTAL_PASSED` au niveau `PAdES-BASELINE-T`.
 - [ ] Le jeton est rangé dans l'attribut non signé `signature-time-stamp` du `SignerInfo`, et porte sur la valeur de signature.
-- [ ] Une TSA injoignable ou une réponse refusée fait échouer `sign` avec une erreur qui nomme la TSA ; aucun PDF partiel n'est rendu.
-- [ ] La taille réservée pour `/Contents` couvre le jeton ; un jeton trop grand rend une erreur claire.
+- [ ] Une TSA injoignable ou une réponse refusée fait échouer la signature avec une erreur qui désigne la TSA comme cause (le trait `TimestampAuthority` ne porte ni nom ni adresse) ; aucun PDF partiel n'est rendu.
+- [ ] La taille réservée pour `/Contents` couvre tout jeton jusqu'à une borne déclarée (16 384 octets DER) ; un jeton plus grand rend une erreur claire qui donne les deux tailles.
 
 ### Notes for the agent
 L'appel à la TSA passe par le trait `TimestampAuthority` (s01) : les tests unitaires injectent une fausse TSA, les tests de conformité la TSA locale.
@@ -194,7 +194,7 @@ Même trait `RevocationSource` que s09 : l'appelant choisit OCSP, CRL, ou OCSP p
 - **Owns**: `crates/nacre-pades/`
 
 ### Acceptance criteria
-- [ ] `sign` au niveau LT ajoute après la signature une révision qui porte `/DSS` avec `/Certs`, `/CRLs` et `/OCSPs` ; DSS la déclare `TOTAL_PASSED` au niveau `PAdES-BASELINE-LT`.
+- [ ] `sign_at_level(…, Level::LT { … })` ajoute après la signature une révision qui porte `/DSS` avec `/Certs`, `/CRLs` et `/OCSPs` ; DSS la déclare `TOTAL_PASSED` au niveau `PAdES-BASELINE-LT`.
 - [ ] `/DSS` couvre la chaîne du signataire et celle de la TSA, chacune avec sa donnée de révocation ; une entrée `/VRI` par signature est écrite.
 - [ ] Rien n'est ajouté dans le CMS : les données de révocation ne vivent que dans `/DSS`.
 - [ ] Un certificat dont la révocation ne peut être obtenue fait échouer le passage au niveau LT avec une erreur qui le nomme ; la signature B-T reste rendue à l'appelant.
@@ -211,7 +211,7 @@ C'est l'écart principal d'`ades-rs` : son « B-LT » rangeait la révocation da
 - **Owns**: `crates/nacre-pades/`
 
 ### Acceptance criteria
-- [ ] `sign` au niveau LTA ajoute une révision `/DocTimeStamp` (`/SubFilter /ETSI.RFC3161`) après `/DSS` ; DSS déclare le PDF `TOTAL_PASSED` au niveau `PAdES-BASELINE-LTA`.
+- [ ] `sign_at_level(…, Level::LTA { … })` ajoute une révision `/DocTimeStamp` (`/SubFilter /ETSI.RFC3161`) après `/DSS` ; DSS déclare le PDF `TOTAL_PASSED` au niveau `PAdES-BASELINE-LTA`.
 - [ ] `extend` sur un PDF déjà LTA ajoute un `/DSS` mis à jour (révocation de la TSA précédente), puis un nouvel horodatage de document ; DSS déclare toujours `PAdES-BASELINE-LTA`.
 - [ ] `extend` ne décide jamais quand il doit être appelé : c'est à l'appelant (brief, Domain model).
 - [ ] Les octets de chaque révision précédente sont intacts en préfixe du résultat.
