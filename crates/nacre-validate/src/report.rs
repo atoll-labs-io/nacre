@@ -1,6 +1,8 @@
 use nacre_core::{SubIndication, ValidationReport};
 use nacre_pdf::ObjectId;
 
+use crate::{CertificatePath, ChainDefect};
+
 /// The integrity verdict on one signature field.
 #[non_exhaustive]
 #[derive(Debug)]
@@ -17,6 +19,11 @@ pub struct SignatureValidation {
     /// Each revision appended after the one the signed bytes end at, oldest first; empty
     /// when the signed bytes end at no revision.
     pub later_revisions: Vec<LaterRevision>,
+    /// The valid certification path from the signer to a trust anchor, `None` when no
+    /// path was found or the signature failed before its chain was built. `Some` means the
+    /// path is valid at the control date, not that the signature passed: revocation is not
+    /// judged yet, so the report stays `INDETERMINATE` / `TRY_LATER`.
+    pub chain: Option<CertificatePath>,
 }
 
 /// One revision appended after a signature, and what it changes.
@@ -58,7 +65,8 @@ pub enum AllowedChange {
 }
 
 /// The first rule a signature broke. Every structural defect gives `TOTAL_FAILED` /
-/// `FORMAT_FAILURE`; a [`Defect::Cms`] gives the outcome of its CMS error.
+/// `FORMAT_FAILURE`; a [`Defect::Cms`] gives the outcome of its CMS error, a
+/// [`Defect::Chain`] that of its chain defect.
 #[non_exhaustive]
 #[derive(Debug)]
 pub enum Defect {
@@ -90,17 +98,31 @@ pub enum Defect {
     ContentsNotDer,
     /// The CMS `SignedData` is unreadable or does not verify.
     Cms(nacre_cms::Error),
+    /// A path reaches a trust anchor but breaks a rule of RFC 5280; judged last, once the
+    /// integrity and the later revisions passed. Its report is [`ChainDefect::report`].
+    Chain(ChainDefect),
 }
 
 impl SignatureValidation {
-    pub(crate) fn sound(field: String, later_revisions: Vec<LaterRevision>) -> Self {
+    /// A signature every check passed: `chain` is its valid path, `None` when no path
+    /// reaches an anchor.
+    pub(crate) fn sound(
+        field: String,
+        later_revisions: Vec<LaterRevision>,
+        chain: Option<CertificatePath>,
+    ) -> Self {
+        let sub = match chain {
+            Some(_) => SubIndication::TryLater,
+            None => SubIndication::NoCertificateChainFound,
+        };
         Self {
             field,
-            report: ValidationReport::indeterminate(SubIndication::NoCertificateChainFound, None),
+            report: ValidationReport::indeterminate(sub, None),
             digest_verified: true,
             signature_verified: true,
             defect: None,
             later_revisions,
+            chain,
         }
     }
 
@@ -119,6 +141,7 @@ impl SignatureValidation {
             Defect::RevisionNotAllowed { .. } | Defect::AddedByRevisionNotAllowed { .. } => {
                 (failed(), true, true)
             }
+            Defect::Chain(chain) => (chain.report(), true, true),
             _ => (failed(), false, false),
         };
         Self {
@@ -128,6 +151,7 @@ impl SignatureValidation {
             signature_verified,
             defect: Some(defect),
             later_revisions,
+            chain: None,
         }
     }
 }

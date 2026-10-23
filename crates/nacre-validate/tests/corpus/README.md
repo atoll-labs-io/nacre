@@ -60,3 +60,39 @@ Regenerate them from the repository root with:
 ```sh
 cargo run -p nacre-validate --example forge_pades_attacks -- crates/nacre-validate/tests/corpus/attacks
 ```
+
+## `chain/` and the chain attacks
+
+A fictitious PKI and the PDFs signed under it, read by `tests/chain.rs`, `tests/validate.rs`
+and `tests/attacks.rs` with `chain/root.der` as trust anchor at 2026-10-22. Every file is
+written by the cargo example `forge_chain_attacks`; its P-256 keys are fictitious and fixed
+in the example, the subjects are `O=Nacre tests,C=FR`, every certificate is valid from
+2026-01-01 to 2036-01-01 unless stated, every PDF is `unsigned.pdf` signed at
+2026-10-22T08:00:00Z, its CMS correct and carrying the chain named.
+
+| File | Content | SHA-256 |
+| --- | --- | --- |
+| `chain/root.der` | self-signed root `CN=Nacre chain root`, CA, `keyCertSign`, `cRLSign` | `a1192fb1bcdbb43d21d99805bd9040a3847bf9b65a988d267c93ff27653c9a71` |
+| `chain/intermediate.der` | `CN=Nacre chain intermediate`, issued by the root, CA, `keyCertSign`, `cRLSign` | `e2d6f541f734de8f17bc8bd0a5d12d4a0c56752fcd96f3cecb5685f3795b6cc0` |
+| `chain/leaf.der` | `CN=Nacre chain signer`, issued by the intermediate, not a CA, `digitalSignature`, `nonRepudiation` | `8577bf14a4b82d9a8a25e7842f8da998bc5f34755e0894c887f99aebcf9b46eb` |
+| `chain/impostor-root.der` | self-signed, the root's name, another key | `60537e32081f76ef20828332749aa6bf6f686f84f83b43ef58ab55c95ef2b0ba` |
+| `chain/chain-cms.pdf` | signed by the leaf, the CMS carrying the leaf and the intermediate | `4a51e92a3884d46473a69b01c1f99f46096ac4dc7a1864ce12dd65114e43e8a2` |
+| `chain/chain-dss.pdf` | signed by the leaf, the CMS carrying the leaf alone, then a revision adding a `/DSS` whose `/Certs` holds the intermediate, unfiltered | `a84bea31f37eb9c676dc6a302180934ffc515a3e34bcdde3f1234dc4d031abff` |
+| `chain/chain-cms-refused-revision.pdf` | `chain-cms.pdf`, then a revision setting a catalog `/OpenAction`, which no rule allows | `f9c6461d0111f8039d26f79115cd0b55fe756b713303f23ae61f02207259ab2b` |
+| `attacks/chain-impostor-root.pdf` | a leaf issued by the impostor root, the CMS carrying both | `848a03ed3aba7f9ec9e50a2224b7ba8469cbc966304f9a386f727fe6b9cab327` |
+| `attacks/chain-leaf-as-ca.pdf` | the leaf, under an intermediate of the same name and key issued by the root with `cA` false | `d93863ab748c08204e6c22d375c9db5c792163774ca18551617a4a44fab2ad7e` |
+| `attacks/chain-path-length.pdf` | root, then `CN=Nacre chain constrained CA` with `pathLenConstraint` 0, then `CN=Nacre chain second CA`, then a leaf | `a6f122b5c9723749dc049901cecabf5fcb068885fb7d5326a7b7b90ccc223e1a` |
+| `attacks/chain-expired.pdf` | a leaf valid until 2026-06-01, under the intermediate | `4a2e980bd30053eeac19efb45196fdcced5253e9395ad1340ff4cacb0bf8ca38` |
+| `attacks/chain-key-usage.pdf` | a leaf whose `keyUsage` is `keyCertSign` alone, under the intermediate | `8ef4df00549a7b807fa995d4da6588364f278dfdc96a6ca229e843d5ff2c3903` |
+| `attacks/chain-critical-extension.pdf` | the leaf, under an intermediate of the same name and key carrying a critical extension `1.3.6.1.4.1.32473.1` (the arc RFC 5612 reserves for documentation), its value `NULL` | `4aaf05cb6338148dc199237945a1039a0cc19ee8f8028ae9bc2f663a48b30a80` |
+| `attacks/chain-not-yet-valid.pdf` | a leaf valid from 2027-01-01, under the intermediate | `1df76f56382773f7d46a595fa76aa07dc2b1c4265b6310c367fb451f2f8ebff3` |
+| `attacks/chain-ca-key-usage.pdf` | the leaf, under an intermediate of the same name and key issued by the root, `cA` true, `keyUsage` `digitalSignature` alone | `159abae7a5870cf1619065de688adbc0a59cfe8f9910979497ed8c3d9b4b0df4` |
+| `attacks/chain-extended-key-usage.pdf` | a leaf with a non-critical `extendedKeyUsage` holding `serverAuth` alone, under the intermediate | `921920f158b7a9a70cc9e331313129176005558bf008ea3673f776760a4c3b87` |
+| `attacks/chain-malformed-extension.pdf` | a leaf carrying `keyUsage` twice, under the intermediate | `8dcb80dc0e42465478443c5932afeb11e941f1cdfc80776a12d0a865706db3c7` |
+| `attacks/chain-dss-junk.pdf` | `chain/chain-cms.pdf`, then a revision adding a `/DSS` whose `/Certs` lists 300 unfiltered streams, each a DER `SEQUENCE` of one `INTEGER` (0 to 299), none a certificate | `850e3ce3141326e8f57c9a0ab9289673e0d790af2126f665be0435189cf7569c` |
+
+Regenerate them from the repository root with:
+
+```sh
+cargo run -p nacre-validate --example forge_chain_attacks -- crates/nacre-validate/tests/corpus
+```

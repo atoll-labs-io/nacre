@@ -1,0 +1,187 @@
+# Finding 1 - certificates sharing the issuer's name and key identifier exhaust the search budget and hide a valid path
+# Scenario program: qa-scen, a scratch binary crate under the QA temp dir depending by path on crates/nacre-validate, nacre-pades and nacre-core of the copy; source quoted whole at the end.
+# Tree under test: 472f2f8a48d5661d65dfdf2b848d91dd56e30d69 (copy of git ls-files; cargo fetch: exit 0; cargo build --workspace --all-features: exit 0)
+# Bench PKI: conformance/pki/generate.sh run on the host (OpenSSL 3.6.5) inside the copy, out/ in the temp dir only; fresh keys.
+# Certificates are shown by the first 8 bytes of their SHA-256.
+# Every run below was replayed once with identical output.
+
+# decoys/dN.der: subject CN=QA CA (as ca.der), subjectKeyIdentifier copied from ca.der, cA true, keyCertSign, issued by root.der, each its own key; generation loop quoted below
+# pool: 0 decoys, then ca.der
+$ <tmp>/target-scen/debug/qa-scen build leaf-nr.der 2026-10-24 root.der ca.der   (stdin: none)
+path: 3 certificates, sha256 prefixes ["a2240fb583dae3ad", "f0e8892934e15d62", "329b7e08f613dfd5"]
+[exit code: 0]
+
+# pool: 62 decoys, then ca.der
+$ <tmp>/target-scen/debug/qa-scen build leaf-nr.der 2026-10-24 root.der decoys/d1.der decoys/d2.der decoys/d3.der decoys/d4.der decoys/d5.der decoys/d6.der decoys/d7.der decoys/d8.der decoys/d9.der decoys/d10.der decoys/d11.der decoys/d12.der decoys/d13.der decoys/d14.der decoys/d15.der decoys/d16.der decoys/d17.der decoys/d18.der decoys/d19.der decoys/d20.der decoys/d21.der decoys/d22.der decoys/d23.der decoys/d24.der decoys/d25.der decoys/d26.der decoys/d27.der decoys/d28.der decoys/d29.der decoys/d30.der decoys/d31.der decoys/d32.der decoys/d33.der decoys/d34.der decoys/d35.der decoys/d36.der decoys/d37.der decoys/d38.der decoys/d39.der decoys/d40.der decoys/d41.der decoys/d42.der decoys/d43.der decoys/d44.der decoys/d45.der decoys/d46.der decoys/d47.der decoys/d48.der decoys/d49.der decoys/d50.der decoys/d51.der decoys/d52.der decoys/d53.der decoys/d54.der decoys/d55.der decoys/d56.der decoys/d57.der decoys/d58.der decoys/d59.der decoys/d60.der decoys/d61.der decoys/d62.der ca.der   (stdin: none)
+path: 3 certificates, sha256 prefixes ["a2240fb583dae3ad", "f0e8892934e15d62", "329b7e08f613dfd5"]
+[exit code: 0]
+
+# pool: 63 decoys, then ca.der
+$ <tmp>/target-scen/debug/qa-scen build leaf-nr.der 2026-10-24 root.der decoys/d1.der decoys/d2.der decoys/d3.der decoys/d4.der decoys/d5.der decoys/d6.der decoys/d7.der decoys/d8.der decoys/d9.der decoys/d10.der decoys/d11.der decoys/d12.der decoys/d13.der decoys/d14.der decoys/d15.der decoys/d16.der decoys/d17.der decoys/d18.der decoys/d19.der decoys/d20.der decoys/d21.der decoys/d22.der decoys/d23.der decoys/d24.der decoys/d25.der decoys/d26.der decoys/d27.der decoys/d28.der decoys/d29.der decoys/d30.der decoys/d31.der decoys/d32.der decoys/d33.der decoys/d34.der decoys/d35.der decoys/d36.der decoys/d37.der decoys/d38.der decoys/d39.der decoys/d40.der decoys/d41.der decoys/d42.der decoys/d43.der decoys/d44.der decoys/d45.der decoys/d46.der decoys/d47.der decoys/d48.der decoys/d49.der decoys/d50.der decoys/d51.der decoys/d52.der decoys/d53.der decoys/d54.der decoys/d55.der decoys/d56.der decoys/d57.der decoys/d58.der decoys/d59.der decoys/d60.der decoys/d61.der decoys/d62.der decoys/d63.der ca.der   (stdin: none)
+defect: NoPath
+  report: INDETERMINATE / Some("NO_CERTIFICATE_CHAIN_FOUND") level None
+[exit code: 0]
+
+# pool: 70 decoys, then ca.der
+$ <tmp>/target-scen/debug/qa-scen build leaf-nr.der 2026-10-24 root.der decoys/d1.der decoys/d2.der decoys/d3.der decoys/d4.der decoys/d5.der decoys/d6.der decoys/d7.der decoys/d8.der decoys/d9.der decoys/d10.der decoys/d11.der decoys/d12.der decoys/d13.der decoys/d14.der decoys/d15.der decoys/d16.der decoys/d17.der decoys/d18.der decoys/d19.der decoys/d20.der decoys/d21.der decoys/d22.der decoys/d23.der decoys/d24.der decoys/d25.der decoys/d26.der decoys/d27.der decoys/d28.der decoys/d29.der decoys/d30.der decoys/d31.der decoys/d32.der decoys/d33.der decoys/d34.der decoys/d35.der decoys/d36.der decoys/d37.der decoys/d38.der decoys/d39.der decoys/d40.der decoys/d41.der decoys/d42.der decoys/d43.der decoys/d44.der decoys/d45.der decoys/d46.der decoys/d47.der decoys/d48.der decoys/d49.der decoys/d50.der decoys/d51.der decoys/d52.der decoys/d53.der decoys/d54.der decoys/d55.der decoys/d56.der decoys/d57.der decoys/d58.der decoys/d59.der decoys/d60.der decoys/d61.der decoys/d62.der decoys/d63.der decoys/d64.der decoys/d65.der decoys/d66.der decoys/d67.der decoys/d68.der decoys/d69.der decoys/d70.der ca.der   (stdin: none)
+defect: NoPath
+  report: INDETERMINATE / Some("NO_CERTIFICATE_CHAIN_FOUND") level None
+[exit code: 0]
+
+# pool: ca.der, then 70 decoys
+$ <tmp>/target-scen/debug/qa-scen build leaf-nr.der 2026-10-24 root.der ca.der decoys/d1.der decoys/d2.der decoys/d3.der decoys/d4.der decoys/d5.der decoys/d6.der decoys/d7.der decoys/d8.der decoys/d9.der decoys/d10.der decoys/d11.der decoys/d12.der decoys/d13.der decoys/d14.der decoys/d15.der decoys/d16.der decoys/d17.der decoys/d18.der decoys/d19.der decoys/d20.der decoys/d21.der decoys/d22.der decoys/d23.der decoys/d24.der decoys/d25.der decoys/d26.der decoys/d27.der decoys/d28.der decoys/d29.der decoys/d30.der decoys/d31.der decoys/d32.der decoys/d33.der decoys/d34.der decoys/d35.der decoys/d36.der decoys/d37.der decoys/d38.der decoys/d39.der decoys/d40.der decoys/d41.der decoys/d42.der decoys/d43.der decoys/d44.der decoys/d45.der decoys/d46.der decoys/d47.der decoys/d48.der decoys/d49.der decoys/d50.der decoys/d51.der decoys/d52.der decoys/d53.der decoys/d54.der decoys/d55.der decoys/d56.der decoys/d57.der decoys/d58.der decoys/d59.der decoys/d60.der decoys/d61.der decoys/d62.der decoys/d63.der decoys/d64.der decoys/d65.der decoys/d66.der decoys/d67.der decoys/d68.der decoys/d69.der decoys/d70.der   (stdin: none)
+path: 3 certificates, sha256 prefixes ["a2240fb583dae3ad", "f0e8892934e15d62", "329b7e08f613dfd5"]
+[exit code: 0]
+
+# --- decoy generation ---
+SKI=$(openssl x509 -in ca.pem -noout -ext subjectKeyIdentifier | tail -1 | tr -d ' ')
+for i in $(seq 1 70); do
+  openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out decoys/d$i.key
+  openssl req -new -key decoys/d$i.key -subj "/CN=QA CA" -out decoys/d$i.csr
+  printf 'basicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign\nsubjectKeyIdentifier=%s\n' "$SKI" > decoys/d$i.ext
+  openssl x509 -req -in decoys/d$i.csr -CA root.pem -CAkey root.key -set_serial $((5000+i)) -days 1000 -sha256 -extfile decoys/d$i.ext -outform DER -out decoys/d$i.der
+done
+# --- forge.sh (root, ca, leaf-nr) ---
+set -eu
+k(){ openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out $1.key 2>/dev/null; }
+ext(){ printf '%s\n' "$2" > $1.ext; }
+# root
+k root; openssl req -x509 -new -key root.key -subj "/CN=QA Root" -days 3650 -sha256 \
+  -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign" -out root.pem 2>/dev/null
+issue(){ # name subject issuer extensions
+  k $1; openssl req -new -key $1.key -subj "/CN=$2" -out $1.csr 2>/dev/null; ext $1 "$4"
+  openssl x509 -req -in $1.csr -CA $3.pem -CAkey $3.key -set_serial 0x$(openssl rand -hex 8) -days 1000 -sha256 -extfile $1.ext -out $1.pem 2>/dev/null; }
+issue ca "QA CA" root "basicConstraints=critical,CA:TRUE
+keyUsage=critical,keyCertSign"
+issue ca-nokcs "QA CA no keyCertSign" root "basicConstraints=critical,CA:TRUE
+keyUsage=critical,digitalSignature"
+issue ca-nobc "QA CA no basicConstraints" root "keyUsage=critical,keyCertSign"
+issue leaf-nr "QA leaf nonRepudiation only" ca "basicConstraints=CA:FALSE
+keyUsage=critical,nonRepudiation"
+issue leaf-ke "QA leaf keyEncipherment only" ca "basicConstraints=CA:FALSE
+keyUsage=critical,keyEncipherment"
+issue leaf-noku "QA leaf no keyUsage" ca "basicConstraints=CA:FALSE"
+issue leaf-under-nokcs "QA leaf under CA without keyCertSign" ca-nokcs "basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature"
+issue leaf-under-nobc "QA leaf under CA without basicConstraints" ca-nobc "basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature"
+issue leaf-nc "QA leaf critical nameConstraints" ca "basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature
+nameConstraints=critical,permitted;DNS:example.org"
+for f in *.pem; do openssl x509 -in $f -outform DER -out ${f%.pem}.der; done
+
+# --- qa-scen source (Cargo.toml then src/main.rs) ---
+[package]
+name = "qa-scen"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+nacre-validate = { path = "../copy/crates/nacre-validate" }
+nacre-pades = { path = "../copy/crates/nacre-pades" }
+nacre-core = { path = "../copy/crates/nacre-core" }
+der = { version = "0.8", features = ["alloc", "oid", "pem"] }
+x509-cert = "0.3"
+p256 = { version = "0.14", features = ["ecdsa", "pkcs8", "pem"] }
+sha2 = "0.11"
+
+// QA scenario program for s16-validate-chain: calls the public API of nacre-validate.
+// Usage:
+//   qa-scen validate <pdf>
+//   qa-scen anchors <pdf> <date YYYY-MM-DD> <anchor-file>...        (anchor files raw bytes, DER expected)
+//   qa-scen build <signer-file> <date YYYY-MM-DD> <anchor-file|-> [pool-file...]
+//   qa-scen bench-sign <pki-dir> <unsigned.pdf> <out.pdf> [leaf-only]
+use std::time::SystemTime;
+use nacre_core::{SignatureAlgorithm, Signer};
+use nacre_validate::{TrustAnchors, build_chain, validate, validate_with_anchors};
+use p256::ecdsa::signature::hazmat::PrehashSigner;
+use p256::ecdsa::{DerSignature, SigningKey};
+use p256::pkcs8::DecodePrivateKey;
+use sha2::{Digest, Sha256};
+
+fn h(b: &[u8]) -> String { Sha256::digest(b).iter().take(8).map(|x| format!("{x:02x}")).collect() }
+
+fn date(s: &str) -> SystemTime {
+    let p: Vec<u16> = s.split('-').map(|x| x.parse().expect("date YYYY-MM-DD")).collect();
+    x509_cert::time::Time::from(der::DateTime::new(p[0], p[1] as u8, p[2] as u8, 0, 0, 0).expect("valid date")).to_system_time()
+}
+
+fn read(p: &str) -> Vec<u8> { std::fs::read(p).unwrap_or_else(|e| { eprintln!("cannot read {p}: {e}"); std::process::exit(2) }) }
+
+fn pem_cert(dir: &str, name: &str) -> Vec<u8> {
+    let pem = std::fs::read_to_string(format!("{dir}/{name}")).expect("pem");
+    der::pem::decode_vec(pem.as_bytes()).expect("pem decode").1
+}
+
+fn print(results: Result<Vec<nacre_validate::SignatureValidation>, nacre_validate::Error>) -> i32 {
+    match results {
+        Err(e) => { println!("error: {e}"); println!("  debug: {e:?}"); println!("  kind: {:?}", e.kind()); 1 }
+        Ok(rs) => {
+            println!("signatures: {}", rs.len());
+            for r in rs {
+                println!("- field {:?}", r.field);
+                println!("  indication: {} / {:?}", r.report.indication().as_str(), r.report.sub_indication().map(|s| s.as_str()));
+                println!("  digest_verified={} signature_verified={}", r.digest_verified, r.signature_verified);
+                println!("  defect: {:?}", r.defect);
+                match &r.chain {
+                    None => println!("  chain: None"),
+                    Some(c) => println!("  chain: {} certificates, sha256 prefixes {:?}", c.certificates.len(), c.certificates.iter().map(|x| h(x)).collect::<Vec<_>>()),
+                }
+                println!("  later_revisions: {}", r.later_revisions.len());
+            }
+            0
+        }
+    }
+}
+
+struct Bench { key: SigningKey, chain: Vec<Vec<u8>> }
+impl Signer for Bench {
+    fn algorithm(&self) -> SignatureAlgorithm { SignatureAlgorithm::EcdsaP256Sha256 }
+    fn certificate_chain(&self) -> &[Vec<u8>] { &self.chain }
+    fn sign_digest(&self, d: &[u8]) -> Result<Vec<u8>, nacre_core::Error> {
+        let s: DerSignature = self.key.sign_prehash(d).map_err(|e| nacre_core::Error::Signer(Box::new(e)))?;
+        Ok(s.as_bytes().to_vec())
+    }
+}
+
+fn main() {
+    let a: Vec<String> = std::env::args().collect();
+    let code = match a.get(1).map(String::as_str) {
+        Some("validate") => print(validate(&read(&a[2]))),
+        Some("anchors") => {
+            let bytes: Vec<Vec<u8>> = a[4..].iter().map(|p| read(p)).collect();
+            match TrustAnchors::from_certificates(bytes.iter().map(Vec::as_slice)) {
+                Err(e) => { println!("anchors error: {e}"); println!("  debug: {e:?}"); println!("  kind: {:?}", e.kind()); 1 }
+                Ok(an) => print(validate_with_anchors(&read(&a[2]), &an, date(&a[3]))),
+            }
+        }
+        Some("build") => {
+            let signer = read(&a[2]);
+            let an = if a[4] == "-" { TrustAnchors::default() } else {
+                let b = read(&a[4]);
+                match TrustAnchors::from_certificates([b.as_slice()]) { Ok(x) => x, Err(e) => { println!("anchors error: {e} kind {:?}", e.kind()); std::process::exit(1) } }
+            };
+            let pool: Vec<Vec<u8>> = a[5..].iter().map(|p| read(p)).collect();
+            let refs: Vec<&[u8]> = pool.iter().map(Vec::as_slice).collect();
+            match build_chain(&signer, &refs, &an, date(&a[3])) {
+                Ok(p) => { println!("path: {} certificates, sha256 prefixes {:?}", p.certificates.len(), p.certificates.iter().map(|x| h(x)).collect::<Vec<_>>()); 0 }
+                Err(d) => { let r = d.report(); println!("defect: {d:?}"); println!("  report: {} / {:?} level {:?}", r.indication().as_str(), r.sub_indication().map(|s| s.as_str()), r.level()); 0 }
+            }
+        }
+        Some("bench-sign") => {
+            let dir = &a[2];
+            let key = SigningKey::from_pkcs8_pem(&std::fs::read_to_string(format!("{dir}/signer.key.pem")).expect("key")).expect("key parse");
+            let mut chain = vec![pem_cert(dir, "signer.cert.pem")];
+            if a.get(5).map(String::as_str) != Some("leaf-only") { chain.push(pem_cert(dir, "intermediate.cert.pem")); }
+            let pdf = nacre_pades::sign(&read(&a[3]), &Bench { key, chain }, nacre_pades::DateTime::new(2026, 10, 22, 8, 0, 0).expect("dt")).expect("sign");
+            std::fs::write(&a[4], pdf).expect("write");
+            println!("signed {} with the bench signer", a[4]); 0
+        }
+        Some("pem2der") => { std::fs::write(&a[3], pem_cert(&a[2].rsplit_once('/').unwrap().0, a[2].rsplit_once('/').unwrap().1)).unwrap(); 0 }
+        _ => { eprintln!("unknown subcommand"); 2 }
+    };
+    std::process::exit(code);
+}

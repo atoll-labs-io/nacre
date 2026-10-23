@@ -9,7 +9,9 @@ use std::path::Path;
 
 use nacre_core::TestSigner;
 use nacre_pades::{DateTime, sign};
-use nacre_validate::validate;
+use std::time::SystemTime;
+
+use nacre_validate::{TrustAnchors, validate, validate_with_anchors};
 
 const STRIDE: usize = 97;
 
@@ -23,12 +25,21 @@ fn truncated_and_flipped_inputs_never_panic() {
         files.push(std::fs::read(entry.unwrap().path()).unwrap());
     }
 
+    let anchors =
+        TrustAnchors::from_certificates([&include_bytes!("corpus/chain/root.der")[..]]).unwrap();
+    let date: SystemTime =
+        x509_cert::time::Time::from(der::DateTime::new(2026, 10, 22, 0, 0, 0).unwrap())
+            .to_system_time();
+    let run = |pdf: &[u8]| {
+        let _ = validate(pdf);
+        let _ = validate_with_anchors(pdf, &anchors, date);
+    };
     for file in &files {
         for at in (0..file.len()).step_by(STRIDE) {
-            let _ = validate(&file[..at]);
+            run(&file[..at]);
             let mut flipped = file.clone();
             flipped[at] = 0xFF;
-            let _ = validate(&flipped);
+            run(&flipped);
         }
     }
 }
