@@ -1,0 +1,53 @@
+$ cd $QA_TMP/scratch && QA_PKI=$QA_TMP/pki QA_UNSIGNED=crates/nacre-pades/tests/corpus/unsigned.pdf qa-s11 unavailable
+stdin: (none)
+--- stdout+stderr
+[OCSP only: the TSA certificate has no OCSP URL] sign_at_level(pdf 744 bytes, signer chain ["signer.der", "root.der"], Level::LT { tsa, revocation, issuers: 0 item(s) })
+  source asked for C=FR,O=Nacre QA,CN=Nacre QA signer (issuer C=FR,O=Nacre QA,CN=Nacre QA root) -> Ocsp, 804 bytes
+  source asked for C=FR,O=Nacre QA,CN=Nacre QA TSA (issuer C=FR,O=Nacre QA,CN=Nacre QA root) -> Err: the revocation source failed
+  signer signed 1 time(s), TSA asked 1 time(s), revocation source asked 2 time(s): ["C=FR,O=Nacre QA,CN=Nacre QA signer", "C=FR,O=Nacre QA,CN=Nacre QA TSA"]
+  Err
+  Display: the B-T signature could not be raised to B-LT: no revocation data could be obtained for C=FR,O=Nacre QA,CN=Nacre QA TSA
+  caused by: no revocation data could be obtained for C=FR,O=Nacre QA,CN=Nacre QA TSA
+  caused by: the revocation source failed
+  caused by: no usable OCSP responder
+  kind(): Unavailable
+  Debug length 153 chars, contains %PDF: false
+  variant: LongTerm, source variant: Revocation
+  Debug of signed: SignedPdf { len: 37050 }
+  --- B-T file handed back (37050 bytes):
+  revisions: 2 (ends at [744, 37050]), file length 37050
+  signature 0 'Signature1': ByteRange [0, 919, 36473, 577], covers up to byte 37050 (a revision ends there: true), CMS verifies over ByteRange: true
+    /Contents 17776 bytes, CMS 2945 bytes, padding 14831 zero bytes
+    CMS certificates: ["C=FR,O=Nacre QA,CN=Nacre QA root", "C=FR,O=Nacre QA,CN=Nacre QA signer"]
+    CMS crls: 0
+    unsigned attributes: ["1.2.840.113549.1.9.16.2.14"]
+    signed attributes: ["1.2.840.113549.1.9.3", "1.2.840.113549.1.9.4", "1.2.840.113549.1.9.16.2.47"]
+    adbe-revocationInfoArchival (1.2.840.113583.1.1.8) present: false
+    SHA-1 of decoded /Contents (padding included): 3FCA0A8C23F7375EC14C664C2CA180A182E6826A
+    SHA-1 of CMS alone:                            CD2B572FF7CEE40A606A8A01861423041F97A94C
+  catalog /DSS: absent
+[CRL and OCSP servers given with the loopback policy off] sign_at_level(pdf 744 bytes, signer chain ["signer.der", "root.der"], Level::LT { tsa, revocation, issuers: 0 item(s) })
+  source asked for C=FR,O=Nacre QA,CN=Nacre QA signer (issuer C=FR,O=Nacre QA,CN=Nacre QA root) -> Err: the revocation source failed
+  signer signed 1 time(s), TSA asked 1 time(s), revocation source asked 1 time(s): ["C=FR,O=Nacre QA,CN=Nacre QA signer"]
+  Err
+  Display: the B-T signature could not be raised to B-LT: no revocation data could be obtained for C=FR,O=Nacre QA,CN=Nacre QA signer
+  caused by: no revocation data could be obtained for C=FR,O=Nacre QA,CN=Nacre QA signer
+  caused by: the revocation source failed
+  caused by: the revocation source address is not public
+  kind(): Unavailable
+  Debug length 157 chars, contains %PDF: false
+  variant: LongTerm, source variant: Revocation
+  Debug of signed: SignedPdf { len: 37050 }
+  --- B-T file handed back (37050 bytes):
+  revisions: 2 (ends at [744, 37050]), file length 37050
+  signature 0 'Signature1': ByteRange [0, 919, 36473, 577], covers up to byte 37050 (a revision ends there: true), CMS verifies over ByteRange: true
+    /Contents 17776 bytes, CMS 2944 bytes, padding 14832 zero bytes
+    CMS certificates: ["C=FR,O=Nacre QA,CN=Nacre QA root", "C=FR,O=Nacre QA,CN=Nacre QA signer"]
+    CMS crls: 0
+    unsigned attributes: ["1.2.840.113549.1.9.16.2.14"]
+    signed attributes: ["1.2.840.113549.1.9.3", "1.2.840.113549.1.9.4", "1.2.840.113549.1.9.16.2.47"]
+    adbe-revocationInfoArchival (1.2.840.113583.1.1.8) present: false
+    SHA-1 of decoded /Contents (padding included): 8DA7A36CEDE3A8C7381B3488E260B79E27FE4AEB
+    SHA-1 of CMS alone:                            0491E6BA0B9CC0292325A1D3681F20CB950322AE
+  catalog /DSS: absent
+--- exit code: 0

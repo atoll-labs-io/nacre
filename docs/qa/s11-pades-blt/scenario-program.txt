@@ -1,0 +1,365 @@
+Scenario program of the s11-pades-blt QA, quoted whole. Everything below ran under a mktemp -d directory ($QA_TMP), on a copy of the files git ls-files lists; nothing ran in the worktree.
+
+## Throwaway PKI and servers (openssl 3.6.5), started and stopped by this QA
+- root: self-signed P-256 'CN=Nacre QA root,O=Nacre QA,C=FR'; signer and TSA leaves issued by it with 'openssl ca' (ca.cnf below).
+- signer leaf: AIA OCSP http://127.0.0.1:18611/, CDP http://127.0.0.1:18612/root.crl. TSA leaf: EKU timeStamping (critical), CDP only, no AIA.
+- 'unrelated.der': a separate self-signed P-256 certificate 'CN=Unrelated CA,O=Elsewhere,C=FR'.
+- OCSP: setsid openssl ocsp -index index -port 18611 -rsigner root.pem -rkey root.key -CA root.pem -ndays 7 (openssl ocsp accepts no host, so it listened on 0.0.0.0:18611 while the walk ran).
+- CRL: setsid python3 -I -m http.server 18612 --bind 127.0.0.1 --directory www (www/root.crl from 'openssl ca -gencrl').
+- TSA: no server; the caller-written OpensslTsa below answers each request with 'openssl ts -reply -config ca.cnf'.
+- Private keys were generated under $QA_TMP/pki and removed with it; none is quoted here.
+
+## ca.cnf
+[ ca ]
+default_ca = qa_ca
+[ qa_ca ]
+dir = .
+new_certs_dir = ./newcerts
+database = ./index
+serial = ./serial
+crlnumber = ./crlnumber
+certificate = ./root.pem
+private_key = ./root.key
+default_md = sha256
+default_days = 3650
+default_crl_days = 3650
+policy = policy_any
+unique_subject = no
+copy_extensions = none
+[ policy_any ]
+commonName = supplied
+organizationName = optional
+countryName = optional
+[ v3_root ]
+basicConstraints = critical, CA:true
+keyUsage = critical, keyCertSign, cRLSign
+subjectKeyIdentifier = hash
+[ v3_signer ]
+basicConstraints = critical, CA:false
+keyUsage = critical, digitalSignature, nonRepudiation
+authorityInfoAccess = OCSP;URI:http://127.0.0.1:18611/
+crlDistributionPoints = URI:http://127.0.0.1:18612/root.crl
+authorityKeyIdentifier = keyid
+subjectKeyIdentifier = hash
+[ v3_tsa ]
+basicConstraints = critical, CA:false
+keyUsage = critical, digitalSignature
+extendedKeyUsage = critical, timeStamping
+crlDistributionPoints = URI:http://127.0.0.1:18612/root.crl
+authorityKeyIdentifier = keyid
+subjectKeyIdentifier = hash
+[ tsa ]
+default_tsa = tsa_config
+[ tsa_config ]
+serial = ./tsaserial
+signer_cert = ./tsa.pem
+certs = ./tsachain.pem
+signer_key = ./tsa.key
+signer_digest = sha256
+default_policy = 1.2.3.4.1
+digests = sha256
+accuracy = secs:1
+ordering = no
+tsa_name = no
+ess_cert_id_chain = no
+ess_cert_id_alg = sha256
+
+## run.sh
+#!/bin/sh
+# run.sh <mode>: one scenario transcript on stdout
+T=/tmp/qa-s11.3TzDcv
+export QA_PKI=$T/pki QA_SCRATCH=$T/scratch QA_UNSIGNED=$T/copy/crates/nacre-pades/tests/corpus/unsigned.pdf
+echo "\$ cd \$QA_TMP/scratch && QA_PKI=\$QA_TMP/pki QA_UNSIGNED=crates/nacre-pades/tests/corpus/unsigned.pdf qa-s11 $1"
+echo "stdin: (none)"
+echo "--- stdout+stderr"
+cd $T/scratch && $T/target/debug/qa-s11 "$1" 2>&1
+echo "--- exit code: $?"
+
+## Cargo.toml
+[package]
+name = "qa-s11"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+nacre-pades = { path = "../copy/crates/nacre-pades" }
+nacre-core = { path = "../copy/crates/nacre-core" }
+nacre-cms = { path = "../copy/crates/nacre-cms" }
+nacre-pdf = { path = "../copy/crates/nacre-pdf" }
+nacre-tsp = { path = "../copy/crates/nacre-tsp" }
+nacre-revocation = { path = "../copy/crates/nacre-revocation", features = ["http"] }
+p256 = { version = "0.14", features = ["ecdsa", "pkcs8", "pem"] }
+der = { version = "0.8", features = ["alloc", "pem"] }
+x509-cert = "0.3"
+sha1 = "0.11"
+sha2 = "0.11"
+
+## src/main.rs
+// QA scenarios for s11-pades-blt: calls the public interface of nacre-pades as a user would.
+use std::cell::{Cell, RefCell};
+use std::error::Error as _;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+
+use der::{Decode, Header, Reader, SliceReader};
+use nacre_cms::SignedData;
+use nacre_core::{DigestAlgorithm, RevocationData, RevocationSource, SignatureAlgorithm, Signer, TimestampAuthority};
+use nacre_pades::{DateTime, Error, Level, sign_at_level};
+use nacre_pdf::{Document, Object};
+use nacre_revocation::{Fallback, HttpCrlSource, HttpOcspSource};
+use p256::ecdsa::signature::hazmat::PrehashSigner;
+use p256::ecdsa::{DerSignature, SigningKey};
+use p256::pkcs8::DecodePrivateKey;
+use sha1::Digest as _;
+use sha2::{Digest, Sha256};
+use x509_cert::Certificate;
+
+fn pki() -> PathBuf { PathBuf::from(std::env::var("QA_PKI").unwrap()) }
+fn scratch() -> PathBuf { PathBuf::from(std::env::var("QA_SCRATCH").unwrap()) }
+fn der(name: &str) -> Vec<u8> { std::fs::read(pki().join(name)).unwrap() }
+
+struct PemSigner { key: SigningKey, chain: Vec<Vec<u8>>, calls: Cell<usize> }
+impl Signer for PemSigner {
+    fn algorithm(&self) -> SignatureAlgorithm { SignatureAlgorithm::EcdsaP256Sha256 }
+    fn certificate_chain(&self) -> &[Vec<u8>] { &self.chain }
+    fn sign_digest(&self, d: &[u8]) -> Result<Vec<u8>, nacre_core::Error> {
+        self.calls.set(self.calls.get() + 1);
+        let s: DerSignature = self.key.sign_prehash(d).map_err(|e| nacre_core::Error::Signer(Box::new(e)))?;
+        Ok(s.as_bytes().to_vec())
+    }
+}
+fn signer(chain: &[&str]) -> PemSigner {
+    let pem = std::fs::read_to_string(pki().join("signer.key")).unwrap();
+    PemSigner { key: SigningKey::from_pkcs8_pem(&pem).unwrap(), chain: chain.iter().map(|n| der(n)).collect(), calls: Cell::new(0) }
+}
+
+/// A TSA that answers with `openssl ts -reply` over the request nacre-tsp builds.
+struct OpensslTsa { calls: Cell<usize> }
+impl TimestampAuthority for OpensslTsa {
+    fn timestamp(&self, alg: DigestAlgorithm, imprint: &[u8]) -> Result<Vec<u8>, nacre_core::Error> {
+        self.calls.set(self.calls.get() + 1);
+        let n = self.calls.get();
+        let req = nacre_tsp::Request::new(alg, imprint, &[0x42, n as u8]).unwrap().to_der().unwrap();
+        let q = scratch().join(format!("tsq-{n}-{}.der", std::process::id()));
+        let r = scratch().join(format!("tst-{n}-{}.der", std::process::id()));
+        std::fs::write(&q, req).unwrap();
+        let st = Command::new("openssl").current_dir(pki())
+            .args(["ts", "-reply", "-config", "ca.cnf", "-queryfile"]).arg(&q).arg("-token_out").arg("-out").arg(&r)
+            .output().unwrap();
+        assert!(st.status.success(), "{}", String::from_utf8_lossy(&st.stderr));
+        Ok(std::fs::read(&r).unwrap())
+    }
+}
+
+/// Wraps a real source and records each certificate asked about, by subject.
+struct Recording<'a> { inner: &'a dyn RevocationSource, asked: RefCell<Vec<String>> }
+impl RevocationSource for Recording<'_> {
+    fn revocation(&self, c: &[u8], i: &[u8]) -> Result<RevocationData, nacre_core::Error> {
+        self.asked.borrow_mut().push(subject(c));
+        let out = self.inner.revocation(c, i);
+        println!("  source asked for {} (issuer {}) -> {}", subject(c), subject(i), match &out {
+            Ok(RevocationData::Crl(b)) => format!("Crl, {} bytes", b.len()),
+            Ok(RevocationData::Ocsp(b)) => format!("Ocsp, {} bytes", b.len()),
+            Ok(_) => "other".into(),
+            Err(e) => format!("Err: {e}"),
+        });
+        out
+    }
+}
+/// A source that hands back whatever bytes it is given, without fetching.
+struct Garbage;
+impl RevocationSource for Garbage {
+    fn revocation(&self, _: &[u8], _: &[u8]) -> Result<RevocationData, nacre_core::Error> {
+        Ok(RevocationData::Crl(b"this is not a CRL".to_vec()))
+    }
+}
+
+fn subject(c: &[u8]) -> String {
+    Certificate::from_der(c).map(|c| c.tbs_certificate().subject().to_string()).unwrap_or_else(|_| "<not X.509>".into())
+}
+fn time() -> DateTime { DateTime::new(2026, 10, 23, 9, 0, 0).unwrap() }
+fn unsigned() -> Vec<u8> { std::fs::read(std::env::var("QA_UNSIGNED").unwrap()).unwrap() }
+fn http_source() -> Fallback<HttpOcspSource, HttpCrlSource> { Fallback::new(HttpOcspSource::allowing_loopback(), HttpCrlSource::allowing_loopback()) }
+
+fn chain_of(e: &dyn std::error::Error) {
+    println!("  Display: {e}");
+    let mut s = e.source();
+    while let Some(c) = s { println!("  caused by: {c}"); s = c.source(); }
+}
+fn report_err(e: &Error) {
+    chain_of(e);
+    println!("  kind(): {:?}", e.kind());
+    let dbg = format!("{e:?}");
+    println!("  Debug length {} chars, contains %PDF: {}", dbg.len(), dbg.contains("%PDF") || dbg.contains("37, 80, 68, 70"));
+    if let Error::LongTerm { signed, source } = e {
+        println!("  variant: LongTerm, source variant: {}", variant(source));
+        println!("  Debug of signed: {:?}", signed);
+        println!("  --- B-T file handed back ({} bytes):", signed.0.len());
+        inspect(&signed.0);
+    } else {
+        println!("  variant: {}", variant(e));
+    }
+}
+fn variant(e: &Error) -> &'static str {
+    match e {
+        Error::Revocation { .. } => "Revocation", Error::IssuerMissing { .. } => "IssuerMissing",
+        Error::RevocationUnsupported { .. } => "RevocationUnsupported", Error::Certificate(_) => "Certificate",
+        Error::LongTerm { .. } => "LongTerm", Error::Pdf(_) => "Pdf", Error::Cms(_) => "Cms",
+        Error::Timestamp(_) => "Timestamp", _ => "other",
+    }
+}
+
+fn hex(b: &[u8]) -> String { b.iter().map(|x| format!("{x:02X}")).collect() }
+
+/// Prints what a reader of `pdf` finds: revisions, signatures, CMS content, /DSS.
+fn inspect(pdf: &[u8]) {
+    let doc = Document::parse(pdf).unwrap();
+    let revs: Vec<usize> = doc.revisions().iter().map(|r| r.end).collect();
+    println!("  revisions: {} (ends at {:?}), file length {}", revs.len(), revs, pdf.len());
+    for (n, f) in doc.signature_fields().iter().enumerate() {
+        let Ok(Object::Dictionary(sig)) = doc.object(f.value.unwrap()) else { panic!() };
+        let Some(Object::Array(br)) = sig.get(b"ByteRange") else { panic!() };
+        let br: Vec<usize> = br.iter().map(|o| match o { Object::Integer(i) => *i as usize, _ => 0 }).collect();
+        let Some(Object::String(contents)) = sig.get(b"Contents") else { panic!() };
+        let mut r = SliceReader::new(contents).unwrap();
+        let h = Header::decode(&mut r).unwrap();
+        let len = usize::try_from((r.position() + h.length()).unwrap()).unwrap();
+        let cms_der = &contents[..len];
+        let cms = SignedData::from_der(cms_der).unwrap();
+        let mut hs = Sha256::new();
+        hs.update(&pdf[br[0]..br[0] + br[1]]); hs.update(&pdf[br[2]..br[2] + br[3]]);
+        let ok = cms.verify_detached_digest(&hs.finalize()).is_ok();
+        let end = br[2] + br[3];
+        let rev_ends_here = revs.contains(&end);
+        println!("  signature {n} '{}': ByteRange {:?}, covers up to byte {end} (a revision ends there: {rev_ends_here}), CMS verifies over ByteRange: {ok}", f.name, br);
+        println!("    /Contents {} bytes, CMS {} bytes, padding {} zero bytes", contents.len(), len, contents.len() - len);
+        println!("    CMS certificates: {:?}", cms.certificates.iter().map(|c| subject(c)).collect::<Vec<_>>());
+        println!("    CMS crls: {}", cms.crls.len());
+        let si = &cms.signer_infos[0];
+        println!("    unsigned attributes: {:?}", si.unsigned_attrs.iter().map(|a| a.oid.to_string()).collect::<Vec<_>>());
+        let signed_oids: Vec<String> = si.signed_attrs.as_ref().unwrap().attributes().unwrap().iter().map(|a| a.oid.to_string()).collect();
+        println!("    signed attributes: {:?}", signed_oids);
+        println!("    adbe-revocationInfoArchival (1.2.840.113583.1.1.8) present: {}", signed_oids.iter().any(|o| o == "1.2.840.113583.1.1.8"));
+        let mut s1 = sha1::Sha1::new(); s1.update(contents);
+        println!("    SHA-1 of decoded /Contents (padding included): {}", hex(&s1.finalize()));
+        let mut s2 = sha1::Sha1::new(); s2.update(cms_der);
+        println!("    SHA-1 of CMS alone:                            {}", hex(&s2.finalize()));
+    }
+    let Some(dss) = doc.catalog().get(b"DSS") else { println!("  catalog /DSS: absent"); return; };
+    let dss_id = match dss { Object::Reference(id) => *id, _ => panic!("direct /DSS") };
+    let Ok(Object::Dictionary(dss)) = doc.object(dss_id) else { panic!() };
+    let dss_rev = revs.iter().position(|e| (dss_id.number as usize) > 0 && *e >= 0).unwrap_or(0);
+    let _ = dss_rev;
+    println!("  catalog /DSS: {dss_id}, keys {:?}", dss.iter().map(|(k, _)| String::from_utf8_lossy(k).into_owned()).collect::<Vec<_>>());
+    let stream = |o: &Object| -> (String, Vec<u8>) {
+        let Object::Reference(id) = o else { panic!("direct item") };
+        let Ok(Object::Stream(s)) = doc.object(*id) else { panic!("not a stream") };
+        (id.to_string(), pdf[s.data.clone()].to_vec())
+    };
+    for key in [&b"Certs"[..], b"CRLs", b"OCSPs"] {
+        let items = match dss.get(key) { Some(Object::Array(a)) => a.clone(), None => vec![], Some(_) => panic!() };
+        println!("  /{}: {} stream(s)", String::from_utf8_lossy(key), items.len());
+        for it in &items {
+            let (id, bytes) = stream(it);
+            let what = match key {
+                b"Certs" => subject(&bytes),
+                b"CRLs" => describe(&bytes, &["crl", "-inform", "DER", "-noout", "-issuer", "-lastupdate"]),
+                _ => describe(&bytes, &["ocsp", "-respin", "/dev/stdin", "-resp_text", "-noverify"]),
+            };
+            println!("    {id}: {} bytes, SHA-256 {}: {what}", bytes.len(), &hex(&Sha256::digest(&bytes))[..16]);
+        }
+    }
+    if let Some(Object::Dictionary(vri)) = dss.get(b"VRI") {
+        println!("  /VRI: {} key(s)", vri.len());
+        for (k, v) in vri.iter() {
+            let Object::Reference(id) = v else { panic!() };
+            let Ok(Object::Dictionary(e)) = doc.object(*id) else { panic!() };
+            let entries: Vec<String> = e.iter().map(|(k, v)| format!("/{}={}", String::from_utf8_lossy(k), match v {
+                Object::Array(a) => format!("[{}]", a.iter().map(|x| match x { Object::Reference(r) => r.to_string(), _ => "?".into() }).collect::<Vec<_>>().join(", ")),
+                Object::Name(n) => format!("/{}", String::from_utf8_lossy(n)), _ => "?".into() })).collect();
+            println!("    /{} -> {id}: {}", String::from_utf8_lossy(k), entries.join(" "));
+        }
+    } else { println!("  /VRI: absent"); }
+}
+
+fn describe(bytes: &[u8], args: &[&str]) -> String {
+    use std::io::Write;
+    let mut c = Command::new("openssl").args(args).stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped()).spawn().unwrap();
+    c.stdin.take().unwrap().write_all(bytes).unwrap();
+    let o = c.wait_with_output().unwrap();
+    let text = String::from_utf8_lossy(&o.stdout);
+    if !o.status.success() { return format!("openssl refuses it: {}", String::from_utf8_lossy(&o.stderr).lines().next().unwrap_or("")); }
+    let keep: Vec<&str> = text.lines().map(str::trim).filter(|l| l.starts_with("issuer=") || l.starts_with("lastUpdate=") || l.starts_with("Cert Status") || l.starts_with("Responder Id") || l.starts_with("OCSP Response Status") || l.starts_with("Serial Number")).collect();
+    keep.join("; ")
+}
+
+fn save(name: &str, bytes: &[u8]) -> PathBuf {
+    let p = scratch().join(name); std::fs::write(&p, bytes).unwrap();
+    println!("  written to scratch file {}", p.file_name().unwrap().to_string_lossy()); p
+}
+
+fn run_lt(label: &str, pdf: &[u8], chain: &[&str], issuers: &[Vec<u8>], src: &dyn RevocationSource) -> Option<Vec<u8>> {
+    let s = signer(chain);
+    let tsa = OpensslTsa { calls: Cell::new(0) };
+    let rec = Recording { inner: src, asked: RefCell::new(vec![]) };
+    println!("[{label}] sign_at_level(pdf {} bytes, signer chain {:?}, Level::LT {{ tsa, revocation, issuers: {} item(s) }})", pdf.len(), chain, issuers.len());
+    let out = sign_at_level(pdf, &s, time(), Level::LT { tsa: &tsa, revocation: &rec, issuers });
+    println!("  signer signed {} time(s), TSA asked {} time(s), revocation source asked {} time(s): {:?}", s.calls.get(), tsa.calls.get(), rec.asked.borrow().len(), rec.asked.borrow());
+    match out {
+        Ok(pdf) => { println!("  Ok: {} bytes", pdf.len()); inspect(&pdf); Some(pdf) }
+        Err(e) => { println!("  Err"); report_err(&e); None }
+    }
+}
+
+fn main() {
+    let mode = std::env::args().nth(1).unwrap();
+    let pdf = unsigned();
+    let src = http_source();
+    match mode.as_str() {
+        "lt" => {
+            println!("--- the unsigned input:"); inspect(&pdf);
+            println!("--- B-T of the same input, for comparison:");
+            let s = signer(&["signer.der", "root.der"]); let tsa = OpensslTsa { calls: Cell::new(0) };
+            let bt = sign_at_level(&pdf, &s, time(), Level::T { tsa: &tsa }).unwrap(); inspect(&bt);
+            println!("--- B-LT:");
+            let lt = run_lt("LT", &pdf, &["signer.der", "root.der"], &[], &src).unwrap();
+            println!("  output starts with the unsigned input: {}", lt.starts_with(&pdf));
+            save("lt.pdf", &lt);
+        }
+        "lt-invalid" => {
+            run_lt("not a PDF", b"hello, not a pdf", &["signer.der", "root.der"], &[], &src);
+            let mut cut = pdf.clone(); cut.truncate(pdf.len() / 2);
+            run_lt("truncated PDF", &cut, &["signer.der", "root.der"], &[], &src);
+        }
+        "coverage" => {
+            let one = run_lt("signer chain without the root, root given in issuers", &pdf, &["signer.der"], &[der("root.der")], &src).unwrap();
+            let lt = std::fs::read(scratch().join("lt.pdf")).unwrap();
+            let two = run_lt("a second LT signature on the LT file of scenario lt", &lt, &["signer.der", "root.der"], &[], &src).unwrap();
+            println!("  second output starts with the first LT file: {}", two.starts_with(&lt));
+            save("lt-one.pdf", &one); save("lt-two.pdf", &two);
+        }
+        "coverage-invalid" => {
+            run_lt("signer chain without the root, issuers empty", &pdf, &["signer.der"], &[], &src);
+            run_lt("issuers holds bytes that are not a certificate", &pdf, &["signer.der", "root.der"], &[b"not a certificate".to_vec()], &src);
+            run_lt("issuers holds an unrelated certificate", &pdf, &["signer.der"], &[der("unrelated.der")], &src);
+        }
+        "cms" => {
+            let lt = std::fs::read(scratch().join("lt.pdf")).unwrap();
+            println!("[LT file of scenario lt, re-read]"); inspect(&lt);
+        }
+        "cms-invalid" => {
+            run_lt("a revocation source that returns bytes that are not a CRL", &pdf, &["signer.der", "root.der"], &[], &Garbage);
+        }
+        "unavailable" => {
+            run_lt("OCSP only: the TSA certificate has no OCSP URL", &pdf, &["signer.der", "root.der"], &[], &HttpOcspSource::allowing_loopback());
+            run_lt("CRL and OCSP servers given with the loopback policy off", &pdf, &["signer.der", "root.der"], &[], &Fallback::new(HttpOcspSource::new(), HttpCrlSource::new()));
+        }
+        "unavailable-servers-down" => {
+            run_lt("both servers stopped", &pdf, &["signer.der", "root.der"], &[], &src);
+        }
+        _ => panic!("unknown mode"),
+    }
+}

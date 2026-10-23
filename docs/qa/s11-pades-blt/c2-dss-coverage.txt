@@ -1,0 +1,150 @@
+$ cd $QA_TMP/scratch && QA_PKI=$QA_TMP/pki QA_UNSIGNED=crates/nacre-pades/tests/corpus/unsigned.pdf qa-s11 coverage
+stdin: (none)
+--- stdout+stderr
+[signer chain without the root, root given in issuers] sign_at_level(pdf 744 bytes, signer chain ["signer.der"], Level::LT { tsa, revocation, issuers: 1 item(s) })
+  source asked for C=FR,O=Nacre QA,CN=Nacre QA signer (issuer C=FR,O=Nacre QA,CN=Nacre QA root) -> Ocsp, 805 bytes
+  source asked for C=FR,O=Nacre QA,CN=Nacre QA TSA (issuer C=FR,O=Nacre QA,CN=Nacre QA root) -> Crl, 209 bytes
+  signer signed 1 time(s), TSA asked 1 time(s), revocation source asked 2 time(s): ["C=FR,O=Nacre QA,CN=Nacre QA signer", "C=FR,O=Nacre QA,CN=Nacre QA TSA"]
+  Ok: 39521 bytes
+  revisions: 3 (ends at [744, 36170, 39521]), file length 39521
+  signature 0 'Signature1': ByteRange [0, 919, 35593, 577], covers up to byte 36170 (a revision ends there: true), CMS verifies over ByteRange: true
+    /Contents 17336 bytes, CMS 2503 bytes, padding 14833 zero bytes
+    CMS certificates: ["C=FR,O=Nacre QA,CN=Nacre QA signer"]
+    CMS crls: 0
+    unsigned attributes: ["1.2.840.113549.1.9.16.2.14"]
+    signed attributes: ["1.2.840.113549.1.9.3", "1.2.840.113549.1.9.4", "1.2.840.113549.1.9.16.2.47"]
+    adbe-revocationInfoArchival (1.2.840.113583.1.1.8) present: false
+    SHA-1 of decoded /Contents (padding included): 4198CDD8042EE03117BA99EEDD9B72C49850F0E1
+    SHA-1 of CMS alone:                            157130EBF3A96D94DCE841A502A827A91DEE44AB
+  catalog /DSS: 15 0 R, keys ["Certs", "CRLs", "OCSPs", "VRI"]
+  /Certs: 3 stream(s)
+    9 0 R: 560 bytes, SHA-256 8B415A1E0B98ECE3: C=FR,O=Nacre QA,CN=Nacre QA signer
+    10 0 R: 527 bytes, SHA-256 3A1936BEF27A95FA: C=FR,O=Nacre QA,CN=Nacre QA TSA
+    11 0 R: 440 bytes, SHA-256 E8234E9BE4E6448F: C=FR,O=Nacre QA,CN=Nacre QA root
+  /CRLs: 1 stream(s)
+    12 0 R: 209 bytes, SHA-256 BB6A336177E4827B: issuer=CN=Nacre QA root, O=Nacre QA, C=FR; lastUpdate=Oct 23 10:22:29 2026 GMT
+  /OCSPs: 1 stream(s)
+    13 0 R: 805 bytes, SHA-256 A2D1745FBC7B5BDE: OCSP Response Status: successful (0x0); Responder Id: CN = Nacre QA root, O = Nacre QA, C = FR; Serial Number: 1000; Cert Status: good; Serial Number:
+  /VRI: 1 key(s)
+    /4198CDD8042EE03117BA99EEDD9B72C49850F0E1 -> 14 0 R: /Type=/VRI /Cert=[9 0 R, 10 0 R, 11 0 R] /CRL=[12 0 R] /OCSP=[13 0 R]
+[a second LT signature on the LT file of scenario lt] sign_at_level(pdf 40400 bytes, signer chain ["signer.der", "root.der"], Level::LT { tsa, revocation, issuers: 0 item(s) })
+  source asked for C=FR,O=Nacre QA,CN=Nacre QA signer (issuer C=FR,O=Nacre QA,CN=Nacre QA root) -> Ocsp, 805 bytes
+  source asked for C=FR,O=Nacre QA,CN=Nacre QA TSA (issuer C=FR,O=Nacre QA,CN=Nacre QA root) -> Crl, 209 bytes
+  signer signed 1 time(s), TSA asked 1 time(s), revocation source asked 2 time(s): ["C=FR,O=Nacre QA,CN=Nacre QA signer", "C=FR,O=Nacre QA,CN=Nacre QA TSA"]
+  Ok: 80080 bytes
+  revisions: 5 (ends at [744, 37050, 40400, 76642, 80080]), file length 80080
+  signature 0 'Signature1': ByteRange [0, 919, 36473, 577], covers up to byte 37050 (a revision ends there: true), CMS verifies over ByteRange: true
+    /Contents 17776 bytes, CMS 2944 bytes, padding 14832 zero bytes
+    CMS certificates: ["C=FR,O=Nacre QA,CN=Nacre QA root", "C=FR,O=Nacre QA,CN=Nacre QA signer"]
+    CMS crls: 0
+    unsigned attributes: ["1.2.840.113549.1.9.16.2.14"]
+    signed attributes: ["1.2.840.113549.1.9.3", "1.2.840.113549.1.9.4", "1.2.840.113549.1.9.16.2.47"]
+    adbe-revocationInfoArchival (1.2.840.113583.1.1.8) present: false
+    SHA-1 of decoded /Contents (padding included): 7F06F33A7E3999724675FFA4663DE616E9DCF10B
+    SHA-1 of CMS alone:                            0BA15B7B384371E2CDAD24209825A2D5942C5E94
+  signature 1 'Signature2': ByteRange [0, 40576, 76130, 512], covers up to byte 76642 (a revision ends there: true), CMS verifies over ByteRange: true
+    /Contents 17776 bytes, CMS 2943 bytes, padding 14833 zero bytes
+    CMS certificates: ["C=FR,O=Nacre QA,CN=Nacre QA root", "C=FR,O=Nacre QA,CN=Nacre QA signer"]
+    CMS crls: 0
+    unsigned attributes: ["1.2.840.113549.1.9.16.2.14"]
+    signed attributes: ["1.2.840.113549.1.9.3", "1.2.840.113549.1.9.4", "1.2.840.113549.1.9.16.2.47"]
+    adbe-revocationInfoArchival (1.2.840.113583.1.1.8) present: false
+    SHA-1 of decoded /Contents (padding included): BE465A3C9144131624AF6FE5BCACA95D3DDBD376
+    SHA-1 of CMS alone:                            F26644B79B9C29D759BBA6EB1B290218984BC274
+  catalog /DSS: 24 0 R, keys ["Certs", "CRLs", "OCSPs", "VRI"]
+  /Certs: 6 stream(s)
+    9 0 R: 560 bytes, SHA-256 8B415A1E0B98ECE3: C=FR,O=Nacre QA,CN=Nacre QA signer
+    10 0 R: 440 bytes, SHA-256 E8234E9BE4E6448F: C=FR,O=Nacre QA,CN=Nacre QA root
+    11 0 R: 527 bytes, SHA-256 3A1936BEF27A95FA: C=FR,O=Nacre QA,CN=Nacre QA TSA
+    18 0 R: 560 bytes, SHA-256 8B415A1E0B98ECE3: C=FR,O=Nacre QA,CN=Nacre QA signer
+    19 0 R: 440 bytes, SHA-256 E8234E9BE4E6448F: C=FR,O=Nacre QA,CN=Nacre QA root
+    20 0 R: 527 bytes, SHA-256 3A1936BEF27A95FA: C=FR,O=Nacre QA,CN=Nacre QA TSA
+  /CRLs: 2 stream(s)
+    12 0 R: 209 bytes, SHA-256 BB6A336177E4827B: issuer=CN=Nacre QA root, O=Nacre QA, C=FR; lastUpdate=Oct 23 10:22:29 2026 GMT
+    21 0 R: 209 bytes, SHA-256 BB6A336177E4827B: issuer=CN=Nacre QA root, O=Nacre QA, C=FR; lastUpdate=Oct 23 10:22:29 2026 GMT
+  /OCSPs: 2 stream(s)
+    13 0 R: 804 bytes, SHA-256 5EB9EA07DF602878: OCSP Response Status: successful (0x0); Responder Id: CN = Nacre QA root, O = Nacre QA, C = FR; Serial Number: 1000; Cert Status: good; Serial Number:
+    22 0 R: 805 bytes, SHA-256 755F54C589B86A0C: OCSP Response Status: successful (0x0); Responder Id: CN = Nacre QA root, O = Nacre QA, C = FR; Serial Number: 1000; Cert Status: good; Serial Number:
+  /VRI: 2 key(s)
+    /7F06F33A7E3999724675FFA4663DE616E9DCF10B -> 14 0 R: /Type=/VRI /Cert=[9 0 R, 10 0 R, 11 0 R] /CRL=[12 0 R] /OCSP=[13 0 R]
+    /BE465A3C9144131624AF6FE5BCACA95D3DDBD376 -> 23 0 R: /Type=/VRI /Cert=[18 0 R, 19 0 R, 20 0 R] /CRL=[21 0 R] /OCSP=[22 0 R]
+  second output starts with the first LT file: true
+  written to scratch file lt-one.pdf
+  written to scratch file lt-two.pdf
+--- exit code: 0
+
+=== replay of the same scenario
+$ cd $QA_TMP/scratch && QA_PKI=$QA_TMP/pki QA_UNSIGNED=crates/nacre-pades/tests/corpus/unsigned.pdf qa-s11 coverage
+stdin: (none)
+--- stdout+stderr
+[signer chain without the root, root given in issuers] sign_at_level(pdf 744 bytes, signer chain ["signer.der"], Level::LT { tsa, revocation, issuers: 1 item(s) })
+  source asked for C=FR,O=Nacre QA,CN=Nacre QA signer (issuer C=FR,O=Nacre QA,CN=Nacre QA root) -> Ocsp, 804 bytes
+  source asked for C=FR,O=Nacre QA,CN=Nacre QA TSA (issuer C=FR,O=Nacre QA,CN=Nacre QA root) -> Crl, 209 bytes
+  signer signed 1 time(s), TSA asked 1 time(s), revocation source asked 2 time(s): ["C=FR,O=Nacre QA,CN=Nacre QA signer", "C=FR,O=Nacre QA,CN=Nacre QA TSA"]
+  Ok: 39520 bytes
+  revisions: 3 (ends at [744, 36170, 39520]), file length 39520
+  signature 0 'Signature1': ByteRange [0, 919, 35593, 577], covers up to byte 36170 (a revision ends there: true), CMS verifies over ByteRange: true
+    /Contents 17336 bytes, CMS 2504 bytes, padding 14832 zero bytes
+    CMS certificates: ["C=FR,O=Nacre QA,CN=Nacre QA signer"]
+    CMS crls: 0
+    unsigned attributes: ["1.2.840.113549.1.9.16.2.14"]
+    signed attributes: ["1.2.840.113549.1.9.3", "1.2.840.113549.1.9.4", "1.2.840.113549.1.9.16.2.47"]
+    adbe-revocationInfoArchival (1.2.840.113583.1.1.8) present: false
+    SHA-1 of decoded /Contents (padding included): D64B648EFA2AA00EFFE1C759345E42AF131453EA
+    SHA-1 of CMS alone:                            3883A10EC1BD26BCB87726378E6AAE3791CCD678
+  catalog /DSS: 15 0 R, keys ["Certs", "CRLs", "OCSPs", "VRI"]
+  /Certs: 3 stream(s)
+    9 0 R: 560 bytes, SHA-256 8B415A1E0B98ECE3: C=FR,O=Nacre QA,CN=Nacre QA signer
+    10 0 R: 527 bytes, SHA-256 3A1936BEF27A95FA: C=FR,O=Nacre QA,CN=Nacre QA TSA
+    11 0 R: 440 bytes, SHA-256 E8234E9BE4E6448F: C=FR,O=Nacre QA,CN=Nacre QA root
+  /CRLs: 1 stream(s)
+    12 0 R: 209 bytes, SHA-256 BB6A336177E4827B: issuer=CN=Nacre QA root, O=Nacre QA, C=FR; lastUpdate=Oct 23 10:22:29 2026 GMT
+  /OCSPs: 1 stream(s)
+    13 0 R: 804 bytes, SHA-256 8FD69C4D7C2A3780: OCSP Response Status: successful (0x0); Responder Id: CN = Nacre QA root, O = Nacre QA, C = FR; Serial Number: 1000; Cert Status: good; Serial Number:
+  /VRI: 1 key(s)
+    /D64B648EFA2AA00EFFE1C759345E42AF131453EA -> 14 0 R: /Type=/VRI /Cert=[9 0 R, 10 0 R, 11 0 R] /CRL=[12 0 R] /OCSP=[13 0 R]
+[a second LT signature on the LT file of scenario lt] sign_at_level(pdf 40400 bytes, signer chain ["signer.der", "root.der"], Level::LT { tsa, revocation, issuers: 0 item(s) })
+  source asked for C=FR,O=Nacre QA,CN=Nacre QA signer (issuer C=FR,O=Nacre QA,CN=Nacre QA root) -> Ocsp, 804 bytes
+  source asked for C=FR,O=Nacre QA,CN=Nacre QA TSA (issuer C=FR,O=Nacre QA,CN=Nacre QA root) -> Crl, 209 bytes
+  signer signed 1 time(s), TSA asked 1 time(s), revocation source asked 2 time(s): ["C=FR,O=Nacre QA,CN=Nacre QA signer", "C=FR,O=Nacre QA,CN=Nacre QA TSA"]
+  Ok: 80079 bytes
+  revisions: 5 (ends at [744, 37050, 40400, 76642, 80079]), file length 80079
+  signature 0 'Signature1': ByteRange [0, 919, 36473, 577], covers up to byte 37050 (a revision ends there: true), CMS verifies over ByteRange: true
+    /Contents 17776 bytes, CMS 2944 bytes, padding 14832 zero bytes
+    CMS certificates: ["C=FR,O=Nacre QA,CN=Nacre QA root", "C=FR,O=Nacre QA,CN=Nacre QA signer"]
+    CMS crls: 0
+    unsigned attributes: ["1.2.840.113549.1.9.16.2.14"]
+    signed attributes: ["1.2.840.113549.1.9.3", "1.2.840.113549.1.9.4", "1.2.840.113549.1.9.16.2.47"]
+    adbe-revocationInfoArchival (1.2.840.113583.1.1.8) present: false
+    SHA-1 of decoded /Contents (padding included): 7F06F33A7E3999724675FFA4663DE616E9DCF10B
+    SHA-1 of CMS alone:                            0BA15B7B384371E2CDAD24209825A2D5942C5E94
+  signature 1 'Signature2': ByteRange [0, 40576, 76130, 512], covers up to byte 76642 (a revision ends there: true), CMS verifies over ByteRange: true
+    /Contents 17776 bytes, CMS 2944 bytes, padding 14832 zero bytes
+    CMS certificates: ["C=FR,O=Nacre QA,CN=Nacre QA root", "C=FR,O=Nacre QA,CN=Nacre QA signer"]
+    CMS crls: 0
+    unsigned attributes: ["1.2.840.113549.1.9.16.2.14"]
+    signed attributes: ["1.2.840.113549.1.9.3", "1.2.840.113549.1.9.4", "1.2.840.113549.1.9.16.2.47"]
+    adbe-revocationInfoArchival (1.2.840.113583.1.1.8) present: false
+    SHA-1 of decoded /Contents (padding included): 9CC13560F0413980B546218A9D47BDACDF67E66C
+    SHA-1 of CMS alone:                            1FFA41C8C0BC89FD04A2667DDC4B33CE5E20EA84
+  catalog /DSS: 24 0 R, keys ["Certs", "CRLs", "OCSPs", "VRI"]
+  /Certs: 6 stream(s)
+    9 0 R: 560 bytes, SHA-256 8B415A1E0B98ECE3: C=FR,O=Nacre QA,CN=Nacre QA signer
+    10 0 R: 440 bytes, SHA-256 E8234E9BE4E6448F: C=FR,O=Nacre QA,CN=Nacre QA root
+    11 0 R: 527 bytes, SHA-256 3A1936BEF27A95FA: C=FR,O=Nacre QA,CN=Nacre QA TSA
+    18 0 R: 560 bytes, SHA-256 8B415A1E0B98ECE3: C=FR,O=Nacre QA,CN=Nacre QA signer
+    19 0 R: 440 bytes, SHA-256 E8234E9BE4E6448F: C=FR,O=Nacre QA,CN=Nacre QA root
+    20 0 R: 527 bytes, SHA-256 3A1936BEF27A95FA: C=FR,O=Nacre QA,CN=Nacre QA TSA
+  /CRLs: 2 stream(s)
+    12 0 R: 209 bytes, SHA-256 BB6A336177E4827B: issuer=CN=Nacre QA root, O=Nacre QA, C=FR; lastUpdate=Oct 23 10:22:29 2026 GMT
+    21 0 R: 209 bytes, SHA-256 BB6A336177E4827B: issuer=CN=Nacre QA root, O=Nacre QA, C=FR; lastUpdate=Oct 23 10:22:29 2026 GMT
+  /OCSPs: 2 stream(s)
+    13 0 R: 804 bytes, SHA-256 5EB9EA07DF602878: OCSP Response Status: successful (0x0); Responder Id: CN = Nacre QA root, O = Nacre QA, C = FR; Serial Number: 1000; Cert Status: good; Serial Number:
+    22 0 R: 804 bytes, SHA-256 6F9B75EB84C2E9C0: OCSP Response Status: successful (0x0); Responder Id: CN = Nacre QA root, O = Nacre QA, C = FR; Serial Number: 1000; Cert Status: good; Serial Number:
+  /VRI: 2 key(s)
+    /7F06F33A7E3999724675FFA4663DE616E9DCF10B -> 14 0 R: /Type=/VRI /Cert=[9 0 R, 10 0 R, 11 0 R] /CRL=[12 0 R] /OCSP=[13 0 R]
+    /9CC13560F0413980B546218A9D47BDACDF67E66C -> 23 0 R: /Type=/VRI /Cert=[18 0 R, 19 0 R, 20 0 R] /CRL=[21 0 R] /OCSP=[22 0 R]
+  second output starts with the first LT file: true
+  written to scratch file lt-one.pdf
+  written to scratch file lt-two.pdf
+--- exit code: 0

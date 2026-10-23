@@ -13,8 +13,9 @@ mod support;
 use nacre_conformance::{Dss, reports_dir};
 use nacre_core::Indication;
 use nacre_pades::{DateTime, Level, sign, sign_at_level};
+use nacre_revocation::{Fallback, HttpCrlSource, HttpOcspSource};
 use nacre_tsp::HttpTsa;
-use support::BenchSigner;
+use support::{BenchSigner, bench_certificate};
 
 const UNSIGNED: &[u8] = include_bytes!("corpus/unsigned.pdf");
 
@@ -93,5 +94,41 @@ fn bench_signature_is_pades_baseline_t() {
     assert_eq!(verdict.report.indication(), Indication::TotalPassed);
     assert_eq!(verdict.report.sub_indication(), None);
     assert_eq!(verdict.format, "PAdES-BASELINE-T");
+    assert!(report.is_file());
+}
+
+#[test]
+#[ignore = "conformance"]
+fn bench_signature_is_pades_baseline_lt() {
+    let report = reports_dir().join("s11-pades-lt.xml");
+    let _ = std::fs::remove_file(&report);
+    let tsa = HttpTsa::new("http://127.0.0.1:18081/cgi-bin/tsa");
+    let revocation = Fallback::new(
+        HttpOcspSource::allowing_loopback(),
+        HttpCrlSource::allowing_loopback(),
+    );
+    let issuers = [bench_certificate("root.cert.pem")];
+    let signed = sign_at_level(
+        UNSIGNED,
+        &BenchSigner::load(),
+        time(),
+        Level::LT {
+            tsa: &tsa,
+            revocation: &revocation,
+            issuers: &issuers,
+        },
+    )
+    .unwrap();
+
+    let reports = Dss::from_env()
+        .unwrap()
+        .validate("s11-pades-lt", &signed)
+        .unwrap();
+
+    assert_eq!(reports.signatures.len(), 1);
+    let verdict = &reports.signatures[0];
+    assert_eq!(verdict.report.indication(), Indication::TotalPassed);
+    assert_eq!(verdict.report.sub_indication(), None);
+    assert_eq!(verdict.format, "PAdES-BASELINE-LT");
     assert!(report.is_file());
 }

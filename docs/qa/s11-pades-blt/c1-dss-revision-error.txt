@@ -1,0 +1,20 @@
+$ cd $QA_TMP/scratch && QA_PKI=$QA_TMP/pki QA_UNSIGNED=crates/nacre-pades/tests/corpus/unsigned.pdf qa-s11 lt-invalid
+stdin: (none)
+--- stdout+stderr
+[not a PDF] sign_at_level(pdf 16 bytes, signer chain ["signer.der", "root.der"], Level::LT { tsa, revocation, issuers: 0 item(s) })
+  signer signed 0 time(s), TSA asked 0 time(s), revocation source asked 0 time(s): []
+  Err
+  Display: PDF: the input does not start with %PDF-
+  caused by: the input does not start with %PDF-
+  kind(): InvalidInput
+  Debug length 18 chars, contains %PDF: false
+  variant: Pdf
+[truncated PDF] sign_at_level(pdf 372 bytes, signer chain ["signer.der", "root.der"], Level::LT { tsa, revocation, issuers: 0 item(s) })
+  signer signed 0 time(s), TSA asked 0 time(s), revocation source asked 0 time(s): []
+  Err
+  Display: PDF: no startxref statement in the last 1024 bytes
+  caused by: no startxref statement in the last 1024 bytes
+  kind(): InvalidInput
+  Debug length 21 chars, contains %PDF: false
+  variant: Pdf
+--- exit code: 0

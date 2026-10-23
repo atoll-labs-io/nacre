@@ -2,7 +2,7 @@
 //! PAdES (ETSI EN 319 142-1) for Nacre. **Experimental**: not yet fuzzed at length nor
 //! cross-checked against a reference implementation.
 //!
-//! [`sign`] signs a PDF at PAdES-BASELINE-B and [`sign_at_level`] at B-B or B-T: it appends one
+//! [`sign`] signs a PDF at PAdES-BASELINE-B and [`sign_at_level`] at B-B, B-T or B-LT: it appends one
 //! incremental revision holding an invisible signature field whose `/Sig` dictionary has
 //! `/SubFilter /ETSI.CAdES.detached` and the signing time in `/M`, and whose `/Contents`
 //! holds a detached CMS carrying `signingCertificateV2` and never `signingTime`.
@@ -11,15 +11,21 @@
 //! `id-aa-signatureTimeStampToken` of the `SignerInfo` and time-stamps the signature value.
 //! The authority is reached only through `TimestampAuthority`.
 //!
+//! At B-LT a further revision adds a `/DSS` dictionary holding the certificates of the
+//! signer's chain and of the timestamp token, their CRLs and OCSP responses, and a `/VRI`
+//! entry for the signature. Revocation data is obtained only through `RevocationSource`.
+//!
 //! Revocation data never goes into the CMS. The signing time is the caller's: this crate
 //! reads no clock.
 
+mod dss;
 mod error;
+mod ltv;
 mod reserve;
 mod sign;
 mod timestamp;
 
 pub use der::DateTime;
-pub use error::Error;
+pub use error::{Error, SignedPdf};
 pub use sign::{Level, sign, sign_at_level};
 pub use timestamp::TIMESTAMP_TOKEN_MAX;

@@ -18,15 +18,18 @@ impl BenchSigner {
         let key = SigningKey::from_pkcs8_pem(&read(&dir, "signer.key.pem")).unwrap();
         let chain = ["signer.cert.pem", "intermediate.cert.pem"]
             .iter()
-            .map(|name| {
-                let pem = read(&dir, name);
-                let (label, der) = der::pem::decode_vec(pem.as_bytes()).unwrap();
-                assert_eq!(label, "CERTIFICATE");
-                der
-            })
+            .map(|name| bench_certificate(name))
             .collect();
         Self { key, chain }
     }
+}
+
+/// The DER of the bench certificate `name`, read from its PEM file in the bench's PKI.
+pub fn bench_certificate(name: &str) -> Vec<u8> {
+    let pem = read(&nacre_conformance::pki_dir(), name);
+    let (label, der) = der::pem::decode_vec(pem.as_bytes()).unwrap();
+    assert_eq!(label, "CERTIFICATE");
+    der
 }
 
 fn read(dir: &Path, name: &str) -> String {

@@ -1,0 +1,32 @@
+$ cd $QA_TMP/scratch && QA_PKI=$QA_TMP/pki QA_UNSIGNED=crates/nacre-pades/tests/corpus/unsigned.pdf qa-s11 unavailable-servers-down
+stdin: (none)
+--- stdout+stderr
+[both servers stopped] sign_at_level(pdf 744 bytes, signer chain ["signer.der", "root.der"], Level::LT { tsa, revocation, issuers: 0 item(s) })
+  source asked for C=FR,O=Nacre QA,CN=Nacre QA signer (issuer C=FR,O=Nacre QA,CN=Nacre QA root) -> Err: the revocation source failed
+  signer signed 1 time(s), TSA asked 1 time(s), revocation source asked 1 time(s): ["C=FR,O=Nacre QA,CN=Nacre QA signer"]
+  Err
+  Display: the B-T signature could not be raised to B-LT: no revocation data could be obtained for C=FR,O=Nacre QA,CN=Nacre QA signer
+  caused by: no revocation data could be obtained for C=FR,O=Nacre QA,CN=Nacre QA signer
+  caused by: the revocation source failed
+  caused by: the revocation download failed
+  caused by: io: Connection refused (os error 111)
+  kind(): Unavailable
+  Debug length 223 chars, contains %PDF: false
+  variant: LongTerm, source variant: Revocation
+  Debug of signed: SignedPdf { len: 37050 }
+  --- B-T file handed back (37050 bytes):
+  revisions: 2 (ends at [744, 37050]), file length 37050
+  signature 0 'Signature1': ByteRange [0, 919, 36473, 577], covers up to byte 37050 (a revision ends there: true), CMS verifies over ByteRange: true
+    /Contents 17776 bytes, CMS 2944 bytes, padding 14832 zero bytes
+    CMS certificates: ["C=FR,O=Nacre QA,CN=Nacre QA root", "C=FR,O=Nacre QA,CN=Nacre QA signer"]
+    CMS crls: 0
+    unsigned attributes: ["1.2.840.113549.1.9.16.2.14"]
+    signed attributes: ["1.2.840.113549.1.9.3", "1.2.840.113549.1.9.4", "1.2.840.113549.1.9.16.2.47"]
+    adbe-revocationInfoArchival (1.2.840.113583.1.1.8) present: false
+    SHA-1 of decoded /Contents (padding included): 5BEB1602C863351BFB7644667A7EBA8AC1C39989
+    SHA-1 of CMS alone:                            FA8DA66AF54797022A963478C3039C71CED6E2FF
+  catalog /DSS: absent
+--- exit code: 0
+
+$ ss -ltn | grep -E ":1861[12] "
+(nothing listening: both servers this QA started are stopped)

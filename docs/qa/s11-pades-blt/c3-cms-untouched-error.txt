@@ -1,0 +1,60 @@
+$ cd $QA_TMP/scratch && QA_PKI=$QA_TMP/pki QA_UNSIGNED=crates/nacre-pades/tests/corpus/unsigned.pdf qa-s11 cms-invalid
+stdin: (none)
+--- stdout+stderr
+[a revocation source that returns bytes that are not a CRL] sign_at_level(pdf 744 bytes, signer chain ["signer.der", "root.der"], Level::LT { tsa, revocation, issuers: 0 item(s) })
+  source asked for C=FR,O=Nacre QA,CN=Nacre QA signer (issuer C=FR,O=Nacre QA,CN=Nacre QA root) -> Crl, 17 bytes
+  source asked for C=FR,O=Nacre QA,CN=Nacre QA TSA (issuer C=FR,O=Nacre QA,CN=Nacre QA root) -> Crl, 17 bytes
+  signer signed 1 time(s), TSA asked 1 time(s), revocation source asked 2 time(s): ["C=FR,O=Nacre QA,CN=Nacre QA signer", "C=FR,O=Nacre QA,CN=Nacre QA TSA"]
+  Ok: 39300 bytes
+  revisions: 3 (ends at [744, 37050, 39300]), file length 39300
+  signature 0 'Signature1': ByteRange [0, 919, 36473, 577], covers up to byte 37050 (a revision ends there: true), CMS verifies over ByteRange: true
+    /Contents 17776 bytes, CMS 2943 bytes, padding 14833 zero bytes
+    CMS certificates: ["C=FR,O=Nacre QA,CN=Nacre QA root", "C=FR,O=Nacre QA,CN=Nacre QA signer"]
+    CMS crls: 0
+    unsigned attributes: ["1.2.840.113549.1.9.16.2.14"]
+    signed attributes: ["1.2.840.113549.1.9.3", "1.2.840.113549.1.9.4", "1.2.840.113549.1.9.16.2.47"]
+    adbe-revocationInfoArchival (1.2.840.113583.1.1.8) present: false
+    SHA-1 of decoded /Contents (padding included): E3B169053A79080616497241182758AC3894B871
+    SHA-1 of CMS alone:                            A63CF0CE108ECCEF030B0FAE0E7F26C971F1E329
+  catalog /DSS: 14 0 R, keys ["Certs", "CRLs", "VRI"]
+  /Certs: 3 stream(s)
+    9 0 R: 560 bytes, SHA-256 8B415A1E0B98ECE3: C=FR,O=Nacre QA,CN=Nacre QA signer
+    10 0 R: 440 bytes, SHA-256 E8234E9BE4E6448F: C=FR,O=Nacre QA,CN=Nacre QA root
+    11 0 R: 527 bytes, SHA-256 3A1936BEF27A95FA: C=FR,O=Nacre QA,CN=Nacre QA TSA
+  /CRLs: 1 stream(s)
+    12 0 R: 17 bytes, SHA-256 7E654233D9EA48E3: openssl refuses it: Could not find CRL from <stdin>
+  /OCSPs: 0 stream(s)
+  /VRI: 1 key(s)
+    /E3B169053A79080616497241182758AC3894B871 -> 13 0 R: /Type=/VRI /Cert=[9 0 R, 10 0 R, 11 0 R] /CRL=[12 0 R]
+--- exit code: 0
+
+=== replay of the same scenario
+$ cd $QA_TMP/scratch && QA_PKI=$QA_TMP/pki QA_UNSIGNED=crates/nacre-pades/tests/corpus/unsigned.pdf qa-s11 cms-invalid
+stdin: (none)
+--- stdout+stderr
+[a revocation source that returns bytes that are not a CRL] sign_at_level(pdf 744 bytes, signer chain ["signer.der", "root.der"], Level::LT { tsa, revocation, issuers: 0 item(s) })
+  source asked for C=FR,O=Nacre QA,CN=Nacre QA signer (issuer C=FR,O=Nacre QA,CN=Nacre QA root) -> Crl, 17 bytes
+  source asked for C=FR,O=Nacre QA,CN=Nacre QA TSA (issuer C=FR,O=Nacre QA,CN=Nacre QA root) -> Crl, 17 bytes
+  signer signed 1 time(s), TSA asked 1 time(s), revocation source asked 2 time(s): ["C=FR,O=Nacre QA,CN=Nacre QA signer", "C=FR,O=Nacre QA,CN=Nacre QA TSA"]
+  Ok: 39300 bytes
+  revisions: 3 (ends at [744, 37050, 39300]), file length 39300
+  signature 0 'Signature1': ByteRange [0, 919, 36473, 577], covers up to byte 37050 (a revision ends there: true), CMS verifies over ByteRange: true
+    /Contents 17776 bytes, CMS 2943 bytes, padding 14833 zero bytes
+    CMS certificates: ["C=FR,O=Nacre QA,CN=Nacre QA root", "C=FR,O=Nacre QA,CN=Nacre QA signer"]
+    CMS crls: 0
+    unsigned attributes: ["1.2.840.113549.1.9.16.2.14"]
+    signed attributes: ["1.2.840.113549.1.9.3", "1.2.840.113549.1.9.4", "1.2.840.113549.1.9.16.2.47"]
+    adbe-revocationInfoArchival (1.2.840.113583.1.1.8) present: false
+    SHA-1 of decoded /Contents (padding included): 20A2E8D2939794022FD7BDD4D1BA5B8CDB007B8A
+    SHA-1 of CMS alone:                            F4345EFD695AA782B99738FD2E4767DABF649F12
+  catalog /DSS: 14 0 R, keys ["Certs", "CRLs", "VRI"]
+  /Certs: 3 stream(s)
+    9 0 R: 560 bytes, SHA-256 8B415A1E0B98ECE3: C=FR,O=Nacre QA,CN=Nacre QA signer
+    10 0 R: 440 bytes, SHA-256 E8234E9BE4E6448F: C=FR,O=Nacre QA,CN=Nacre QA root
+    11 0 R: 527 bytes, SHA-256 3A1936BEF27A95FA: C=FR,O=Nacre QA,CN=Nacre QA TSA
+  /CRLs: 1 stream(s)
+    12 0 R: 17 bytes, SHA-256 7E654233D9EA48E3: openssl refuses it: Could not find CRL from <stdin>
+  /OCSPs: 0 stream(s)
+  /VRI: 1 key(s)
+    /20A2E8D2939794022FD7BDD4D1BA5B8CDB007B8A -> 13 0 R: /Type=/VRI /Cert=[9 0 R, 10 0 R, 11 0 R] /CRL=[12 0 R]
+--- exit code: 0
