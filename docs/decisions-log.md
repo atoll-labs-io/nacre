@@ -67,3 +67,8 @@ A decision the person took is not logged here: it is an ADR or a story.
 | 2026-10-23 | s12-pades-blta | Widened Owns with `conformance/pki/`, `conformance/check.sh`, `conformance/README.md` and re-forked the lane | Criterion 5 needs a second bench TSA; po-bounds reads Owns at the fork point; no running lane owns `conformance/` |
 | 2026-10-23 | s11-pades-blt | Reworded criterion 1 with `issuers` | The s11 plan's corrected criterion |
 | 2026-10-23 | — | Closed or labelled the misfiled s02/s07 issues through octo; kept #65 open | The person delegated it; #65's input is the local DSS only |
+| 2026-10-23 | s12-pades-blta | Started fix run 1 although the review allowed the ship | Its major: `extend` returned `Ok` without storing the previous TSA's data |
+| 2026-10-23 | s12-pades-blta | Shipped after loop 1 despite a fail-closed interop major, then held the merge when CI's conformance job failed | Majors do not block; a failed ship goes back to a fix run |
+| 2026-10-23 | s12-pades-blta | Fix run 2 on the CI failure: root cause first | Concurrent `openssl ts -reply` calls raced on the bench TSA's serial file; fixed with `flock`, proven by parallel requests and a green CI run |
+| 2026-10-23 | s11-pades-blt | Filed #95–#99, held one finding mentioning "token" | Keyword filter of the ship script |
+| 2026-10-23 | s12-pades-blta | Held every finding for the person | The security lens ran on the bench CGI scripts |
