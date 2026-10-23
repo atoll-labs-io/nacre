@@ -667,12 +667,13 @@ Story contrat (ADR-0012) : `nacre-core` est gelé après s01 et ne change que pa
 - **Complexity**: 2
 - **Depends on**: s07-tsp-client, s09-revocation-crl, s38-error-kind
 - **Surface**: `endpoint`
-- **Owns**: `crates/nacre-core/`, `crates/nacre-tsp/src/`, `crates/nacre-revocation/src/`
+- **Owns**: `crates/nacre-core/`, `crates/nacre-tsp/src/`, `crates/nacre-tsp/tests/http.rs`, `crates/nacre-revocation/src/`, `crates/nacre-revocation/tests/http.rs`, `crates/nacre-cms/src/error.rs`, `crates/nacre-pades/src/error.rs`, `crates/nacre-pades/tests/`
 
 ### Acceptance criteria
 - [ ] `nacre_core::Error::Timestamp` et `nacre_core::Error::Revocation` portent un `ErrorKind` fixé par la source, `Unavailable` par défaut, et `kind()` le rend.
 - [ ] `HttpTsa` : un jeton forgé ou rejoué rend `InvalidSignature` ; une empreinte de mauvaise longueur rend `InvalidInput` ; une TSA injoignable rend `Unavailable`.
-- [ ] `HttpCrlSource` : une CRL invalide rend `InvalidSignature` ou `InvalidInput` selon la cause ; une adresse refusée (SSRF) rend `InvalidInput` ; un serveur injoignable rend `Unavailable`.
+- [ ] `HttpCrlSource` : une CRL mal formée rend `InvalidInput` ; une adresse refusée (SSRF) rend `InvalidInput` ; un serveur injoignable rend `Unavailable`. La source ne juge pas la signature de la CRL, la validation (s17) le fait.
+- [ ] `HttpOcspSource` : une réponse rejouée (nonce différent) rend `InvalidSignature` ; une adresse refusée rend `InvalidInput`.
 - [ ] Un test par cas, sur un serveur local.
 
 ### Notes for the agent

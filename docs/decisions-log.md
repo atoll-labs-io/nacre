@@ -72,3 +72,5 @@ A decision the person took is not logged here: it is an ADR or a story.
 | 2026-10-23 | s12-pades-blta | Fix run 2 on the CI failure: root cause first | Concurrent `openssl ts -reply` calls raced on the bench TSA's serial file; fixed with `flock`, proven by parallel requests and a green CI run |
 | 2026-10-23 | s11-pades-blt | Filed #95–#99, held one finding mentioning "token" | Keyword filter of the ship script |
 | 2026-10-23 | s12-pades-blta | Held every finding for the person | The security lens ran on the bench CGI scripts |
+| 2026-10-23 | s39-error-kind-from-sources | Widened Owns and reworded the CRL criterion, added the OCSP one; re-forked the lane | ADR-0020 option 1 (chosen by the person) breaks callers in nacre-pades, nacre-cms and two test harnesses; `HttpCrlSource` never verifies a CRL signature |
+| 2026-10-23 | s39-error-kind-from-sources | Kept "the source does not judge the CRL signature; s17 does" | The person answered the ADR only; this is the plan's default and fails no caller |
