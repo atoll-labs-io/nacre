@@ -228,6 +228,17 @@ fn signing_a_certified_p3_document_is_allowed() {
 }
 
 #[test]
+fn certified_visible_field_signed_is_allowed() {
+    let results = validate(include_bytes!("corpus/certified-visible-field-signed.pdf")).unwrap();
+
+    allowed(
+        of(&results, "Certification"),
+        &[&[AllowedChange::Signature]],
+    );
+    allowed(of(&results, "Approver"), &[]);
+}
+
+#[test]
 fn certified_form_fill_is_allowed() {
     let results = validate(include_bytes!("corpus/certified-form-fill.pdf")).unwrap();
 

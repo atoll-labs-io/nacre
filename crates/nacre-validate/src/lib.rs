@@ -12,8 +12,9 @@
 //! comparing the objects reachable before and after it: a `/DSS`, a document timestamp, a
 //! new signature, or a form fill the DocMDP and FieldMDP permissions allow. Any other
 //! change fails the signature with [`Defect::RevisionNotAllowed`]. A signature its own
-//! revision refuses as a signature (a visible new signature on a certified document, or one
-//! under DocMDP 1) fails with [`Defect::AddedByRevisionNotAllowed`].
+//! revision refuses as a signature (on a certified document, one whose field shows a widget
+//! the certified state did not place at the same rectangle, or one under DocMDP 1) fails
+//! with [`Defect::AddedByRevisionNotAllowed`].
 //!
 //! The certificate chain, revocation and the level are not judged yet, so a sound
 //! signature ends `INDETERMINATE` / `NO_CERTIFICATE_CHAIN_FOUND`, never `TOTAL_PASSED`.
