@@ -1,11 +1,25 @@
 use der::DateTime;
 use nacre_cms::Profile;
-use nacre_core::Signer;
+use nacre_core::{Signer, TimestampAuthority};
 use nacre_pdf::{Dictionary, Document, Object, SignatureSpec};
 use sha2::{Digest, Sha256};
 
 use crate::Error;
 use crate::reserve::contents_capacity;
+use crate::timestamp::timestamp_signature;
+
+/// The level a signature is made at.
+#[non_exhaustive]
+pub enum Level<'a> {
+    /// PAdES-BASELINE-B: no timestamp.
+    B,
+    /// PAdES-BASELINE-T: a signature timestamp from `tsa`, which may verify its own
+    /// answer (`HttpTsa` does).
+    T {
+        /// The authority asked once, after the signer has signed.
+        tsa: &'a dyn TimestampAuthority,
+    },
+}
 
 /// Signs `pdf` at PAdES-BASELINE-B and returns the signed file.
 ///
@@ -17,10 +31,26 @@ use crate::reserve::contents_capacity;
 /// whole certificate chain, never `signingTime` nor revocation data.
 ///
 /// The caller supplies the time, for now with `DateTime::from_system_time`; it is written in
-/// UTC. `signer` signs exactly once.
+/// UTC. `signer` signs exactly once. See [`sign_at_level`] for higher levels.
 pub fn sign(pdf: &[u8], signer: &dyn Signer, signing_time: DateTime) -> Result<Vec<u8>, Error> {
+    sign_at_level(pdf, signer, signing_time, Level::B)
+}
+
+/// Signs `pdf` at `level`, as [`sign`] does for `Level::B`.
+///
+/// At `Level::T` the authority time-stamps the signature value and the token goes into the
+/// unsigned attribute `id-aa-signatureTimeStampToken` of the `SignerInfo`. The `/Contents`
+/// reserves room for a token of up to [`TIMESTAMP_TOKEN_MAX`](crate::TIMESTAMP_TOKEN_MAX)
+/// DER bytes; a larger one is refused. A failure of the authority returns
+/// [`Error::Timestamp`] and no PDF. `signer` signs once and the authority is asked once.
+pub fn sign_at_level(
+    pdf: &[u8],
+    signer: &dyn Signer,
+    signing_time: DateTime,
+    level: Level<'_>,
+) -> Result<Vec<u8>, Error> {
     let doc = Document::parse(pdf)?;
-    let capacity = contents_capacity(signer)?;
+    let capacity = contents_capacity(signer, matches!(level, Level::T { .. }))?;
 
     let fields = doc.signature_fields();
     let field = (1u64..)
@@ -42,7 +72,10 @@ pub fn sign(pdf: &[u8], signer: &dyn Signer, signing_time: DateTime) -> Result<V
     for part in prepared.signed_parts() {
         hasher.update(part);
     }
-    let cms = nacre_cms::sign_detached(&hasher.finalize(), signer, &Profile::PADES, None)?;
+    let mut cms = nacre_cms::sign_detached(&hasher.finalize(), signer, &Profile::PADES, None)?;
+    if let Level::T { tsa } = level {
+        cms = timestamp_signature(&cms, tsa)?;
+    }
     Ok(prepared.embed(&cms)?)
 }
 

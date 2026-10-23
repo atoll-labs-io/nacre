@@ -1,0 +1,146 @@
+# Scenario program (scratch crate outside the worktree, path deps on a copy of story/s08-pades-bt)
+## Cargo.toml
+[package]
+name = "qa-s08"
+version = "0.0.0"
+edition = "2024"
+
+[workspace]
+
+[dependencies]
+nacre-pades = { path = "../copy/crates/nacre-pades" }
+nacre-core = { path = "../copy/crates/nacre-core", features = ["test-signer"] }
+nacre-tsp = { path = "../copy/crates/nacre-tsp", features = ["http"] }
+nacre-cms = { path = "../copy/crates/nacre-cms" }
+der = { version = "0.8", features = ["alloc"] }
+sha2 = "0.11"
+## src/main.rs
+use std::error::Error as _;
+use der::{Decode, Encode};
+use nacre_core::{DigestAlgorithm, TestSigner, TimestampAuthority};
+use nacre_pades::{DateTime, Level, TIMESTAMP_TOKEN_MAX, sign_at_level};
+use nacre_tsp::HttpTsa;
+use sha2::{Digest, Sha256};
+
+const UNSIGNED: &[u8] = include_bytes!("../../copy/crates/nacre-pades/tests/corpus/unsigned.pdf");
+
+/// A caller's own authority that answers with fixed bytes and counts calls.
+struct Fixed(Vec<u8>, std::cell::Cell<u32>);
+impl TimestampAuthority for Fixed {
+    fn timestamp(&self, _: DigestAlgorithm, _: &[u8]) -> Result<Vec<u8>, nacre_core::Error> {
+        self.1.set(self.1.get() + 1);
+        Ok(self.0.clone())
+    }
+}
+/// Wraps a real authority to count how often it is asked.
+struct Counting<'a>(&'a dyn TimestampAuthority, std::cell::Cell<u32>);
+impl TimestampAuthority for Counting<'_> {
+    fn timestamp(&self, a: DigestAlgorithm, i: &[u8]) -> Result<Vec<u8>, nacre_core::Error> {
+        self.1.set(self.1.get() + 1);
+        self.0.timestamp(a, i)
+    }
+}
+
+fn octet_string_of_len(n: usize) -> Vec<u8> {
+    let content = n - 4;
+    let mut out = vec![0x04, 0x82, (content >> 8) as u8, content as u8];
+    out.extend(vec![0u8; content]);
+    out
+}
+
+fn report(result: Result<Vec<u8>, nacre_pades::Error>, out: &str) {
+    match result {
+        Ok(pdf) => {
+            std::fs::write(out, &pdf).unwrap();
+            println!("Ok: {} bytes written to {out}", pdf.len());
+            println!("unsigned input is a byte prefix of the output: {}", pdf.starts_with(UNSIGNED));
+        }
+        Err(e) => {
+            println!("Err (Display): {e}");
+            println!("Err (kind): {:?}", e.kind());
+            let mut s = e.source();
+            while let Some(c) = s {
+                println!("  caused by: {c}");
+                s = c.source();
+            }
+            println!("output file written: {}", std::path::Path::new(out).exists());
+        }
+    }
+}
+
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let signer = TestSigner::from_secret(&[7u8; 32]).unwrap();
+    let time = DateTime::new(2026, 10, 22, 12, 0, 0).unwrap();
+    let out = args[2].as_str();
+    match args[1].as_str() {
+        "tsa" => {
+            let http = HttpTsa::new(&args[3]);
+            let tsa = Counting(&http, Default::default());
+            let pdf = args.get(4).map(|p| std::fs::read(p).unwrap()).unwrap_or(UNSIGNED.to_vec());
+            report(sign_at_level(&pdf, &signer, time, Level::T { tsa: &tsa }), out);
+            println!("authority asked: {} time(s)", tsa.1.get());
+        }
+        "fixed-len" => {
+            let n: usize = args[3].parse().unwrap();
+            let tsa = Fixed(octet_string_of_len(n), Default::default());
+            println!("token given: OCTET STRING, DER length {n} (TIMESTAMP_TOKEN_MAX = {TIMESTAMP_TOKEN_MAX})");
+            report(sign_at_level(UNSIGNED, &signer, time, Level::T { tsa: &tsa }), out);
+            println!("authority asked: {} time(s)", tsa.1.get());
+        }
+        "fixed-garbage" => {
+            let tsa = Fixed(b"<html>503 Service Unavailable</html>".to_vec(), Default::default());
+            println!("token given: the bytes of an HTML error page");
+            report(sign_at_level(UNSIGNED, &signer, time, Level::T { tsa: &tsa }), out);
+        }
+        "inspect" => {
+            // Read the CMS back from the signed PDF: the hex string after the last /Contents <.
+            let pdf = std::fs::read(out).unwrap();
+            let at = pdf.windows(11).rposition(|w| w == b"/Contents <").unwrap() + 11;
+            let end = at + pdf[at..].iter().position(|b| *b == b'>').unwrap();
+            let hex = std::str::from_utf8(&pdf[at..end]).unwrap();
+            let bytes: Vec<u8> = (0..hex.len()).step_by(2).map(|i| u8::from_str_radix(&hex[i..i + 2], 16).unwrap()).collect();
+                        let signed = nacre_cms::SignedData::from_der(&bytes[..der_len(&bytes)]).unwrap();
+            std::fs::write(args[3].as_str(), &bytes[..der_len(&bytes)]).unwrap();
+            let info = &signed.signer_infos[0];
+            println!("/Contents slot: {} bytes, CMS: {} bytes", bytes.len(), der_len(&bytes));
+            for a in &info.unsigned_attrs {
+                println!("  oid {} with {} value(s)", a.oid, a.values.len());
+                let token = a.values[0].to_der().unwrap();
+                std::fs::write(args[4].as_str(), &token).unwrap();
+                let v = nacre_tsp::verify_token(&token, DigestAlgorithm::Sha256, &Sha256::digest(&info.signature)).map(|t| t.gen_time());
+                println!("  token verifies over SHA-256(signature value): {v:?}");
+            }
+            std::fs::write(args[5].as_str(), &info.signature).unwrap();
+        }
+        _ => unreachable!(),
+    }
+}
+
+fn der_len(b: &[u8]) -> usize {
+    use der::Reader;
+    let mut r = der::SliceReader::new(b).unwrap();
+    let h = der::Header::decode(&mut r).unwrap();
+    usize::try_from(h.length()).unwrap() + usize::try_from(r.position()).unwrap()
+}
+
+## Local TSA (openssl ts -reply behind python http.server, started by this QA on 127.0.0.1:18491 / :18492)
+import http.server, subprocess, sys, os
+MODE = sys.argv[2]
+class H(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        body = self.rfile.read(int(self.headers.get('Content-Length', 0)))
+        if MODE == 'reject':
+            out = bytes.fromhex('3005300302010 2'.replace(' ', ''))
+        else:
+            with open('req.tsq', 'wb') as f: f.write(body)
+            subprocess.run(['openssl', 'ts', '-reply', '-config', 'tsa.cnf', '-queryfile', 'req.tsq', '-out', 'resp.tsr'], check=True, capture_output=True)
+            out = open('resp.tsr', 'rb').read()
+            open('last-resp.tsr', 'wb').write(out)
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/timestamp-reply')
+        self.send_header('Content-Length', str(len(out)))
+        self.end_headers()
+        self.wfile.write(out)
+    def log_message(self, *a): pass
+http.server.HTTPServer(('127.0.0.1', int(sys.argv[1])), H).serve_forever()

@@ -1,0 +1,23 @@
+$ cd /tmp/qa-s08.JKa7O6/work && qa-s08 tsa m.pdf not a url
+stdin: (none)
+--- stdout+stderr ---
+Err (Display): the timestamp authority failed
+Err (kind): Unavailable
+  caused by: the timestamp authority failed
+  caused by: TSA request failed: http: invalid uri character
+  caused by: http: invalid uri character
+output file written: false
+authority asked: 1 time(s)
+--- exit code: 0 ---
+
+# a caller's own TimestampAuthority returns the bytes of an HTML page
+$ cd /tmp/qa-s08.JKa7O6/work && qa-s08 fixed-garbage g.pdf
+stdin: (none)
+--- stdout+stderr ---
+token given: the bytes of an HTML error page
+Err (Display): the timestamp authority returned a token that is not DER
+Err (kind): InvalidInput
+  caused by: unknown/unsupported ASN.1 DER tag: 0x3c at DER byte 1
+output file written: false
+--- exit code: 0 ---
+

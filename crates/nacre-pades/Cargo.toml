@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.97"
 license = "MIT OR Apache-2.0"
-description = "PAdES (ETSI EN 319 142-1) for Nacre: signs a PDF at PAdES-BASELINE-B with a Nacre signer, in a new incremental revision."
+description = "PAdES (ETSI EN 319 142-1) for Nacre: signs a PDF at PAdES-BASELINE-B and B-T with a Nacre signer, in a new incremental revision."
 
 [lints]
 workspace = true
@@ -22,5 +22,6 @@ thiserror = "2"
 nacre-core = { path = "../nacre-core", features = ["test-signer"] }
 # No version: nacre-conformance is never published, so `cargo publish` drops it.
 nacre-conformance = { path = "../nacre-conformance", features = ["http"] }
+nacre-tsp = { path = "../nacre-tsp", features = ["http"] }
 p256 = { version = "0.14", features = ["ecdsa", "pkcs8", "pem"] }
 der = { version = "0.8", features = ["alloc", "pem"] }

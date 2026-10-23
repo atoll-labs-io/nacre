@@ -1,0 +1,20 @@
+$ cd /tmp/qa-s08.JKa7O6/work && qa-s08 fixed-len o.pdf 16385
+stdin: (none)
+--- stdout+stderr ---
+token given: OCTET STRING, DER length 16385 (TIMESTAMP_TOKEN_MAX = 16384)
+Err (Display): the timestamp token is 16385 bytes, more than the 16384 reserved
+Err (kind): InvalidInput
+output file written: false
+authority asked: 1 time(s)
+--- exit code: 0 ---
+
+$ cd /tmp/qa-s08.JKa7O6/work && qa-s08 fixed-len o2.pdf 40000
+stdin: (none)
+--- stdout+stderr ---
+token given: OCTET STRING, DER length 40000 (TIMESTAMP_TOKEN_MAX = 16384)
+Err (Display): the timestamp token is 40000 bytes, more than the 16384 reserved
+Err (kind): InvalidInput
+output file written: false
+authority asked: 1 time(s)
+--- exit code: 0 ---
+

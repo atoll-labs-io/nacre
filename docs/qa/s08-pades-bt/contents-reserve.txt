@@ -1,0 +1,9 @@
+$ cd /tmp/qa-s08.JKa7O6/work && qa-s08 fixed-len f.pdf 16384
+stdin: (none)
+--- stdout+stderr ---
+token given: OCTET STRING, DER length 16384 (TIMESTAMP_TOKEN_MAX = 16384)
+Ok: 35998 bytes written to f.pdf
+unsigned input is a byte prefix of the output: true
+authority asked: 1 time(s)
+--- exit code: 0 ---
+
