@@ -77,3 +77,7 @@ A decision the person took is not logged here: it is an ADR or a story.
 | 2026-10-23 | s15-validate-revisions | Fix run 3 then ship with one open major | The person granted the third run past `Max attempts`, then chose to ship and open s40 |
 | 2026-10-23 | s40-validate-ssa-by-effect | Wrote the story the person asked for; made s16 depend on it | The open SSA shape leaves an attacker's signature without a defect; once s16 judges chains it could read as valid |
 | 2026-10-23 | — | Ship script also holds findings mentioning SSA, sneaky or attacker | The s15 major becomes the s40 story, not a public issue |
+| 2026-10-23 | s40-validate-ssa-by-effect | Fix runs 1 and 2 although the reviews allowed the ship; fix run 3 granted by the person | Each major was an SSA shape or an untested guard, the story's very purpose |
+| 2026-10-23 | s40-validate-ssa-by-effect | Kept a visible-rect signature without `/AP` refused, against the planner's proposal | Loosening a security rule is not decided in passing |
+| 2026-10-23 | s16-validate-chain | Widened Owns with `docs/security/attacks/cms.md` and `pades.md`, re-forked the lane | Both attack files hand the chain check to s16 (stories review major) |
+| 2026-10-23 | s16-validate-chain | Accepted the plan's `INDETERMINATE / TRY_LATER` for a valid chain until s17 judges revocation | Fail closed; matches s17's no-data criterion |
