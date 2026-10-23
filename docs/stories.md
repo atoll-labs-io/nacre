@@ -279,7 +279,7 @@ Risque principal : distinguer une révision légitime d'une révision malveillan
 - **Complexity**: 3
 - **Depends on**: s15-validate-revisions, s40-validate-ssa-by-effect
 - **Surface**: `endpoint`
-- **Owns**: `crates/nacre-validate/`
+- **Owns**: `crates/nacre-validate/`, `docs/security/attacks/cms.md`, `docs/security/attacks/pades.md`
 
 ### Acceptance criteria
 - [ ] Avec la racine de la PKI de s02 comme ancre, la chaîne du signataire de s06 est construite, depuis les certificats du CMS et de `/DSS`, et jugée valide.
