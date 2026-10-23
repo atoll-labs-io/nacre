@@ -5,7 +5,12 @@
     clippy::indexing_slicing
 )]
 
-use nacre_pdf::{Document, Object, XrefKind};
+mod support;
+
+use std::collections::HashMap;
+
+use nacre_pdf::{Document, Object, ObjectId, XrefKind};
+use support::{Pdf, Xref};
 
 use XrefKind::{Hybrid as H, Stream as S, Table as T};
 
@@ -103,4 +108,72 @@ fn catalog_and_trailer_are_read() {
         let hybrid = doc.revisions().iter().any(|r| r.xref == XrefKind::Hybrid);
         assert_eq!(hybrid, *name == "word-hybrid.pdf", "{name}");
     }
+}
+
+fn type_is(object: &Object, name: &[u8]) -> bool {
+    let dict = match object {
+        Object::Dictionary(d) => d,
+        Object::Stream(s) => &s.dict,
+        _ => return false,
+    };
+    dict.get(b"Type") == Some(&Object::Name(name.to_vec()))
+}
+
+/// The leaves of the page tree, read from `map` alone.
+fn pages_in(map: &HashMap<ObjectId, Object>, node: ObjectId) -> Vec<ObjectId> {
+    let Some(Object::Dictionary(dict)) = map.get(&node) else {
+        panic!("{node} is not in the map");
+    };
+    if type_is(&map[&node], b"Page") {
+        return vec![node];
+    }
+    let kids = match dict.get(b"Kids") {
+        Some(Object::Array(kids)) => kids.clone(),
+        Some(Object::Reference(id)) => match &map[id] {
+            Object::Array(kids) => kids.clone(),
+            other => panic!("{other:?}"),
+        },
+        other => panic!("{other:?}"),
+    };
+    kids.iter()
+        .flat_map(|kid| match kid {
+            Object::Reference(id) => pages_in(map, *id),
+            other => panic!("{other:?}"),
+        })
+        .collect()
+}
+
+#[test]
+fn reachable_objects_follow_references_once() {
+    let bytes = read("word-pdfmaker-linearized.pdf");
+    let doc = Document::parse(&bytes).unwrap();
+    let map = doc.reachable().unwrap();
+    assert!(type_is(&map[&doc.catalog_id()], b"Catalog"));
+    let Some(Object::Reference(root)) = doc.catalog().get(b"Pages") else {
+        panic!("no /Pages reference");
+    };
+    let Some(Object::Dictionary(tree)) = map.get(root) else {
+        panic!("page tree root missing");
+    };
+    let Some(Object::Integer(count)) = tree.get(b"Count") else {
+        panic!("no /Count");
+    };
+    assert_eq!(pages_in(&map, *root).len() as i64, *count);
+    assert!(!map.values().any(|o| type_is(o, b"XRef")));
+
+    // Every object lives in an object stream; the page points at a free object 9.
+    let built = Pdf::new(Xref::Stream { filter: None })
+        .compressed(3, 1, "<< /Type /Catalog /Pages 2 0 R >>")
+        .compressed(3, 2, "<< /Type /Pages /Kids [4 0 R] /Count 1 >>")
+        .compressed(3, 4, "<< /Type /Page /Parent 2 0 R /Contents 9 0 R >>")
+        .build();
+    let doc = Document::parse(&built).unwrap();
+    let mut ids: Vec<u32> = doc
+        .reachable()
+        .unwrap()
+        .keys()
+        .map(|id| id.number)
+        .collect();
+    ids.sort_unstable();
+    assert_eq!(ids, [1, 2, 4]);
 }

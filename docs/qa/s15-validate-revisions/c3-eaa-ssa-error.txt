@@ -1,0 +1,78 @@
+# Criterion 3 - invalid input: a certified document given an empty visible signature field and never signed in it
+# Scenario program: qa-scen, a scratch binary crate under the QA temp dir depending on crates/nacre-validate by path; it calls nacre_validate::validate on the file named in argv[1] and prints every SignatureValidation. Source quoted whole at the end.
+# Tree under test: 01c707683773d66253d174bb8c4da4216606d9f1 (copy of git ls-files; cargo fetch: exit 0; cargo build --workspace --all-features: exit 0)
+# Every run below was replayed once with identical output.
+
+# ssa-empty-field-unsigned.pdf = head -c 10562 attacks/ssa-empty-field-signed.pdf (the certified file plus the revision adding the empty field Sneaky, before the revision that signs it)
+
+$ cd <tmp>/work && qa-scen ssa-empty-field-unsigned.pdf   (stdin: none)
+file: ssa-empty-field-unsigned.pdf (10562 bytes)
+signatures: 1
+- field "Certification"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(RevisionNotAllowed { end: 10562 })
+  later_revisions: 1
+    end=10562 changed=[ObjectId { number: 3, generation: 0 }, ObjectId { number: 8, generation: 0 }, ObjectId { number: 9, generation: 0 }, ObjectId { number: 10, generation: 0 }]
+      verdict=NotAllowed { refused: [ObjectId { number: 3, generation: 0 }, ObjectId { number: 8, generation: 0 }, ObjectId { number: 9, generation: 0 }, ObjectId { number: 10, generation: 0 }] }
+[exit code: 0]
+
+----- scen/Cargo.toml -----
+[package]
+name = "qa-scen"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+nacre-validate = { path = "../copy/crates/nacre-validate" }
+----- scen/src/main.rs -----
+use std::process::ExitCode;
+
+fn main() -> ExitCode {
+    let Some(path) = std::env::args().nth(1) else {
+        eprintln!("usage: qa-scen <file.pdf>");
+        return ExitCode::from(2);
+    };
+    let pdf = match std::fs::read(&path) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("read error: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    println!("file: {path} ({} bytes)", pdf.len());
+    match nacre_validate::validate(&pdf) {
+        Ok(sigs) => {
+            println!("signatures: {}", sigs.len());
+            for s in &sigs {
+                println!("- field {:?}", s.field);
+                println!("  indication: {} / {:?}", s.report.indication().as_str(),
+                    s.report.sub_indication().map(|x| x.as_str()));
+                println!("  digest_verified={} signature_verified={}", s.digest_verified, s.signature_verified);
+                println!("  defect: {:?}", s.defect);
+                println!("  later_revisions: {}", s.later_revisions.len());
+                for r in &s.later_revisions {
+                    println!("    end={} changed={:?}", r.end, r.changed);
+                    println!("      verdict={:?}", r.verdict);
+                }
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            println!("error: {e} (kind {:?})", e.kind());
+            println!("debug: {e:?}");
+            ExitCode::from(1)
+        }
+    }
+}
+----- tools/run.sh -----
+#!/bin/sh
+# usage: run.sh <dir-label> <dir> <file>
+label=$1; dir=$2; f=$3
+echo "\$ cd $label && qa-scen $f   (stdin: none)"
+cd "$dir" && <tmp>/scen/target/release/qa-scen "$f" 2>&1
+echo "[exit code: $?]"
+echo

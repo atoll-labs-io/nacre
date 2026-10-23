@@ -1,0 +1,78 @@
+# Criteria 2 and 4 - invalid input: a signed file truncated mid-revision, and one with a broken revision appended (startxref pointing past the file)
+# Scenario program: qa-scen, a scratch binary crate under the QA temp dir depending on crates/nacre-validate by path; it calls nacre_validate::validate on the file named in argv[1] and prints every SignatureValidation. Source quoted whole at the end.
+# Tree under test: 01c707683773d66253d174bb8c4da4216606d9f1 (copy of git ls-files; cargo fetch: exit 0; cargo build --workspace --all-features: exit 0)
+# Every run below was replayed once with identical output.
+
+# lta-truncated.pdf = head -c 46500 signed-lta-pyhanko.pdf; lta-garbage.pdf = signed-lta-pyhanko.pdf + '1 0 obj << /Broken >> endobj startxref 999999 %%EOF'
+
+$ cd <tmp>/work && qa-scen lta-truncated.pdf   (stdin: none)
+file: lta-truncated.pdf (46500 bytes)
+error: the PDF cannot be read: data after the last %%EOF at offset 46212 (kind InvalidInput)
+debug: Pdf(TrailingData { offset: 46212 })
+[exit code: 1]
+
+$ cd <tmp>/work && qa-scen lta-garbage.pdf   (stdin: none)
+file: lta-garbage.pdf (46935 bytes)
+error: the PDF cannot be read: no cross-reference section at offset 999999 (kind InvalidInput)
+debug: Pdf(NotAnXrefSection { offset: 999999 })
+[exit code: 1]
+
+----- scen/Cargo.toml -----
+[package]
+name = "qa-scen"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+nacre-validate = { path = "../copy/crates/nacre-validate" }
+----- scen/src/main.rs -----
+use std::process::ExitCode;
+
+fn main() -> ExitCode {
+    let Some(path) = std::env::args().nth(1) else {
+        eprintln!("usage: qa-scen <file.pdf>");
+        return ExitCode::from(2);
+    };
+    let pdf = match std::fs::read(&path) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("read error: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    println!("file: {path} ({} bytes)", pdf.len());
+    match nacre_validate::validate(&pdf) {
+        Ok(sigs) => {
+            println!("signatures: {}", sigs.len());
+            for s in &sigs {
+                println!("- field {:?}", s.field);
+                println!("  indication: {} / {:?}", s.report.indication().as_str(),
+                    s.report.sub_indication().map(|x| x.as_str()));
+                println!("  digest_verified={} signature_verified={}", s.digest_verified, s.signature_verified);
+                println!("  defect: {:?}", s.defect);
+                println!("  later_revisions: {}", s.later_revisions.len());
+                for r in &s.later_revisions {
+                    println!("    end={} changed={:?}", r.end, r.changed);
+                    println!("      verdict={:?}", r.verdict);
+                }
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            println!("error: {e} (kind {:?})", e.kind());
+            println!("debug: {e:?}");
+            ExitCode::from(1)
+        }
+    }
+}
+----- tools/run.sh -----
+#!/bin/sh
+# usage: run.sh <dir-label> <dir> <file>
+label=$1; dir=$2; f=$3
+echo "\$ cd $label && qa-scen $f   (stdin: none)"
+cd "$dir" && <tmp>/scen/target/release/qa-scen "$f" 2>&1
+echo "[exit code: $?]"
+echo

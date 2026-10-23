@@ -1,0 +1,129 @@
+# Criterion 3 - EAA and SSA on certified PDFs (merged widget, split field and widget, empty field added then signed)
+# Scenario program: qa-scen, a scratch binary crate under the QA temp dir depending on crates/nacre-validate by path; it calls nacre_validate::validate on the file named in argv[1] and prints every SignatureValidation. Source quoted whole at the end.
+# Tree under test: 01c707683773d66253d174bb8c4da4216606d9f1 (copy of git ls-files; cargo fetch: exit 0; cargo build --workspace --all-features: exit 0)
+# Every run below was replayed once with identical output.
+
+$ cd <tmp>/copy/crates/nacre-validate/tests/corpus && qa-scen attacks/eaa-freetext.pdf   (stdin: none)
+file: attacks/eaa-freetext.pdf (10251 bytes)
+signatures: 1
+- field "Certification"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(RevisionNotAllowed { end: 10251 })
+  later_revisions: 1
+    end=10251 changed=[ObjectId { number: 3, generation: 0 }, ObjectId { number: 9, generation: 0 }]
+      verdict=NotAllowed { refused: [ObjectId { number: 3, generation: 0 }, ObjectId { number: 9, generation: 0 }] }
+[exit code: 0]
+
+$ cd <tmp>/copy/crates/nacre-validate/tests/corpus && qa-scen attacks/ssa-visible-signature.pdf   (stdin: none)
+file: attacks/ssa-visible-signature.pdf (18961 bytes)
+signatures: 2
+- field "Certification"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(RevisionNotAllowed { end: 18961 })
+  later_revisions: 1
+    end=18961 changed=[ObjectId { number: 3, generation: 0 }, ObjectId { number: 8, generation: 0 }, ObjectId { number: 9, generation: 0 }, ObjectId { number: 10, generation: 0 }, ObjectId { number: 11, generation: 0 }]
+      verdict=NotAllowed { refused: [ObjectId { number: 3, generation: 0 }, ObjectId { number: 8, generation: 0 }, ObjectId { number: 9, generation: 0 }, ObjectId { number: 10, generation: 0 }, ObjectId { number: 11, generation: 0 }] }
+- field "Sneaky"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(AddedByRevisionNotAllowed { end: 18961 })
+  later_revisions: 0
+[exit code: 0]
+
+$ cd <tmp>/copy/crates/nacre-validate/tests/corpus && qa-scen attacks/ssa-split-widget.pdf   (stdin: none)
+file: attacks/ssa-split-widget.pdf (19038 bytes)
+signatures: 2
+- field "Certification"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(RevisionNotAllowed { end: 19038 })
+  later_revisions: 1
+    end=19038 changed=[ObjectId { number: 3, generation: 0 }, ObjectId { number: 8, generation: 0 }, ObjectId { number: 9, generation: 0 }, ObjectId { number: 10, generation: 0 }, ObjectId { number: 11, generation: 0 }, ObjectId { number: 12, generation: 0 }]
+      verdict=NotAllowed { refused: [ObjectId { number: 3, generation: 0 }, ObjectId { number: 8, generation: 0 }, ObjectId { number: 9, generation: 0 }, ObjectId { number: 10, generation: 0 }, ObjectId { number: 11, generation: 0 }, ObjectId { number: 12, generation: 0 }] }
+- field "Sneaky"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(AddedByRevisionNotAllowed { end: 19038 })
+  later_revisions: 0
+[exit code: 0]
+
+$ cd <tmp>/copy/crates/nacre-validate/tests/corpus && qa-scen attacks/ssa-empty-field-signed.pdf   (stdin: none)
+file: attacks/ssa-empty-field-signed.pdf (19195 bytes)
+signatures: 2
+- field "Certification"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(RevisionNotAllowed { end: 10562 })
+  later_revisions: 2
+    end=10562 changed=[ObjectId { number: 3, generation: 0 }, ObjectId { number: 8, generation: 0 }, ObjectId { number: 9, generation: 0 }, ObjectId { number: 10, generation: 0 }]
+      verdict=NotAllowed { refused: [ObjectId { number: 3, generation: 0 }, ObjectId { number: 8, generation: 0 }, ObjectId { number: 9, generation: 0 }, ObjectId { number: 10, generation: 0 }] }
+    end=19195 changed=[ObjectId { number: 10, generation: 0 }, ObjectId { number: 11, generation: 0 }]
+      verdict=NotAllowed { refused: [ObjectId { number: 10, generation: 0 }, ObjectId { number: 11, generation: 0 }] }
+- field "Sneaky"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(AddedByRevisionNotAllowed { end: 19195 })
+  later_revisions: 0
+[exit code: 0]
+
+----- scen/Cargo.toml -----
+[package]
+name = "qa-scen"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+nacre-validate = { path = "../copy/crates/nacre-validate" }
+----- scen/src/main.rs -----
+use std::process::ExitCode;
+
+fn main() -> ExitCode {
+    let Some(path) = std::env::args().nth(1) else {
+        eprintln!("usage: qa-scen <file.pdf>");
+        return ExitCode::from(2);
+    };
+    let pdf = match std::fs::read(&path) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("read error: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    println!("file: {path} ({} bytes)", pdf.len());
+    match nacre_validate::validate(&pdf) {
+        Ok(sigs) => {
+            println!("signatures: {}", sigs.len());
+            for s in &sigs {
+                println!("- field {:?}", s.field);
+                println!("  indication: {} / {:?}", s.report.indication().as_str(),
+                    s.report.sub_indication().map(|x| x.as_str()));
+                println!("  digest_verified={} signature_verified={}", s.digest_verified, s.signature_verified);
+                println!("  defect: {:?}", s.defect);
+                println!("  later_revisions: {}", s.later_revisions.len());
+                for r in &s.later_revisions {
+                    println!("    end={} changed={:?}", r.end, r.changed);
+                    println!("      verdict={:?}", r.verdict);
+                }
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            println!("error: {e} (kind {:?})", e.kind());
+            println!("debug: {e:?}");
+            ExitCode::from(1)
+        }
+    }
+}
+----- tools/run.sh -----
+#!/bin/sh
+# usage: run.sh <dir-label> <dir> <file>
+label=$1; dir=$2; f=$3
+echo "\$ cd $label && qa-scen $f   (stdin: none)"
+cd "$dir" && <tmp>/scen/target/release/qa-scen "$f" 2>&1
+echo "[exit code: $?]"
+echo

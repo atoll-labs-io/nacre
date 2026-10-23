@@ -171,7 +171,7 @@ impl<'d, 'a> Update<'d, 'a> {
         sig.insert(b"SubFilter", Object::Name(spec.sub_filter));
         // ISO 32000-2, Table 257: /P 1 forbids approval signatures, not document timestamps.
         let approval = sig.get(b"Type").is_some_and(|t| t.is_name(b"Sig"));
-        if approval && self.doc_mdp_level()? == Some(1) {
+        if approval && self.doc.doc_mdp_level()? == Some(1) {
             return Err(Error::CertifiedNoChanges);
         }
         let page = self.first_page()?;
@@ -251,68 +251,6 @@ impl<'d, 'a> Update<'d, 'a> {
 
     fn current_catalog(&self) -> &Dictionary {
         self.catalog.as_ref().unwrap_or(self.doc.catalog())
-    }
-
-    /// The DocMDP permission level, following references at each step; `None` when the
-    /// document is not certified.
-    fn doc_mdp_level(&self) -> Result<Option<i64>, Error> {
-        let doc = self.doc;
-        let Some(perms) = doc.catalog().get(b"Perms") else {
-            return Ok(None);
-        };
-        let perms = self.dictionary(perms, doc.catalog_id(), "permissions dictionary")?;
-        let Some(mdp) = perms.1.get(b"DocMDP") else {
-            return Ok(None);
-        };
-        let mdp = self.dictionary(mdp, perms.0, "signature dictionary")?;
-        let Some(references) = mdp.1.get(b"Reference") else {
-            return Ok(None);
-        };
-        let (id, references) = doc.follow(references)?;
-        let Object::Array(references) = references else {
-            return Err(Error::WrongType {
-                object: id.unwrap_or(mdp.0),
-                expected: "array of signature references",
-            });
-        };
-        for reference in &references {
-            let (owner, reference) = self.dictionary(reference, mdp.0, "signature reference")?;
-            if !reference
-                .get(b"TransformMethod")
-                .is_some_and(|m| m.is_name(b"DocMDP"))
-            {
-                continue;
-            }
-            let Some(params) = reference.get(b"TransformParams") else {
-                return Ok(Some(2));
-            };
-            let (owner, params) = self.dictionary(params, owner, "transform parameters")?;
-            return match params.get(b"P").map(|p| doc.follow(p)).transpose()? {
-                None => Ok(Some(2)),
-                Some((_, Object::Integer(p))) => Ok(Some(p)),
-                Some((id, _)) => Err(Error::WrongType {
-                    object: id.unwrap_or(owner),
-                    expected: "DocMDP permission level",
-                }),
-            };
-        }
-        Ok(None)
-    }
-
-    /// Follows `value` to a dictionary, returning the id it lives under (else `owner`).
-    fn dictionary(
-        &self,
-        value: &Object,
-        owner: ObjectId,
-        expected: &'static str,
-    ) -> Result<(ObjectId, Dictionary), Error> {
-        match self.doc.follow(value)? {
-            (id, Object::Dictionary(d)) => Ok((id.unwrap_or(owner), d)),
-            (id, _) => Err(Error::WrongType {
-                object: id.unwrap_or(owner),
-                expected,
-            }),
-        }
     }
 
     /// The first leaf of the page tree, through `/Kids[0]` at each level.
