@@ -74,3 +74,6 @@ A decision the person took is not logged here: it is an ADR or a story.
 | 2026-10-23 | s12-pades-blta | Held every finding for the person | The security lens ran on the bench CGI scripts |
 | 2026-10-23 | s39-error-kind-from-sources | Widened Owns and reworded the CRL criterion, added the OCSP one; re-forked the lane | ADR-0020 option 1 (chosen by the person) breaks callers in nacre-pades, nacre-cms and two test harnesses; `HttpCrlSource` never verifies a CRL signature |
 | 2026-10-23 | s39-error-kind-from-sources | Kept "the source does not judge the CRL signature; s17 does" | The person answered the ADR only; this is the plan's default and fails no caller |
+| 2026-10-23 | s15-validate-revisions | Fix run 3 then ship with one open major | The person granted the third run past `Max attempts`, then chose to ship and open s40 |
+| 2026-10-23 | s40-validate-ssa-by-effect | Wrote the story the person asked for; made s16 depend on it | The open SSA shape leaves an attacker's signature without a defect; once s16 judges chains it could read as valid |
+| 2026-10-23 | — | Ship script also holds findings mentioning SSA, sneaky or attacker | The s15 major becomes the s40 story, not a public issue |
