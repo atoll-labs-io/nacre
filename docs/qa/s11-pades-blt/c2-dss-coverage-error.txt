@@ -1,0 +1,138 @@
+$ cd $QA_TMP/scratch && QA_PKI=$QA_TMP/pki QA_UNSIGNED=crates/nacre-pades/tests/corpus/unsigned.pdf qa-s11 coverage-invalid
+stdin: (none)
+--- stdout+stderr
+[signer chain without the root, issuers empty] sign_at_level(pdf 744 bytes, signer chain ["signer.der"], Level::LT { tsa, revocation, issuers: 0 item(s) })
+  signer signed 1 time(s), TSA asked 1 time(s), revocation source asked 0 time(s): []
+  Err
+  Display: the B-T signature could not be raised to B-LT: the issuer of C=FR,O=Nacre QA,CN=Nacre QA signer is in neither the chains nor the issuers given
+  caused by: the issuer of C=FR,O=Nacre QA,CN=Nacre QA signer is in neither the chains nor the issuers given
+  kind(): Indeterminate
+  Debug length 122 chars, contains %PDF: false
+  variant: LongTerm, source variant: IssuerMissing
+  Debug of signed: SignedPdf { len: 36170 }
+  --- B-T file handed back (36170 bytes):
+  revisions: 2 (ends at [744, 36170]), file length 36170
+  signature 0 'Signature1': ByteRange [0, 919, 35593, 577], covers up to byte 36170 (a revision ends there: true), CMS verifies over ByteRange: true
+    /Contents 17336 bytes, CMS 2502 bytes, padding 14834 zero bytes
+    CMS certificates: ["C=FR,O=Nacre QA,CN=Nacre QA signer"]
+    CMS crls: 0
+    unsigned attributes: ["1.2.840.113549.1.9.16.2.14"]
+    signed attributes: ["1.2.840.113549.1.9.3", "1.2.840.113549.1.9.4", "1.2.840.113549.1.9.16.2.47"]
+    adbe-revocationInfoArchival (1.2.840.113583.1.1.8) present: false
+    SHA-1 of decoded /Contents (padding included): B2FB5299A460CD3AA6BC59F024ADF3495511F8BC
+    SHA-1 of CMS alone:                            29368FDEBE1DAD83CF0141785F2FDA2FC145CAC9
+  catalog /DSS: absent
+[issuers holds bytes that are not a certificate] sign_at_level(pdf 744 bytes, signer chain ["signer.der", "root.der"], Level::LT { tsa, revocation, issuers: 1 item(s) })
+  signer signed 1 time(s), TSA asked 1 time(s), revocation source asked 0 time(s): []
+  Err
+  Display: the B-T signature could not be raised to B-LT: a certificate is not X.509 DER
+  caused by: a certificate is not X.509 DER
+  caused by: unexpected ASN.1 DER tag: expected SEQUENCE, got APPLICATION [14] (constructed)
+  kind(): InvalidInput
+  Debug length 204 chars, contains %PDF: false
+  variant: LongTerm, source variant: Certificate
+  Debug of signed: SignedPdf { len: 37050 }
+  --- B-T file handed back (37050 bytes):
+  revisions: 2 (ends at [744, 37050]), file length 37050
+  signature 0 'Signature1': ByteRange [0, 919, 36473, 577], covers up to byte 37050 (a revision ends there: true), CMS verifies over ByteRange: true
+    /Contents 17776 bytes, CMS 2944 bytes, padding 14832 zero bytes
+    CMS certificates: ["C=FR,O=Nacre QA,CN=Nacre QA root", "C=FR,O=Nacre QA,CN=Nacre QA signer"]
+    CMS crls: 0
+    unsigned attributes: ["1.2.840.113549.1.9.16.2.14"]
+    signed attributes: ["1.2.840.113549.1.9.3", "1.2.840.113549.1.9.4", "1.2.840.113549.1.9.16.2.47"]
+    adbe-revocationInfoArchival (1.2.840.113583.1.1.8) present: false
+    SHA-1 of decoded /Contents (padding included): 92778B5401DADA8CF7A112E0D7B52E4685C6AAF7
+    SHA-1 of CMS alone:                            0F8FEF11E2D09E59E2FDF9EBED32D08B0A520C35
+  catalog /DSS: absent
+[issuers holds an unrelated certificate] sign_at_level(pdf 744 bytes, signer chain ["signer.der"], Level::LT { tsa, revocation, issuers: 1 item(s) })
+  signer signed 1 time(s), TSA asked 1 time(s), revocation source asked 0 time(s): []
+  Err
+  Display: the B-T signature could not be raised to B-LT: the issuer of C=FR,O=Nacre QA,CN=Nacre QA signer is in neither the chains nor the issuers given
+  caused by: the issuer of C=FR,O=Nacre QA,CN=Nacre QA signer is in neither the chains nor the issuers given
+  kind(): Indeterminate
+  Debug length 122 chars, contains %PDF: false
+  variant: LongTerm, source variant: IssuerMissing
+  Debug of signed: SignedPdf { len: 36170 }
+  --- B-T file handed back (36170 bytes):
+  revisions: 2 (ends at [744, 36170]), file length 36170
+  signature 0 'Signature1': ByteRange [0, 919, 35593, 577], covers up to byte 36170 (a revision ends there: true), CMS verifies over ByteRange: true
+    /Contents 17336 bytes, CMS 2503 bytes, padding 14833 zero bytes
+    CMS certificates: ["C=FR,O=Nacre QA,CN=Nacre QA signer"]
+    CMS crls: 0
+    unsigned attributes: ["1.2.840.113549.1.9.16.2.14"]
+    signed attributes: ["1.2.840.113549.1.9.3", "1.2.840.113549.1.9.4", "1.2.840.113549.1.9.16.2.47"]
+    adbe-revocationInfoArchival (1.2.840.113583.1.1.8) present: false
+    SHA-1 of decoded /Contents (padding included): 124BEF9798461F26491DF1ABEB46E77E0B2E3B34
+    SHA-1 of CMS alone:                            08803B85FEC8687786092AAF85FF5758D9214759
+  catalog /DSS: absent
+--- exit code: 0
+
+=== replay of the same scenario
+$ cd $QA_TMP/scratch && QA_PKI=$QA_TMP/pki QA_UNSIGNED=crates/nacre-pades/tests/corpus/unsigned.pdf qa-s11 coverage-invalid
+stdin: (none)
+--- stdout+stderr
+[signer chain without the root, issuers empty] sign_at_level(pdf 744 bytes, signer chain ["signer.der"], Level::LT { tsa, revocation, issuers: 0 item(s) })
+  signer signed 1 time(s), TSA asked 1 time(s), revocation source asked 0 time(s): []
+  Err
+  Display: the B-T signature could not be raised to B-LT: the issuer of C=FR,O=Nacre QA,CN=Nacre QA signer is in neither the chains nor the issuers given
+  caused by: the issuer of C=FR,O=Nacre QA,CN=Nacre QA signer is in neither the chains nor the issuers given
+  kind(): Indeterminate
+  Debug length 122 chars, contains %PDF: false
+  variant: LongTerm, source variant: IssuerMissing
+  Debug of signed: SignedPdf { len: 36170 }
+  --- B-T file handed back (36170 bytes):
+  revisions: 2 (ends at [744, 36170]), file length 36170
+  signature 0 'Signature1': ByteRange [0, 919, 35593, 577], covers up to byte 36170 (a revision ends there: true), CMS verifies over ByteRange: true
+    /Contents 17336 bytes, CMS 2503 bytes, padding 14833 zero bytes
+    CMS certificates: ["C=FR,O=Nacre QA,CN=Nacre QA signer"]
+    CMS crls: 0
+    unsigned attributes: ["1.2.840.113549.1.9.16.2.14"]
+    signed attributes: ["1.2.840.113549.1.9.3", "1.2.840.113549.1.9.4", "1.2.840.113549.1.9.16.2.47"]
+    adbe-revocationInfoArchival (1.2.840.113583.1.1.8) present: false
+    SHA-1 of decoded /Contents (padding included): 09735983C54E41FEB9258A25EA800311ED6A4D71
+    SHA-1 of CMS alone:                            F7DF2C425B2F6B7C1E92C2EBAEB7A4A627C83588
+  catalog /DSS: absent
+[issuers holds bytes that are not a certificate] sign_at_level(pdf 744 bytes, signer chain ["signer.der", "root.der"], Level::LT { tsa, revocation, issuers: 1 item(s) })
+  signer signed 1 time(s), TSA asked 1 time(s), revocation source asked 0 time(s): []
+  Err
+  Display: the B-T signature could not be raised to B-LT: a certificate is not X.509 DER
+  caused by: a certificate is not X.509 DER
+  caused by: unexpected ASN.1 DER tag: expected SEQUENCE, got APPLICATION [14] (constructed)
+  kind(): InvalidInput
+  Debug length 204 chars, contains %PDF: false
+  variant: LongTerm, source variant: Certificate
+  Debug of signed: SignedPdf { len: 37050 }
+  --- B-T file handed back (37050 bytes):
+  revisions: 2 (ends at [744, 37050]), file length 37050
+  signature 0 'Signature1': ByteRange [0, 919, 36473, 577], covers up to byte 37050 (a revision ends there: true), CMS verifies over ByteRange: true
+    /Contents 17776 bytes, CMS 2944 bytes, padding 14832 zero bytes
+    CMS certificates: ["C=FR,O=Nacre QA,CN=Nacre QA root", "C=FR,O=Nacre QA,CN=Nacre QA signer"]
+    CMS crls: 0
+    unsigned attributes: ["1.2.840.113549.1.9.16.2.14"]
+    signed attributes: ["1.2.840.113549.1.9.3", "1.2.840.113549.1.9.4", "1.2.840.113549.1.9.16.2.47"]
+    adbe-revocationInfoArchival (1.2.840.113583.1.1.8) present: false
+    SHA-1 of decoded /Contents (padding included): AA5DDC0168A2633C379C9171BA21660AE5193C91
+    SHA-1 of CMS alone:                            1C49681518CF37F473B474F44CB098B72AE9617C
+  catalog /DSS: absent
+[issuers holds an unrelated certificate] sign_at_level(pdf 744 bytes, signer chain ["signer.der"], Level::LT { tsa, revocation, issuers: 1 item(s) })
+  signer signed 1 time(s), TSA asked 1 time(s), revocation source asked 0 time(s): []
+  Err
+  Display: the B-T signature could not be raised to B-LT: the issuer of C=FR,O=Nacre QA,CN=Nacre QA signer is in neither the chains nor the issuers given
+  caused by: the issuer of C=FR,O=Nacre QA,CN=Nacre QA signer is in neither the chains nor the issuers given
+  kind(): Indeterminate
+  Debug length 122 chars, contains %PDF: false
+  variant: LongTerm, source variant: IssuerMissing
+  Debug of signed: SignedPdf { len: 36170 }
+  --- B-T file handed back (36170 bytes):
+  revisions: 2 (ends at [744, 36170]), file length 36170
+  signature 0 'Signature1': ByteRange [0, 919, 35593, 577], covers up to byte 36170 (a revision ends there: true), CMS verifies over ByteRange: true
+    /Contents 17336 bytes, CMS 2503 bytes, padding 14833 zero bytes
+    CMS certificates: ["C=FR,O=Nacre QA,CN=Nacre QA signer"]
+    CMS crls: 0
+    unsigned attributes: ["1.2.840.113549.1.9.16.2.14"]
+    signed attributes: ["1.2.840.113549.1.9.3", "1.2.840.113549.1.9.4", "1.2.840.113549.1.9.16.2.47"]
+    adbe-revocationInfoArchival (1.2.840.113583.1.1.8) present: false
+    SHA-1 of decoded /Contents (padding included): A84C7084FE0E1070C90FE22370F83F567E78FF99
+    SHA-1 of CMS alone:                            A592D34B64E86F6576BF2715E6A65E866D888DA2
+  catalog /DSS: absent
+--- exit code: 0
