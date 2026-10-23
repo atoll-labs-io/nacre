@@ -24,6 +24,10 @@ const FILL_KEYS: [&[u8]; 3] = [b"V", b"AS", b"AP"];
 const SIGN_KEYS: [&[u8]; 4] = [b"V", b"AS", b"AP", b"F"];
 /// The annotation flag Locked (ISO 32000-1, Table 165, bit 8).
 const LOCKED: i64 = 128;
+/// The annotation flags Hidden, NoView and ToggleNoView (ISO 32000-1, Table 165).
+const HIDDEN: i64 = 2;
+const NO_VIEW: i64 = 32;
+const TOGGLE_NO_VIEW: i64 = 256;
 
 type Objects = HashMap<ObjectId, Object>;
 
@@ -31,9 +35,9 @@ type Objects = HashMap<ObjectId, Object>;
 pub(crate) struct Qualified {
     pub(crate) revision: LaterRevision,
     /// The signature dictionaries of a signature added under DocMDP 1, and of one whose
-    /// field, merged with its widget or not, came after the certification and shows on the
-    /// page. A signature this revision adds and refuses for another reason is not here: it
-    /// is judged on its own signed bytes.
+    /// field shows on the page a widget that was not placed at the same rectangle in the
+    /// certified state. A signature this revision adds and refuses for another reason is not
+    /// here: it is judged on its own signed bytes.
     pub(crate) refused_signatures: Vec<ObjectId>,
 }
 
@@ -58,18 +62,18 @@ pub(crate) fn qualify(
         return Ok(Vec::new());
     }
     let mut previous = State::read(pdf, signed);
-    // The signature fields of the first certified state: a visible signature in any other
-    // field appeared after the certification.
-    let mut certified_fields: Option<HashSet<ObjectId>> = None;
+    // Where the signature widgets of the first certified state lie: a signature shown
+    // anywhere else appeared after the certification.
+    let mut certified: Option<Placed> = None;
     let mut out = Vec::with_capacity(later.len());
     for &end in later {
         let current = State::read(pdf, end);
         if let Some(before) = previous.as_ref().filter(|s| s.doc_mdp.is_some()) {
-            certified_fields.get_or_insert_with(|| before.signature_fields());
+            certified.get_or_insert_with(|| before.placed_signature_widgets());
         }
         // Without both states nothing can be compared, so the revision is unreadable.
         out.push(match (&previous, &current) {
-            (Some(before), Some(after)) => diff(pdf, before, after, certified_fields.as_ref()),
+            (Some(before), Some(after)) => diff(pdf, before, after, certified.as_ref()),
             _ => Qualified {
                 revision: LaterRevision {
                     end,
@@ -94,6 +98,20 @@ struct FormNode {
     has_value: bool,
 }
 
+/// Where a widget lies on its page.
+#[derive(Clone, Copy)]
+enum Placement {
+    /// Hidden, NoView, no `/Rect`, or a `/Rect` of zero area.
+    Off,
+    /// The rectangle, corners normalised to min x, min y, max x, max y.
+    At([f64; 4]),
+    /// A `/Rect` present but unreadable: visible, and equal to nothing.
+    Unknown,
+}
+
+/// Signature field id → its widgets placed on a page, with their rectangles.
+type Placed = HashMap<ObjectId, Vec<(ObjectId, [f64; 4])>>;
+
 enum Lock {
     All,
     Include(Vec<Vec<u8>>),
@@ -113,6 +131,10 @@ struct State<'a> {
     doc_mdp_readable: bool,
     form: HashMap<ObjectId, FormNode>,
     locks: Vec<Lock>,
+    /// The annotations the pages list in their `/Annots`.
+    drawn: HashSet<ObjectId>,
+    /// Object id → the drawn annotations whose `/Parent` chain reaches it.
+    drawn_under: HashMap<ObjectId, Vec<ObjectId>>,
 }
 
 impl<'a> State<'a> {
@@ -145,6 +167,7 @@ impl<'a> State<'a> {
 
         let form = form_nodes(&objects, catalog);
         let locks = field_locks(&objects, &form);
+        let (drawn, drawn_under) = drawn_annotations(&objects, &live);
         Some(Self {
             doc,
             end,
@@ -155,6 +178,8 @@ impl<'a> State<'a> {
             doc_mdp_readable,
             form,
             locks,
+            drawn,
+            drawn_under,
         })
     }
 
@@ -165,11 +190,44 @@ impl<'a> State<'a> {
         }
     }
 
-    fn signature_fields(&self) -> HashSet<ObjectId> {
+    /// The widgets of the signature field `id`: its kids without `/T`, the field itself when
+    /// merged with its widget or when it has no widget kid, and every annotation a page
+    /// lists whose `/Parent` chain reaches it.
+    fn widgets(&self, id: ObjectId, field: &Dictionary) -> Vec<ObjectId> {
+        let (_, kids) = split_kids(&self.objects, field);
+        let mut widgets = with_self(id, field, kids);
+        let mut seen: HashSet<ObjectId> = widgets.iter().copied().collect();
+        for widget in self.drawn_under.get(&id).into_iter().flatten() {
+            if seen.insert(*widget) {
+                widgets.push(*widget);
+            }
+        }
+        widgets
+    }
+
+    /// Only a widget a page lists, outside any optional content group, counts as placed:
+    /// one the page does not draw, or draws depending on a viewer's layer state, may show
+    /// once signed without a change of its own.
+    fn placed_signature_widgets(&self) -> Placed {
         self.form
             .iter()
             .filter(|(_, n)| n.signature && !n.widget_only)
-            .map(|(id, _)| *id)
+            .filter_map(|(id, _)| {
+                let field = self.dict(*id)?;
+                let placed = self
+                    .widgets(*id, field)
+                    .into_iter()
+                    .filter(|w| self.drawn.contains(w))
+                    .filter_map(|w| {
+                        let widget = self.dict(w).filter(|d| d.get(b"OC").is_none())?;
+                        match placement(&self.objects, widget, false) {
+                            Placement::At(rect) => Some((w, rect)),
+                            Placement::Off | Placement::Unknown => None,
+                        }
+                    })
+                    .collect();
+                Some((*id, placed))
+            })
             .collect()
     }
 
@@ -186,7 +244,7 @@ fn diff(
     pdf: &[u8],
     before: &State<'_>,
     after: &State<'_>,
-    certified_fields: Option<&HashSet<ObjectId>>,
+    certified: Option<&Placed>,
 ) -> Qualified {
     let mut changed = Vec::new();
     let mut changed_live = HashSet::new();
@@ -227,8 +285,9 @@ fn diff(
             after,
             changed: &changed_live,
             new: &new_live,
-            certified_fields,
+            certified,
             accepted: HashSet::new(),
+            forced: HashSet::new(),
             new_signature_fields: HashSet::new(),
             roots: Vec::new(),
             kinds: Vec::new(),
@@ -251,8 +310,11 @@ struct Judge<'s, 'a> {
     after: &'s State<'a>,
     changed: &'s HashSet<ObjectId>,
     new: &'s HashSet<ObjectId>,
-    certified_fields: Option<&'s HashSet<ObjectId>>,
+    certified: Option<&'s Placed>,
     accepted: HashSet<ObjectId>,
+    /// The fields, widgets and signature dictionaries of a refused sneaky signature, which
+    /// no accept rule may let through.
+    forced: HashSet<ObjectId>,
     new_signature_fields: HashSet<ObjectId>,
     /// Where the new objects an accepted field brings (`/V`, `/AP`) are reached from.
     roots: Vec<ObjectId>,
@@ -265,11 +327,15 @@ impl Judge<'_, '_> {
         if dss {
             self.kinds.push(AllowedChange::Dss);
         }
+        self.sneaky();
         self.signatures();
         self.form_fills();
         self.catalog();
         self.pages();
         self.subordinates();
+        for id in &self.forced {
+            self.accepted.remove(id);
+        }
 
         let mut refused: Vec<ObjectId> = self
             .changed
@@ -299,11 +365,64 @@ impl Judge<'_, '_> {
         ids
     }
 
+    /// The sneaky signature attack, judged by its effect: once the document has a certified
+    /// state, a signature this revision adds is refused when one widget of its field shows
+    /// on the page and was not placed at that same rectangle in the certified state,
+    /// whatever the shape of the field and whatever changed to show it.
+    fn sneaky(&mut self) {
+        let Some(certified) = self.certified else {
+            return;
+        };
+        let mut fields: Vec<ObjectId> = self
+            .after
+            .form
+            .iter()
+            .filter(|(_, n)| n.signature && !n.widget_only)
+            .map(|(id, _)| *id)
+            .collect();
+        // A signature field outside `/Fields` still draws its widgets on the page.
+        fields.extend(self.new.iter().chain(self.changed).filter(|id| {
+            !self.after.form.contains_key(id)
+                && self
+                    .after
+                    .dict(**id)
+                    .is_some_and(|f| is_name(f.get(b"FT"), b"Sig"))
+        }));
+        fields.sort_unstable();
+        for id in fields {
+            let Some(field) = self.after.dict(id) else {
+                continue;
+            };
+            let Some(value) = self.added_here(field) else {
+                continue;
+            };
+            let widgets = self.after.widgets(id, field);
+            let placed = certified.get(&id).map_or(&[][..], Vec::as_slice);
+            let sneaky = widgets.iter().any(|w| {
+                let Some(widget) = self.after.dict(*w) else {
+                    return false;
+                };
+                match placement(&self.after.objects, widget, true) {
+                    Placement::Off => false,
+                    Placement::Unknown => true,
+                    Placement::At(rect) => !placed.iter().any(|(p, r)| p == w && *r == rect),
+                }
+            });
+            if sneaky {
+                self.refuse_signature(field);
+                self.forced.insert(id);
+                self.forced.insert(value);
+                self.forced.extend(widgets);
+            }
+        }
+    }
+
     /// New merged signature widgets, and existing empty signature fields gaining `/V`.
-    /// A signature that shows on a certified page through a field added after the
-    /// certification is the sneaky signature attack, whatever the shape of that field.
     fn signatures(&mut self) {
         for id in Self::sorted(self.new) {
+            if self.forced.contains(&id) {
+                continue;
+            }
             let Some(field) = self.after.dict(id) else {
                 continue;
             };
@@ -313,10 +432,6 @@ impl Judge<'_, '_> {
             let Some(kind) = self.signature_value(field) else {
                 continue;
             };
-            if self.shows_on_certified_page(field) {
-                self.refuse_signature(field);
-                continue;
-            }
             if !is_name(field.get(b"Subtype"), b"Widget") {
                 continue;
             }
@@ -324,6 +439,9 @@ impl Judge<'_, '_> {
             self.new_signature_fields.insert(id);
         }
         for id in Self::sorted(self.changed) {
+            if self.forced.contains(&id) {
+                continue;
+            }
             let empty = self
                 .before
                 .form
@@ -338,11 +456,6 @@ impl Judge<'_, '_> {
             let Some(kind) = self.signature_value(field) else {
                 continue;
             };
-            let certified_with = self.certified_fields.is_some_and(|ids| ids.contains(&id));
-            if !certified_with && self.shows_on_certified_page(field) {
-                self.refuse_signature(field);
-                continue;
-            }
             if only_keys_differ(old, field, &SIGN_KEYS) && locks_only(old, field) {
                 self.accept_field(id, field, kind);
             }
@@ -353,14 +466,7 @@ impl Judge<'_, '_> {
     /// this revision and the DocMDP permission allows it. A signature the permission
     /// forbids is recorded as refused.
     fn signature_value(&mut self, field: &Dictionary) -> Option<AllowedChange> {
-        let Some(Object::Reference(value)) = field.get(b"V") else {
-            return None;
-        };
-        let sig = self.after.dict(*value)?;
-        let [_, _, c, d] = byte_range(&self.after.doc, sig)?;
-        if c.checked_add(d) != Some(self.after.end) {
-            return None;
-        }
+        let sig = self.after.dict(self.added_here(field)?)?;
         if is_name(sig.get(b"Type"), b"DocTimeStamp")
             && is_name(sig.get(b"SubFilter"), b"ETSI.RFC3161")
         {
@@ -374,24 +480,21 @@ impl Judge<'_, '_> {
         Some(AllowedChange::Signature)
     }
 
-    /// Whether the document is certified and a widget of `field`, the field itself when
-    /// merged or one of its kids, is visible.
-    fn shows_on_certified_page(&self, field: &Dictionary) -> bool {
-        if self.before.doc_mdp.is_none() {
-            return false;
-        }
-        let objects = &self.after.objects;
-        let merged = is_name(field.get(b"Subtype"), b"Widget") && visible(objects, field);
-        merged
-            || array_at(objects, field.get(b"Kids")).is_some_and(|kids| {
-                kids.iter()
-                    .filter_map(|kid| dict_at(objects, Some(kid)))
-                    .any(|w| is_name(w.get(b"Subtype"), b"Widget") && visible(objects, w))
-            })
+    /// The signature dictionary `field`'s `/V` names, when its signed bytes end with this
+    /// revision: the signature this revision adds.
+    fn added_here(&self, field: &Dictionary) -> Option<ObjectId> {
+        let Some(Object::Reference(value)) = field.get(b"V") else {
+            return None;
+        };
+        let sig = self.after.dict(*value)?;
+        let [_, _, c, d] = byte_range(&self.after.doc, sig)?;
+        (c.checked_add(d) == Some(self.after.end)).then_some(*value)
     }
 
     fn refuse_signature(&mut self, field: &Dictionary) {
-        if let Some(Object::Reference(value)) = field.get(b"V") {
+        if let Some(Object::Reference(value)) = field.get(b"V")
+            && !self.refused_signatures.contains(value)
+        {
             self.refused_signatures.push(*value);
         }
     }
@@ -586,18 +689,28 @@ fn locks_only(old: &Dictionary, new: &Dictionary) -> bool {
     }
 }
 
-/// Whether a widget shows on the page: a `/Rect` of non-zero area, neither the Hidden nor
-/// the NoView flag set. An unreadable `/Rect` counts as visible.
-fn visible(objects: &Objects, widget: &Dictionary) -> bool {
+/// Where a widget lies: off the page when the Hidden or NoView flag is set, when it has no
+/// `/Rect` or one of zero area. ToggleNoView makes a NoView widget show on hover, so `after`
+/// reads it as shown while the certified state reads it as off: both fail closed.
+fn placement(objects: &Objects, widget: &Dictionary, after: bool) -> Placement {
     let flags = match resolve(objects, widget.get(b"F")) {
         Some(Object::Integer(n)) => *n,
         _ => 0,
     };
-    if flags & (2 | 32) != 0 {
-        return false;
+    let off = if after && flags & TOGGLE_NO_VIEW != 0 {
+        HIDDEN
+    } else {
+        HIDDEN | NO_VIEW
+    };
+    if flags & off != 0 {
+        return Placement::Off;
     }
     let Some(rect) = array_at(objects, widget.get(b"Rect")) else {
-        return widget.get(b"Rect").is_some();
+        return if widget.get(b"Rect").is_some() {
+            Placement::Unknown
+        } else {
+            Placement::Off
+        };
     };
     let numbers: Vec<f64> = rect
         .iter()
@@ -607,10 +720,81 @@ fn visible(objects: &Objects, widget: &Dictionary) -> bool {
             _ => None,
         })
         .collect();
-    match numbers.as_slice() {
-        [x1, y1, x2, y2] => (x2 - x1).abs() * (y2 - y1).abs() > 0.0,
-        _ => true,
+    let [x1, y1, x2, y2] = numbers.as_slice() else {
+        return Placement::Unknown;
+    };
+    let rect = [x1.min(*x2), y1.min(*y2), x1.max(*x2), y1.max(*y2)];
+    // A NaN area is not zero, so such a rectangle stays visible and matches nothing.
+    if (rect[2] - rect[0]) * (rect[3] - rect[1]) == 0.0 {
+        Placement::Off
+    } else {
+        Placement::At(rect)
     }
+}
+
+/// The kids of `field`, split into field kids (with `/T`) and widget kids.
+fn split_kids(objects: &Objects, field: &Dictionary) -> (Vec<ObjectId>, Vec<ObjectId>) {
+    let kids: Vec<ObjectId> = array_at(objects, field.get(b"Kids"))
+        .map(|kids| {
+            kids.iter()
+                .filter_map(|k| match k {
+                    Object::Reference(id) => Some(*id),
+                    _ => None,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    kids.into_iter().partition(
+        |kid| matches!(objects.get(kid), Some(Object::Dictionary(d)) if d.get(b"T").is_some()),
+    )
+}
+
+/// The annotations listed in the `/Annots` of the live pages, and for each object the
+/// listed annotations whose `/Parent` chain reaches it.
+fn drawn_annotations(
+    objects: &Objects,
+    live: &HashSet<ObjectId>,
+) -> (HashSet<ObjectId>, HashMap<ObjectId, Vec<ObjectId>>) {
+    let mut drawn = HashSet::new();
+    for id in live {
+        let Some(Object::Dictionary(page)) = objects.get(id) else {
+            continue;
+        };
+        if !is_name(page.get(b"Type"), b"Page") {
+            continue;
+        }
+        for item in array_at(objects, page.get(b"Annots")).into_iter().flatten() {
+            if let Object::Reference(annot) = item {
+                drawn.insert(*annot);
+            }
+        }
+    }
+    let mut under: HashMap<ObjectId, Vec<ObjectId>> = HashMap::new();
+    for annot in &drawn {
+        let mut current = *annot;
+        let mut visited = HashSet::from([current]);
+        for _ in 0..MAX_FIELD_DEPTH {
+            let Some(Object::Dictionary(node)) = objects.get(&current) else {
+                break;
+            };
+            let Some(Object::Reference(parent)) = node.get(b"Parent") else {
+                break;
+            };
+            if !visited.insert(*parent) {
+                break;
+            }
+            under.entry(*parent).or_default().push(*annot);
+            current = *parent;
+        }
+    }
+    (drawn, under)
+}
+
+fn with_self(id: ObjectId, field: &Dictionary, mut widgets: Vec<ObjectId>) -> Vec<ObjectId> {
+    if widgets.is_empty() || is_name(field.get(b"Subtype"), b"Widget") {
+        widgets.insert(0, id);
+    }
+    widgets
 }
 
 /// The form nodes of a state: every terminal field and every widget kid of one.
@@ -649,27 +833,12 @@ fn form_nodes(objects: &Objects, catalog: &Dictionary) -> HashMap<ObjectId, Form
             Some(Object::Name(ft)) => ft == b"Sig",
             _ => inherited_sig,
         };
-        let kids: Vec<ObjectId> = array_at(objects, field.get(b"Kids"))
-            .map(|kids| {
-                kids.iter()
-                    .filter_map(|k| match k {
-                        Object::Reference(id) => Some(*id),
-                        _ => None,
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-        let is_field = |kid: &ObjectId| match objects.get(kid) {
-            Some(Object::Dictionary(d)) => d.get(b"T").is_some(),
-            _ => false,
-        };
-        let (field_kids, widgets): (Vec<ObjectId>, Vec<ObjectId>) =
-            kids.into_iter().partition(is_field);
+        let (field_kids, widgets) = split_kids(objects, field);
         if field_kids.is_empty() {
             let has_value = !matches!(field.get(b"V"), None | Some(Object::Null));
-            for widget in widgets {
+            for widget in &widgets {
                 nodes.insert(
-                    widget,
+                    *widget,
                     FormNode {
                         name: name.clone(),
                         signature,

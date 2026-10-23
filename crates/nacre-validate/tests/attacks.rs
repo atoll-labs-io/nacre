@@ -28,8 +28,11 @@ fn rejected(file: &[u8]) -> Defect {
 /// The first signature of `file`, sound in itself, refused for a later revision: the
 /// objects that revision's verdict refuses.
 fn revision_refused(file: &[u8]) -> Vec<ObjectId> {
-    let results = validate(file).unwrap();
-    let result: &SignatureValidation = &results[0];
+    refused_by_revision(&validate(file).unwrap()[0])
+}
+
+/// The objects refused by the later revision that fails `result`, sound in itself.
+fn refused_by_revision(result: &SignatureValidation) -> Vec<ObjectId> {
     assert_eq!(result.report.indication(), Indication::TotalFailed);
     assert_eq!(
         result.report.sub_indication(),
@@ -205,9 +208,10 @@ fn eaa_freetext_is_rejected() {
 /// The certification refused for a later revision, and the signature `Sneaky`, sound in
 /// itself, refused by the revision that adds it.
 fn sneaky_refused(file: &[u8]) {
-    revision_refused(file);
-
     let results = validate(file).unwrap();
+    let certification = results.iter().find(|r| r.field == "Certification").unwrap();
+    refused_by_revision(certification);
+
     let sneaky = results.iter().find(|r| r.field == "Sneaky").unwrap();
     assert_eq!(sneaky.report.indication(), Indication::TotalFailed);
     assert_eq!(
@@ -235,4 +239,65 @@ fn ssa_split_widget_is_rejected() {
 #[test]
 fn ssa_empty_field_signed_is_rejected() {
     sneaky_refused(include_bytes!("corpus/attacks/ssa-empty-field-signed.pdf"));
+}
+
+#[test]
+fn ssa_zero_rect_shown_is_rejected() {
+    sneaky_refused(include_bytes!("corpus/attacks/ssa-zero-rect-shown.pdf"));
+}
+
+#[test]
+fn ssa_hidden_widget_shown_is_rejected() {
+    sneaky_refused(include_bytes!("corpus/attacks/ssa-hidden-widget-shown.pdf"));
+}
+
+#[test]
+fn ssa_indirect_rect_is_rejected() {
+    sneaky_refused(include_bytes!("corpus/attacks/ssa-indirect-rect.pdf"));
+}
+
+#[test]
+fn ssa_kid_widget_shown_is_rejected() {
+    sneaky_refused(include_bytes!("corpus/attacks/ssa-kid-widget-shown.pdf"));
+}
+
+#[test]
+fn ssa_orphan_widget_is_rejected() {
+    sneaky_refused(include_bytes!("corpus/attacks/ssa-orphan-widget.pdf"));
+}
+
+#[test]
+fn ssa_unlisted_widget_shown_is_rejected() {
+    sneaky_refused(include_bytes!(
+        "corpus/attacks/ssa-unlisted-widget-shown.pdf"
+    ));
+}
+
+#[test]
+fn ssa_layer_widget_shown_is_rejected() {
+    sneaky_refused(include_bytes!("corpus/attacks/ssa-layer-widget-shown.pdf"));
+}
+
+#[test]
+fn ssa_moved_rect_is_rejected() {
+    sneaky_refused(include_bytes!("corpus/attacks/ssa-moved-rect.pdf"));
+}
+
+#[test]
+fn ssa_unreadable_rect_is_rejected() {
+    sneaky_refused(include_bytes!("corpus/attacks/ssa-unreadable-rect.pdf"));
+}
+
+#[test]
+fn ssa_toggle_noview_shown_is_rejected() {
+    sneaky_refused(include_bytes!("corpus/attacks/ssa-toggle-noview-shown.pdf"));
+}
+
+/// The signature outside `/Fields` is not listed, so only the certification shows it:
+/// the page, the field, its signature dictionary and its appearance are refused.
+#[test]
+fn ssa_outside_fields_is_rejected() {
+    let file = include_bytes!("corpus/attacks/ssa-outside-fields.pdf");
+    assert_eq!(validate(file).unwrap().len(), 1);
+    assert_eq!(revision_refused(file), ids(&[3, 11, 12, 13]));
 }

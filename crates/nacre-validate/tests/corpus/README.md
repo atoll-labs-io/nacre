@@ -13,6 +13,7 @@ Every subject, key and document here is fictitious or public test material.
 | `fill-and-second-signature.pdf` | the same, not certified: signed as `Signature1`, then one revision fills the field and adds the invisible signature `Bob` | as this repository | `89a7046d0fb972834ff3255ca011de4f99614fdd53ee2af2f8f8231914edc4e2` |
 | `certified-p1-second-signature.pdf` | the same, certified at `/P 1`, then one revision adds the invisible signature `Late` | as this repository | `1406d21464074d94250a408279d037b361b60ef7346b59c69ec6b9a7f0b0380d` |
 | `docmdp-reference-cap.pdf` | `certified-form-fill.pdf`, then a revision whose catalog names a DocMDP signature dictionary holding 40 `/Reference` entries, over the reader's cap of 32, then a revision adding the invisible signature `Late` | as this repository | `09cff22277a0d9c0866a258cef42214d5dfc968a29b97dbc3c4d019c2f90e600` |
+| `certified-visible-field-signed.pdf` | the same, given an empty signature field `Approver` placed on the page with no appearance, certified at `/P 2`, then `Approver` signed: `/V`, an appearance and the Locked flag, nothing else | as this repository | `7bd716b3e00e272a8e81c9b8a7eb380ac212e7c170213ee8d49b3c46c02226fd` |
 | `certified-dss.pdf` | a copy of `crates/nacre-pdf/tests/corpus/real/certified-dss.pdf`, from esig/dss test data, <https://github.com/esig/dss>, `dss-pades/src/test/resources/validation/dss-2554/certified-changes-permitted.pdf`; written by LibreOffice 5.2, RSA, signed by the fictitious Nowina `PKI-TEST` CA; field `signature-test` signed, `signature-test2` empty | LGPL-2.1 | `17c74d6c6911cb8beed4430de172256bd5bed6bdccc4c5cc7c1be95aee0e1d2b` |
 
 ## `attacks/`
@@ -40,9 +41,20 @@ sound, so only the revision rule can refuse it.
 | `ssa-visible-signature.pdf` | certified at `/P 2`: a new signature `Sneaky`, its widget visible and drawing over the page, its CMS correct | `05cba62e6e73bd2469ea082cbf9503f18eb1aa6811fbbbfb8064a187ea7ae57f` |
 | `ssa-split-widget.pdf` | certified at `/P 2`: the same signature `Sneaky`, its field and its visible widget written as separate objects (`/Kids`, `/Parent`) | `775f55742a50554964bba343060804793dca9eff33685a49072018d4b72abc86` |
 | `ssa-empty-field-signed.pdf` | certified at `/P 2`: one revision adds an empty visible signature field `Sneaky`, the next signs it, its CMS correct | `68dab81152412ec84fa7424c35a727b0110930fbd8bc6eacbfb60e2f1b439190` |
+| `ssa-zero-rect-shown.pdf` | given the text field `Name` and an empty signature field `Sneaky` whose `/Rect` is `[0 0 0 0]`, certified at `/P 2`: signing `Sneaky` sets its rectangle and an appearance drawing over the page | `a138a512b26cc975c95090800b5401c7ce0b0b8d8b8cfa9d6ed42b6fd7ac76fe` |
+| `ssa-hidden-widget-shown.pdf` | the same field `Sneaky`, placed and with its appearance but Hidden (`/F 6`), certified at `/P 3`: signing it clears Hidden (`/F 4`) | `6875bc4258e00ef22dc6151da2a08f5c60a15c4a6c6782d624a131aee42e68ec` |
+| `ssa-indirect-rect.pdf` | the same field `Sneaky`, its `/Rect` an indirect `[0 0 0 0]`, certified at `/P 2`: signing it redefines that array as a visible rectangle and adds an appearance | `4283be2e088f1a2f5978aac6a22b3f72cd46fbdd60e58ecde66caae7b3523007` |
+| `ssa-kid-widget-shown.pdf` | a signature field `Sneaky` and its separate widget kid of `/Rect [0 0 0 0]`, certified at `/P 2`: signing the field gives the kid a visible rectangle and an appearance | `edd00793c9e8529e3b8861e12f7d7b1f2b102e5a6fcd228cc10062ebd16e0027` |
+| `ssa-orphan-widget.pdf` | given the text field `Name`, certified at `/P 2`: one revision adds a signature `Sneaky`, merged with an invisible widget, and a second visible widget whose `/Parent` is `Sneaky`, listed by page 3 but not in the field's `/Kids` | `9e4cc14e367416df275678511efb383874fc93281ba46e274609e6c648b9086f` |
+| `ssa-outside-fields.pdf` | the same certified file: one revision adds a visible merged signature `Sneaky` that page 3 lists and `/Fields` does not | `16d2368c2afc5948aac28cd1ceba7059ba0f69c771e559ca280df25dc3ca3388` |
+| `ssa-unlisted-widget-shown.pdf` | an empty signature field `Sneaky` with a visible rectangle, in `/Fields` but in no page's `/Annots`, certified at `/P 2`: signing it adds an appearance and lists it on page 3 | `7ce32f8c22af3f0e05cd2b068ed1da7529ef8dc13c7d8835286261e68c35d388` |
+| `ssa-layer-widget-shown.pdf` | the field `Sneaky`, placed and with its appearance, in an optional content group the default configuration turns off (`/OC`, `/OCProperties`), certified at `/P 2`: signing it removes `/OC` | `18c042963ef8abffd3e7f67ef4c031aea212f21fc6b906e62c588174e4904092` |
+| `ssa-moved-rect.pdf` | the field `Sneaky`, placed at `[72 650 400 700]` with no appearance, certified at `/P 2`: signing it adds an appearance and moves its rectangle to `[72 100 400 150]` | `2d85c9219a7415f5639be6120291e1f456fe9797adbeb04eb13ac31312b3596e` |
+| `ssa-unreadable-rect.pdf` | given the text field `Name`, certified at `/P 2`: one revision adds a visible merged signature `Sneaky` whose `/Rect` cannot be read, its last item a reference to an object the file never defines | `a35ed3a82d11ef42329d990451f1b87cc49889bd4379030c744e2c3909a2b69f` |
+| `ssa-toggle-noview-shown.pdf` | the same certified file: one revision adds a visible merged signature `Sneaky` flagged Print, NoView and ToggleNoView (`/F 292`), so it shows on hover | `1cd548c5d8d32c83a03b2d2a0526951083973ada7bf0f8d08505d627d173b904` |
 
 The files are the output of a cargo example, deterministic (RFC 6979 ECDSA, a fixed signing
-time), which also writes the six forged files of the table above into `tests/corpus/`.
+time), which also writes the seven forged files of the table above into `tests/corpus/`.
 Regenerate them from the repository root with:
 
 ```sh

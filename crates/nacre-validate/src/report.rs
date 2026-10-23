@@ -83,8 +83,8 @@ pub enum Defect {
     /// A later revision, the one ending at `end`, is not allowed or cannot be read.
     RevisionNotAllowed { end: usize },
     /// The revision that added this signature, the one ending at `end`, refuses it as a
-    /// signature: a visible new signature on a certified document, or any signature under
-    /// DocMDP 1.
+    /// signature: on a certified document, one whose field shows a widget the certified
+    /// state did not place at the same rectangle, or any signature under DocMDP 1.
     AddedByRevisionNotAllowed { end: usize },
     /// `/Contents` is not one DER `SEQUENCE` followed only by zero bytes.
     ContentsNotDer,

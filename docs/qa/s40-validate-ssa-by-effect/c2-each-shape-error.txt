@@ -1,0 +1,247 @@
+# Criterion 2 - counter-cases: shapes signed but left invisible, the moved rect put back, the unreadable rect hidden or made readable, and the ToggleNoView flags varied, to see the rule goes by effect
+# Inputs made in <tmp>/work with tools/mutate.py (quoted at the end), each a same-length byte edit of the LAST occurrence so xref offsets stay valid; the edit falls inside the last signature's ByteRange, so that signature's own digest fails by construction (Cms(MessageDigestMismatch)) and only the certification's verdict on the revision can be read.
+# Scenario program: qa-scen, a scratch binary crate under the QA temp dir depending on crates/nacre-validate by path; it calls the public nacre_validate::validate on the file named in argv[1] and prints every SignatureValidation. Source quoted whole at the end.
+# Tree under test: fa962eba87b4f60a363208383cce9838b3b30760 (copy of git ls-files, no .env* file to copy; cargo fetch: exit 0; cargo build --workspace --all-features: exit 0)
+# Every run below was replayed once with identical output (cmp).
+# mutations:
+#   $ python3 -I tools/mutate.py <corpus>/attacks/ssa-layer-widget-shown.pdf layer-signed-hidden.pdf '/F 4 /AP << /N 10 0 R >> /V 14' '/F 6 /AP << /N 10 0 R >> /V 14'
+#   layer-signed-hidden.pdf: replaced last b'/F 4 /AP << /N 10 0 R >> /V 14' at offset 20064 with b'/F 6 /AP << /N 10 0 R >> /V 14'
+#   $ python3 -I tools/mutate.py <corpus>/attacks/ssa-unlisted-widget-shown.pdf unlisted-signed-still-unlisted.pdf '/Annots [7 0 R 11 0 R 9 0 R]' '/Annots [7 0 R 11 0 R]      '
+#   unlisted-signed-still-unlisted.pdf: replaced last b'/Annots [7 0 R 11 0 R 9 0 R]' at offset 19750 with b'/Annots [7 0 R 11 0 R]      '
+#   $ python3 -I tools/mutate.py <corpus>/attacks/ssa-orphan-widget.pdf orphan-widget-hidden.pdf '/Parent 14 0 R /Rect [72 650 400 700] /F 4' '/Parent 14 0 R /Rect [72 650 400 700] /F 6'
+#   orphan-widget-hidden.pdf: replaced last b'/Parent 14 0 R /Rect [72 650 400 700] /F 4' at offset 19228 with b'/Parent 14 0 R /Rect [72 650 400 700] /F 6'
+#   $ python3 -I tools/mutate.py <corpus>/attacks/ssa-moved-rect.pdf moved-rect-kept.pdf '/Rect [72 100 400 150]' '/Rect [72 650 400 700]'
+#   moved-rect-kept.pdf: replaced last b'/Rect [72 100 400 150]' at offset 19714 with b'/Rect [72 650 400 700]'
+#   $ python3 -I tools/mutate.py <corpus>/attacks/ssa-unreadable-rect.pdf unreadable-rect-hidden.pdf '/Rect [72 650 400 14 0 R] /F 4' '/Rect [72 650 400 14 0 R] /F 6'
+#   unreadable-rect-hidden.pdf: replaced last b'/Rect [72 650 400 14 0 R] /F 4' at offset 19259 with b'/Rect [72 650 400 14 0 R] /F 6'
+#   $ python3 -I tools/mutate.py <corpus>/attacks/ssa-unreadable-rect.pdf unreadable-rect-readable.pdf '/Rect [72 650 400 14 0 R]' '/Rect [72 650 400 700]   '
+#   unreadable-rect-readable.pdf: replaced last b'/Rect [72 650 400 14 0 R]' at offset 19259 with b'/Rect [72 650 400 700]   '
+#   $ python3 -I tools/mutate.py <corpus>/attacks/ssa-toggle-noview-shown.pdf toggle-noview-only.pdf '/Rect [72 650 400 700] /F 292' '/Rect [72 650 400 700] /F 36 '
+#   toggle-noview-only.pdf: replaced last b'/Rect [72 650 400 700] /F 292' at offset 19259 with b'/Rect [72 650 400 700] /F 36 '
+#   $ python3 -I tools/mutate.py <corpus>/attacks/ssa-toggle-noview-shown.pdf toggle-hidden-too.pdf '/Rect [72 650 400 700] /F 292' '/Rect [72 650 400 700] /F 294'
+#   toggle-hidden-too.pdf: replaced last b'/Rect [72 650 400 700] /F 292' at offset 19259 with b'/Rect [72 650 400 700] /F 294'
+#   $ python3 -I tools/mutate.py <corpus>/attacks/ssa-toggle-noview-shown.pdf toggle-without-noview.pdf '/Rect [72 650 400 700] /F 292' '/Rect [72 650 400 700] /F 260'
+#   toggle-without-noview.pdf: replaced last b'/Rect [72 650 400 700] /F 292' at offset 19259 with b'/Rect [72 650 400 700] /F 260'
+# moved-rect-kept.pdf: rect put back -> certification Allowed([Signature]). unreadable-rect-hidden.pdf: Hidden set -> Allowed([Signature]); unreadable-rect-readable.pdf -> still RevisionNotAllowed (the rect differs from the certified one).
+# layer-signed-hidden.pdf, unlisted-signed-still-unlisted.pdf, orphan-widget-hidden.pdf: left invisible, but the revision also removes /OC, rewrites the page or adds an annotation -> the certification still refuses it (fail-closed).
+# toggle-noview-only.pdf (/F 36, NoView without ToggleNoView) and toggle-hidden-too.pdf (/F 294, Hidden + NoView + ToggleNoView) -> Allowed([Signature]): the widget is off. toggle-without-noview.pdf (/F 260, ToggleNoView without NoView) -> RevisionNotAllowed: the widget is shown.
+
+$ cd <tmp>/work && qa-scen layer-signed-hidden.pdf   (stdin: none)
+file: layer-signed-hidden.pdf (20242 bytes)
+signatures: 2
+- field "Sneaky"
+  indication: TOTAL_FAILED / Some("HASH_FAILURE")
+  digest_verified=false signature_verified=false
+  defect: Some(Cms(MessageDigestMismatch))
+  later_revisions: 0
+- field "Certification"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(RevisionNotAllowed { end: 20242 })
+  later_revisions: 1
+    end=20242 changed=[ObjectId { number: 11, generation: 0 }, ObjectId { number: 14, generation: 0 }]
+      verdict=NotAllowed { refused: [ObjectId { number: 11, generation: 0 }, ObjectId { number: 14, generation: 0 }] }
+[exit code: 0]
+
+$ cd <tmp>/work && qa-scen unlisted-signed-still-unlisted.pdf   (stdin: none)
+file: unlisted-signed-still-unlisted.pdf (20106 bytes)
+signatures: 2
+- field "Sneaky"
+  indication: TOTAL_FAILED / Some("HASH_FAILURE")
+  digest_verified=false signature_verified=false
+  defect: Some(Cms(MessageDigestMismatch))
+  later_revisions: 0
+- field "Certification"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(RevisionNotAllowed { end: 20106 })
+  later_revisions: 1
+    end=20106 changed=[ObjectId { number: 9, generation: 0 }, ObjectId { number: 12, generation: 0 }, ObjectId { number: 13, generation: 0 }]
+      verdict=NotAllowed { refused: [ObjectId { number: 9, generation: 0 }, ObjectId { number: 12, generation: 0 }, ObjectId { number: 13, generation: 0 }] }
+[exit code: 0]
+
+$ cd <tmp>/work && qa-scen orphan-widget-hidden.pdf   (stdin: none)
+file: orphan-widget-hidden.pdf (19873 bytes)
+signatures: 2
+- field "Certification"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(RevisionNotAllowed { end: 19873 })
+  later_revisions: 1
+    end=19873 changed=[ObjectId { number: 3, generation: 0 }, ObjectId { number: 6, generation: 0 }, ObjectId { number: 11, generation: 0 }, ObjectId { number: 12, generation: 0 }, ObjectId { number: 13, generation: 0 }, ObjectId { number: 14, generation: 0 }]
+      verdict=NotAllowed { refused: [ObjectId { number: 3, generation: 0 }, ObjectId { number: 12, generation: 0 }, ObjectId { number: 13, generation: 0 }, ObjectId { number: 14, generation: 0 }] }
+- field "Sneaky"
+  indication: TOTAL_FAILED / Some("HASH_FAILURE")
+  digest_verified=false signature_verified=false
+  defect: Some(Cms(MessageDigestMismatch))
+  later_revisions: 0
+[exit code: 0]
+
+$ cd <tmp>/work && qa-scen moved-rect-kept.pdf   (stdin: none)
+file: moved-rect-kept.pdf (19939 bytes)
+signatures: 2
+- field "Sneaky"
+  indication: TOTAL_FAILED / Some("HASH_FAILURE")
+  digest_verified=false signature_verified=false
+  defect: Some(Cms(MessageDigestMismatch))
+  later_revisions: 0
+- field "Certification"
+  indication: INDETERMINATE / Some("NO_CERTIFICATE_CHAIN_FOUND")
+  digest_verified=true signature_verified=true
+  defect: None
+  later_revisions: 1
+    end=19939 changed=[ObjectId { number: 9, generation: 0 }, ObjectId { number: 12, generation: 0 }, ObjectId { number: 13, generation: 0 }]
+      verdict=Allowed([Signature])
+[exit code: 0]
+
+$ cd <tmp>/work && qa-scen unreadable-rect-hidden.pdf   (stdin: none)
+file: unreadable-rect-hidden.pdf (19745 bytes)
+signatures: 2
+- field "Certification"
+  indication: INDETERMINATE / Some("NO_CERTIFICATE_CHAIN_FOUND")
+  digest_verified=true signature_verified=true
+  defect: None
+  later_revisions: 1
+    end=19745 changed=[ObjectId { number: 3, generation: 0 }, ObjectId { number: 6, generation: 0 }, ObjectId { number: 11, generation: 0 }, ObjectId { number: 12, generation: 0 }, ObjectId { number: 13, generation: 0 }]
+      verdict=Allowed([Signature])
+- field "Sneaky"
+  indication: TOTAL_FAILED / Some("HASH_FAILURE")
+  digest_verified=false signature_verified=false
+  defect: Some(Cms(MessageDigestMismatch))
+  later_revisions: 0
+[exit code: 0]
+
+$ cd <tmp>/work && qa-scen unreadable-rect-readable.pdf   (stdin: none)
+file: unreadable-rect-readable.pdf (19745 bytes)
+signatures: 2
+- field "Certification"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(RevisionNotAllowed { end: 19745 })
+  later_revisions: 1
+    end=19745 changed=[ObjectId { number: 3, generation: 0 }, ObjectId { number: 6, generation: 0 }, ObjectId { number: 11, generation: 0 }, ObjectId { number: 12, generation: 0 }, ObjectId { number: 13, generation: 0 }]
+      verdict=NotAllowed { refused: [ObjectId { number: 3, generation: 0 }, ObjectId { number: 6, generation: 0 }, ObjectId { number: 11, generation: 0 }, ObjectId { number: 12, generation: 0 }, ObjectId { number: 13, generation: 0 }] }
+- field "Sneaky"
+  indication: TOTAL_FAILED / Some("HASH_FAILURE")
+  digest_verified=false signature_verified=false
+  defect: Some(Cms(MessageDigestMismatch))
+  later_revisions: 0
+[exit code: 0]
+
+$ cd <tmp>/work && qa-scen toggle-noview-only.pdf   (stdin: none)
+file: toggle-noview-only.pdf (19744 bytes)
+signatures: 2
+- field "Certification"
+  indication: INDETERMINATE / Some("NO_CERTIFICATE_CHAIN_FOUND")
+  digest_verified=true signature_verified=true
+  defect: None
+  later_revisions: 1
+    end=19744 changed=[ObjectId { number: 3, generation: 0 }, ObjectId { number: 6, generation: 0 }, ObjectId { number: 11, generation: 0 }, ObjectId { number: 12, generation: 0 }, ObjectId { number: 13, generation: 0 }]
+      verdict=Allowed([Signature])
+- field "Sneaky"
+  indication: TOTAL_FAILED / Some("HASH_FAILURE")
+  digest_verified=false signature_verified=false
+  defect: Some(Cms(MessageDigestMismatch))
+  later_revisions: 0
+[exit code: 0]
+
+$ cd <tmp>/work && qa-scen toggle-hidden-too.pdf   (stdin: none)
+file: toggle-hidden-too.pdf (19744 bytes)
+signatures: 2
+- field "Certification"
+  indication: INDETERMINATE / Some("NO_CERTIFICATE_CHAIN_FOUND")
+  digest_verified=true signature_verified=true
+  defect: None
+  later_revisions: 1
+    end=19744 changed=[ObjectId { number: 3, generation: 0 }, ObjectId { number: 6, generation: 0 }, ObjectId { number: 11, generation: 0 }, ObjectId { number: 12, generation: 0 }, ObjectId { number: 13, generation: 0 }]
+      verdict=Allowed([Signature])
+- field "Sneaky"
+  indication: TOTAL_FAILED / Some("HASH_FAILURE")
+  digest_verified=false signature_verified=false
+  defect: Some(Cms(MessageDigestMismatch))
+  later_revisions: 0
+[exit code: 0]
+
+$ cd <tmp>/work && qa-scen toggle-without-noview.pdf   (stdin: none)
+file: toggle-without-noview.pdf (19744 bytes)
+signatures: 2
+- field "Certification"
+  indication: TOTAL_FAILED / Some("FORMAT_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(RevisionNotAllowed { end: 19744 })
+  later_revisions: 1
+    end=19744 changed=[ObjectId { number: 3, generation: 0 }, ObjectId { number: 6, generation: 0 }, ObjectId { number: 11, generation: 0 }, ObjectId { number: 12, generation: 0 }, ObjectId { number: 13, generation: 0 }]
+      verdict=NotAllowed { refused: [ObjectId { number: 3, generation: 0 }, ObjectId { number: 6, generation: 0 }, ObjectId { number: 11, generation: 0 }, ObjectId { number: 12, generation: 0 }, ObjectId { number: 13, generation: 0 }] }
+- field "Sneaky"
+  indication: TOTAL_FAILED / Some("HASH_FAILURE")
+  digest_verified=false signature_verified=false
+  defect: Some(Cms(MessageDigestMismatch))
+  later_revisions: 0
+[exit code: 0]
+
+----- scen/Cargo.toml -----
+[package]
+name = "qa-scen"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+nacre-validate = { path = "../copy/crates/nacre-validate" }
+----- scen/src/main.rs -----
+use std::process::ExitCode;
+
+fn main() -> ExitCode {
+    let Some(path) = std::env::args().nth(1) else {
+        eprintln!("usage: qa-scen <file.pdf>");
+        return ExitCode::from(2);
+    };
+    let pdf = match std::fs::read(&path) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("read error: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    println!("file: {path} ({} bytes)", pdf.len());
+    match nacre_validate::validate(&pdf) {
+        Ok(sigs) => {
+            println!("signatures: {}", sigs.len());
+            for s in &sigs {
+                println!("- field {:?}", s.field);
+                println!("  indication: {} / {:?}", s.report.indication().as_str(),
+                    s.report.sub_indication().map(|x| x.as_str()));
+                println!("  digest_verified={} signature_verified={}", s.digest_verified, s.signature_verified);
+                println!("  defect: {:?}", s.defect);
+                println!("  later_revisions: {}", s.later_revisions.len());
+                for r in &s.later_revisions {
+                    println!("    end={} changed={:?}", r.end, r.changed);
+                    println!("      verdict={:?}", r.verdict);
+                }
+            }
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            println!("error: {e} (kind {:?})", e.kind());
+            println!("debug: {e:?}");
+            ExitCode::from(1)
+        }
+    }
+}
+----- tools/mutate.py -----
+import sys
+src, dst, old, new = sys.argv[1], sys.argv[2], sys.argv[3].encode(), sys.argv[4].encode()
+assert len(old) == len(new)
+b = open(src, 'rb').read()
+i = b.rindex(old)
+open(dst, 'wb').write(b[:i] + new + b[i+len(old):])
+print(f"{dst}: replaced last {old!r} at offset {i} with {new!r}")
+----- tools/run.sh -----
+#!/bin/sh
+label=$1; dir=$2; f=$3
+echo "\$ cd $label && qa-scen $f   (stdin: none)"
+cd "$dir" && "$QA_T"/scen/target/release/qa-scen "$f" 2>&1
+echo "[exit code: $?]"
+echo
