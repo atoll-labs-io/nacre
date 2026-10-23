@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.97"
 license = "MIT OR Apache-2.0"
-description = "Validation of PAdES signatures for Nacre: checks that each signature covers the document and is cryptographically valid."
+description = "Validation of PAdES signatures for Nacre: checks that each signature covers the document and is cryptographically valid, builds its certificate chain and judges its revocation at the time its timestamp proves."
 
 [lints]
 workspace = true
@@ -13,6 +13,8 @@ workspace = true
 nacre-core = { path = "../nacre-core", version = "0.1.0" }
 nacre-pdf = { path = "../nacre-pdf", version = "0.1.0" }
 nacre-cms = { path = "../nacre-cms", version = "0.1.0" }
+nacre-tsp = { path = "../nacre-tsp", version = "0.1.0" }
+nacre-revocation = { path = "../nacre-revocation", version = "0.1.0" }
 sha2 = "0.11"
 der = { version = "0.8", features = ["alloc"] }
 x509-cert = "0.3"
@@ -26,7 +28,9 @@ thiserror = "2"
 nacre-core = { path = "../nacre-core", features = ["test-signer"] }
 # No version: dev-dependencies are dropped by `cargo publish`.
 nacre-pades = { path = "../nacre-pades" }
-nacre-conformance = { path = "../nacre-conformance" }
+nacre-conformance = { path = "../nacre-conformance", features = ["http"] }
+nacre-tsp = { path = "../nacre-tsp", features = ["http"] }
+nacre-revocation = { path = "../nacre-revocation", features = ["http"] }
 der = { version = "0.8", features = ["alloc", "oid", "pem"] }
 x509-cert = { version = "0.3", features = ["builder"] }
 p256 = { version = "0.14", features = ["ecdsa", "pkcs8", "pem"] }

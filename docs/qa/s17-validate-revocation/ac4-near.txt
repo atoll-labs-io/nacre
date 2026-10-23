@@ -1,0 +1,274 @@
+# QA s17-validate-revocation — scenario ac4-near
+Tree checked: 50fecebeed209d68f59e11126ba87223b014f482 (copy of git ls-files, ADR-0059)
+Working directory: /tmp/qa-s17.JWNt8j/scenario (scratch crate depending on the copy's crates by path)
+Build: cargo build (CARGO_TARGET_DIR=/tmp/qa-s17.JWNt8j/target), after Install and Build of the copy
+Command: /tmp/qa-s17.JWNt8j/target/debug/qa-s17 ac4-near
+Stdin: none
+Runs: 2, outputs identical
+
+## stdout and stderr
+PKI: QA root > QA intermediate > {QA signer, QA TSA}; signature /M 2026-10-22T08:00Z; control date 2026-10-25T00:00Z unless said
+== control 10-23T00:00: B-T 08:00, signer revoked 12:00, TSA revoked 13:00
+   field=Signature1 indication=INDETERMINATE sub=Some(RevokedNoPoe) level=None
+   digest_verified=true signature_verified=true chain_len=Some(3)
+   defect=Some("Revocation(Revoked { depth: 0, date: SystemTime { tv_sec: 1792670400, tv_nsec: 0 } })")
+   best_signature_time=None
+== control 10-23T00:00: B-T token over another imprint, signer revoked 12:00
+   field=Signature1 indication=INDETERMINATE sub=Some(RevokedNoPoe) level=None
+   digest_verified=true signature_verified=true chain_len=Some(3)
+   defect=Some("Revocation(Revoked { depth: 0, date: SystemTime { tv_sec: 1792670400, tv_nsec: 0 } })")
+   best_signature_time=None
+== control 10-23T00:00: B-B, signer revoked 12:00 (AC2 with data 10 h old)
+   field=Signature1 indication=INDETERMINATE sub=Some(RevokedNoPoe) level=None
+   digest_verified=true signature_verified=true chain_len=Some(3)
+   defect=Some("Revocation(Revoked { depth: 0, date: SystemTime { tv_sec: 1792670400, tv_nsec: 0 } })")
+   best_signature_time=None
+
+Exit code: 0
+
+## Cargo.toml (whole)
+[package]
+name = "qa-s17"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+nacre-validate = { path = "/tmp/qa-s17.JWNt8j/copy/crates/nacre-validate" }
+nacre-core = { path = "/tmp/qa-s17.JWNt8j/copy/crates/nacre-core" }
+nacre-pades = { path = "/tmp/qa-s17.JWNt8j/copy/crates/nacre-pades" }
+nacre-pdf = { path = "/tmp/qa-s17.JWNt8j/copy/crates/nacre-pdf" }
+nacre-cms = { path = "/tmp/qa-s17.JWNt8j/copy/crates/nacre-cms" }
+sha2 = "0.11"
+spki = "0.8"
+der = { version = "0.8", features = ["alloc", "oid", "pem"] }
+x509-cert = { version = "0.3", features = ["builder"] }
+p256 = { version = "0.14", features = ["ecdsa", "pkcs8", "pem"] }
+
+
+## src/main.rs (whole)
+#![allow(clippy::unwrap_used)]
+//! QA s17: scenarios calling the public interface of nacre-validate on PDFs built here.
+//! Inputs are made with the story's test forge (certificates, CRLs, tokens, PDFs), under a
+//! PKI of this QA's own (other keys, names and dates than tests/revocation.rs).
+
+#[path = "/tmp/qa-s17.JWNt8j/copy/crates/nacre-validate/tests/support/forge.rs"]
+#[allow(dead_code)]
+mod forge;
+
+use std::time::SystemTime;
+
+use der::{DateTime, Encode};
+use forge::{ChainSigner, ForgedTsa, Role, crl, instant, issue, key, signed, time, with_dss};
+use nacre_core::{RevocationData, RevocationSource};
+use nacre_pades::{Level, sign_at_level};
+use nacre_validate::{TrustAnchors, validate_with_anchors, validate_with_revocation};
+use p256::ecdsa::SigningKey;
+use x509_cert::Certificate;
+use x509_cert::time::Time;
+
+fn der(c: &Certificate) -> Vec<u8> { c.to_der().unwrap() }
+
+struct Pki { root: Certificate, rk: SigningKey, int: Certificate, ik: SigningKey,
+             signer: Certificate, sk: SigningKey, tsa: Certificate, tk: SigningKey }
+
+impl Pki {
+    fn new() -> Self {
+        let rk = key(&[0x71; 32]); let ik = key(&[0x72; 32]);
+        let sk = key(&[0x73; 32]); let tk = key(&[0x74; 32]);
+        let root = issue(Role::Ca, "CN=QA root,O=QA,C=FR", 11, &rk, None, &rk);
+        let int = issue(Role::Ca, "CN=QA intermediate,O=QA,C=FR", 12, &ik, Some(&root), &rk);
+        let signer = issue(Role::Signer, "CN=QA signer,O=QA,C=FR", 13, &sk, Some(&int), &ik);
+        let tsa = issue(Role::Tsa, "CN=QA TSA,O=QA,C=FR", 14, &tk, Some(&int), &ik);
+        Self { root, rk, int, ik, signer, sk, tsa, tk }
+    }
+    fn chain_signer(&self) -> ChainSigner { ChainSigner { key: self.sk.clone(), chain: vec![der(&self.signer), der(&self.int)] } }
+    fn tsa_at(&self, h: u8, m: u8) -> ForgedTsa { ForgedTsa { key: self.tk.clone(), certificates: vec![der(&self.tsa)], gen_time: DateTime::new(2026, 10, 22, h, m, 0).unwrap(), imprint: None } }
+    fn int_crl(&self, this_update: Time, revoked: &[(&Certificate, Time)]) -> Vec<u8> { crl(&self.int, &self.ik, this_update, time(2026, 12, 1, 0, 0, 0), revoked) }
+    fn root_crl_at(&self, this_update: Time, revoked: &[(&Certificate, Time)]) -> Vec<u8> { crl(&self.root, &self.rk, this_update, time(2026, 12, 1, 0, 0, 0), revoked) }
+    fn root_crl(&self, revoked: &[(&Certificate, Time)]) -> Vec<u8> { crl(&self.root, &self.rk, time(2026, 10, 22, 14, 0, 0), time(2026, 12, 1, 0, 0, 0), revoked) }
+    fn anchors(&self) -> TrustAnchors { let r = der(&self.root); TrustAnchors::from_certificates([r.as_slice()]).unwrap() }
+    fn certs(&self) -> Vec<Vec<u8>> { vec![der(&self.int), der(&self.root)] }
+}
+
+/// Answers from fixed CRLs, by issuer; counts nothing, keeps nothing.
+struct StubSource { pki_int: Vec<u8>, int_crl: Vec<u8>, root_crl: Vec<u8> }
+impl RevocationSource for StubSource {
+    fn revocation(&self, _certificate: &[u8], issuer: &[u8]) -> Result<RevocationData, nacre_core::Error> {
+        if issuer == self.pki_int.as_slice() { Ok(RevocationData::Crl(self.int_crl.clone())) } else { Ok(RevocationData::Crl(self.root_crl.clone())) }
+    }
+}
+struct Failing;
+impl RevocationSource for Failing {
+    fn revocation(&self, _: &[u8], _: &[u8]) -> Result<RevocationData, nacre_core::Error> {
+        Err(nacre_core::Error::Signer("network unreachable (stub)".into()))
+    }
+}
+struct Junk;
+impl RevocationSource for Junk {
+    fn revocation(&self, _: &[u8], _: &[u8]) -> Result<RevocationData, nacre_core::Error> {
+        Ok(RevocationData::Crl(b"not a CRL at all".to_vec()))
+    }
+}
+
+fn fmt_time(t: Option<SystemTime>) -> String {
+    t.map(|t| { let x = Time::try_from(t).map(|x| x.to_string()).unwrap_or_else(|_| format!("{t:?}")); x }).unwrap_or_else(|| "None".into())
+}
+
+fn show(label: &str, r: Result<Vec<nacre_validate::SignatureValidation>, nacre_validate::Error>) {
+    println!("== {label}");
+    match r {
+        Err(e) => println!("   Err: {e}  (kind {:?})", e.kind()),
+        Ok(v) => for s in v {
+            println!("   field={} indication={} sub={:?} level={:?}", s.field, s.report.indication().as_str(), s.report.sub_indication(), s.report.level());
+            println!("   digest_verified={} signature_verified={} chain_len={:?}", s.digest_verified, s.signature_verified, s.chain.as_ref().map(|c| c.certificates.len()));
+            println!("   defect={:?}", s.defect.as_ref().map(|d| format!("{d:?}")));
+            println!("   best_signature_time={}", fmt_time(s.best_signature_time));
+        }
+    }
+}
+
+fn main() {
+    let which = std::env::args().nth(1).unwrap_or_default();
+    let p = Pki::new();
+    let control = instant(2026, 10, 25, 0, 0, 0);
+    println!("PKI: QA root > QA intermediate > {{QA signer, QA TSA}}; signature /M 2026-10-22T08:00Z; control date 2026-10-25T00:00Z unless said");
+    match which.as_str() {
+        "ac1" => {
+            let pdf = signed(&p.chain_signer(), Level::T { tsa: &p.tsa_at(8, 0) });
+            let root = p.root_crl(&[]);
+            let after = with_dss(&pdf, &p.certs(), &[p.int_crl(time(2026, 10, 22, 14, 0, 0), &[(&p.signer, time(2026, 10, 22, 12, 0, 0))]), root.clone()]);
+            show("B-T stamped 08:00, signer revoked 12:00, CRL of 14:00 in /DSS, no source", validate_with_anchors(&after, &p.anchors(), control));
+            let before = with_dss(&pdf, &p.certs(), &[p.int_crl(time(2026, 10, 22, 14, 0, 0), &[(&p.signer, time(2026, 10, 22, 6, 0, 0))]), root.clone()]);
+            show("B-T stamped 08:00, signer revoked 06:00 (before stamp), CRL of 14:00 in /DSS", validate_with_anchors(&before, &p.anchors(), control));
+            let equal = with_dss(&pdf, &p.certs(), &[p.int_crl(time(2026, 10, 22, 14, 0, 0), &[(&p.signer, time(2026, 10, 22, 8, 0, 0))]), root.clone()]);
+            show("edge: B-T stamped 08:00, signer revoked exactly 08:00", validate_with_anchors(&equal, &p.anchors(), control));
+            let one_s = with_dss(&pdf, &p.certs(), &[p.int_crl(time(2026, 10, 22, 14, 0, 0), &[(&p.signer, time(2026, 10, 22, 8, 0, 1))]), root]);
+            show("edge: B-T stamped 08:00, signer revoked 08:00:01", validate_with_anchors(&one_s, &p.anchors(), control));
+        }
+        "ac1-error" => {
+            let pdf = signed(&p.chain_signer(), Level::T { tsa: &p.tsa_at(8, 0) });
+            show("not a PDF at all", validate_with_anchors(b"hello, not a pdf", &p.anchors(), control));
+            show("B-T PDF truncated to half its length", validate_with_anchors(&pdf[..pdf.len() / 2], &p.anchors(), control));
+            let pem = format!("-----BEGIN CERTIFICATE-----\n{}\n-----END CERTIFICATE-----\n", "MIIB");
+            println!("== anchor given as PEM instead of DER");
+            match TrustAnchors::from_certificates([pem.as_bytes()]) { Ok(_) => println!("   Ok (accepted)"), Err(e) => println!("   Err: {e}  (kind {:?})", e.kind()) }
+            println!("== anchor that is garbage bytes");
+            match TrustAnchors::from_certificates([&b"\x30\x03\x02\x01"[..]]) { Ok(_) => println!("   Ok (accepted)"), Err(e) => println!("   Err: {e}  (kind {:?})", e.kind()) }
+            let other = issue(Role::Ca, "CN=Unrelated root,O=QA,C=FR", 99, &key(&[0x7f; 32]), None, &key(&[0x7f; 32]));
+            let o = der(&other);
+            let dss = with_dss(&pdf, &p.certs(), &[p.int_crl(time(2026, 10, 22, 14, 0, 0), &[]), p.root_crl(&[])]);
+            show("anchor that does not certify the signer (wrong root)", validate_with_anchors(&dss, &TrustAnchors::from_certificates([o.as_slice()]).unwrap(), control));
+            show("/DSS CRL is junk bytes only, no source", validate_with_anchors(&with_dss(&pdf, &p.certs(), &[b"junk".to_vec()]), &p.anchors(), control));
+        }
+        "ac2" => {
+            let pdf = signed(&p.chain_signer(), Level::B);
+            let root = p.root_crl(&[]);
+            let rev = with_dss(&pdf, &p.certs(), &[p.int_crl(time(2026, 10, 22, 14, 0, 0), &[(&p.signer, time(2026, 10, 22, 12, 0, 0))]), root.clone()]);
+            show("B-B, signer revoked 12:00 (after /M, before control date)", validate_with_anchors(&rev, &p.anchors(), control));
+            let late = with_dss(&pdf, &p.certs(), &[p.int_crl(time(2026, 10, 26, 0, 0, 0), &[(&p.signer, time(2026, 10, 25, 12, 0, 0))]), root.clone()]);
+            show("B-B, signer revoked 2026-10-25T12:00 (after control date), CRL of 10-26", validate_with_anchors(&late, &p.anchors(), control));
+            show("B-B, same file, control date moved to 2026-10-27", validate_with_anchors(&late, &p.anchors(), instant(2026, 10, 27, 0, 0, 0)));
+            let ca = with_dss(&pdf, &p.certs(), &[p.int_crl(time(2026, 10, 22, 14, 0, 0), &[]), p.root_crl(&[(&p.int, time(2026, 10, 22, 12, 0, 0))])]);
+            show("B-B, intermediate revoked 12:00 by root CRL", validate_with_anchors(&ca, &p.anchors(), control));
+        }
+        "ac2-error" => {
+            let pdf = signed(&p.chain_signer(), Level::B);
+            let rev = with_dss(&pdf, &p.certs(), &[p.int_crl(time(2026, 10, 22, 14, 0, 0), &[(&p.signer, time(2026, 10, 22, 12, 0, 0))]), p.root_crl(&[])]);
+            show("B-B revoked, control date UNIX_EPOCH (before every certificate)", validate_with_anchors(&rev, &p.anchors(), SystemTime::UNIX_EPOCH));
+            show("B-B revoked, empty TrustAnchors", validate_with_anchors(&rev, &TrustAnchors::default(), control));
+            let forged = crl(&p.int, &key(&[0x7e; 32]), time(2026, 10, 22, 14, 0, 0), time(2026, 12, 1, 0, 0, 0), &[]);
+            show("B-B, /DSS CRL claiming the intermediate but signed by another key, listing nothing", validate_with_anchors(&with_dss(&pdf, &p.certs(), &[forged, p.root_crl(&[])]), &p.anchors(), control));
+        }
+        "ac3" => {
+            let src = StubSource { pki_int: der(&p.int), int_crl: p.int_crl(time(2026, 10, 22, 8, 30, 0), &[]), root_crl: p.root_crl(&[]) };
+            let issuers = vec![der(&p.root)];
+            let lt = sign_at_level(forge::UNSIGNED, &p.chain_signer(), DateTime::new(2026, 10, 22, 8, 0, 0).unwrap(), Level::LT { tsa: &p.tsa_at(8, 0), revocation: &src, issuers: &issuers }).unwrap();
+            show("B-LT built with a stub source, validated with NO source (only /DSS)", validate_with_revocation(&lt, &p.anchors(), control, None));
+            let lta = sign_at_level(forge::UNSIGNED, &p.chain_signer(), DateTime::new(2026, 10, 22, 8, 0, 0).unwrap(), Level::LTA { tsa: &p.tsa_at(8, 0), revocation: &src, issuers: &issuers, document_tsa: &p.tsa_at(9, 0) }).unwrap();
+            show("B-LTA built with a stub source, validated with NO source (only /DSS)", validate_with_revocation(&lta, &p.anchors(), control, None));
+            let bb = signed(&p.chain_signer(), Level::B);
+            let bb_certs = with_dss(&bb, &p.certs(), &[]);
+            show("B-B, /DSS with certificates only, no CRL, no source", validate_with_revocation(&bb_certs, &p.anchors(), control, None));
+            show("B-B, no /DSS at all, no source", validate_with_revocation(&bb, &p.anchors(), control, None));
+            show("B-B, no /DSS, stub source answering", validate_with_revocation(&bb, &p.anchors(), control, Some(&src)));
+        }
+        "ac3-error" => {
+            let bb = signed(&p.chain_signer(), Level::B);
+            show("B-B, no /DSS, source that fails (Err)", validate_with_revocation(&bb, &p.anchors(), control, Some(&Failing)));
+            show("B-B, no /DSS, source returning garbage as a CRL", validate_with_revocation(&bb, &p.anchors(), control, Some(&Junk)));
+        }
+        "ac4" => {
+            let pdf = signed(&p.chain_signer(), Level::T { tsa: &p.tsa_at(8, 0) });
+            let root = p.root_crl(&[]);
+            let tsa_rev = with_dss(&pdf, &p.certs(), &[p.int_crl(time(2026, 10, 22, 14, 0, 0), &[(&p.signer, time(2026, 10, 22, 12, 0, 0)), (&p.tsa, time(2026, 10, 22, 13, 0, 0))]), root.clone()]);
+            show("B-T 08:00, signer revoked 12:00, TSA revoked 13:00 (after stamp, before control date)", validate_with_anchors(&tsa_rev, &p.anchors(), control));
+            let tsa_ok = with_dss(&pdf, &p.certs(), &[p.int_crl(time(2026, 10, 22, 14, 0, 0), &[(&p.signer, time(2026, 10, 22, 12, 0, 0))]), root.clone()]);
+            show("control: same, TSA not revoked", validate_with_anchors(&tsa_ok, &p.anchors(), control));
+            // TSA with no revocation data: CRL of the intermediate does cover it, so give a CRL issued before the TSA's notBefore? Use a separate issuer path instead: drop intermediate CRL -> both missing.
+            let tsa_ca_rev = with_dss(&pdf, &p.certs(), &[p.int_crl(time(2026, 10, 22, 14, 0, 0), &[(&p.signer, time(2026, 10, 22, 12, 0, 0))]), p.root_crl(&[(&p.int, time(2026, 10, 22, 13, 0, 0))])]);
+            show("B-T 08:00, signer revoked 12:00, intermediate (CA of signer and TSA) revoked 13:00", validate_with_anchors(&tsa_ca_rev, &p.anchors(), control));
+            let tsa_no_eku = issue(Role::Signer, "CN=QA not a TSA,O=QA,C=FR", 15, &p.tk, Some(&p.int), &p.ik);
+            let bad = ForgedTsa { key: p.tk.clone(), certificates: vec![der(&tsa_no_eku)], gen_time: DateTime::new(2026, 10, 22, 8, 0, 0).unwrap(), imprint: None };
+            let pdf2 = signed(&p.chain_signer(), Level::T { tsa: &bad });
+            let f = with_dss(&pdf2, &p.certs(), &[p.int_crl(time(2026, 10, 22, 14, 0, 0), &[(&p.signer, time(2026, 10, 22, 12, 0, 0))]), root]);
+            show("B-T 08:00 by a token whose cert lacks id-kp-timeStamping, signer revoked 12:00", validate_with_anchors(&f, &p.anchors(), control));
+        }
+        "ac4-error" => {
+            let tsa = ForgedTsa { key: p.tk.clone(), certificates: vec![der(&p.tsa)], gen_time: DateTime::new(2026, 10, 22, 8, 0, 0).unwrap(), imprint: Some(vec![0u8; 32]) };
+            let pdf = signed(&p.chain_signer(), Level::T { tsa: &tsa });
+            let f = with_dss(&pdf, &p.certs(), &[p.int_crl(time(2026, 10, 22, 14, 0, 0), &[(&p.signer, time(2026, 10, 22, 12, 0, 0))]), p.root_crl(&[])]);
+            show("B-T token over another imprint (zeros), signer revoked 12:00", validate_with_anchors(&f, &p.anchors(), control));
+            let late = with_dss(&signed(&p.chain_signer(), Level::T { tsa: &p.tsa_at(8, 0) }), &p.certs(), &[p.int_crl(time(2026, 10, 22, 14, 0, 0), &[]), p.root_crl(&[])]);
+            show("B-T 08:00, nothing revoked, control date 2026-10-22T07:00 (before genTime)", validate_with_anchors(&late, &p.anchors(), instant(2026, 10, 22, 7, 0, 0)));
+        }
+        "fresh" => {
+            // Fix run 1: a signature with no proof of existence counts only data issued
+            // within 24 h before the control date (2026-10-25T00:00Z).
+            let bb = signed(&p.chain_signer(), Level::B);
+            let fresh = time(2026, 10, 24, 12, 0, 0);
+            let stale = time(2026, 10, 22, 14, 0, 0);
+            let rfresh = p.root_crl_at(fresh, &[]);
+            let revoked = [(&p.signer, time(2026, 10, 22, 12, 0, 0))];
+            show("B-B, signer revoked 10-22T12:00, both CRLs of 10-24T12:00 (12 h old)", validate_with_anchors(&with_dss(&bb, &p.certs(), &[p.int_crl(fresh, &revoked), rfresh.clone()]), &p.anchors(), control));
+            show("B-B, nothing revoked, both CRLs of 10-24T12:00", validate_with_anchors(&with_dss(&bb, &p.certs(), &[p.int_crl(fresh, &[]), rfresh.clone()]), &p.anchors(), control));
+            show("edge: B-B, nothing revoked, intermediate CRL of exactly 10-24T00:00 (24 h)", validate_with_anchors(&with_dss(&bb, &p.certs(), &[p.int_crl(time(2026, 10, 24, 0, 0, 0), &[]), rfresh.clone()]), &p.anchors(), control));
+            show("edge: B-B, nothing revoked, intermediate CRL of 10-23T23:59:59 (24 h + 1 s)", validate_with_anchors(&with_dss(&bb, &p.certs(), &[p.int_crl(time(2026, 10, 23, 23, 59, 59), &[]), rfresh.clone()]), &p.anchors(), control));
+            show("attack shape: B-B, key revoked since, /DSS holds only an old CRL (10-22T08:30) listing nothing", validate_with_anchors(&with_dss(&bb, &p.certs(), &[p.int_crl(time(2026, 10, 22, 8, 30, 0), &[]), rfresh.clone()]), &p.anchors(), control));
+            show("B-B, the only CRL listing the signer revoked 12:00 is of 10-22T14:00 (34 h old)", validate_with_anchors(&with_dss(&bb, &p.certs(), &[p.int_crl(stale, &revoked), rfresh.clone()]), &p.anchors(), control));
+            show("B-B, fresh intermediate CRL, root CRL of 10-22T14:00 (stale)", validate_with_anchors(&with_dss(&bb, &p.certs(), &[p.int_crl(fresh, &[]), p.root_crl_at(stale, &[])]), &p.anchors(), control));
+            show("B-B, intermediate revoked 10-22T12:00 by a fresh root CRL", validate_with_anchors(&with_dss(&bb, &p.certs(), &[p.int_crl(fresh, &[]), p.root_crl_at(fresh, &[(&p.int, time(2026, 10, 22, 12, 0, 0))])]), &p.anchors(), control));
+            show("B-B, [stale listing nothing, fresh listing signer] in that order", validate_with_anchors(&with_dss(&bb, &p.certs(), &[p.int_crl(stale, &[]), p.int_crl(fresh, &revoked), rfresh.clone()]), &p.anchors(), control));
+            show("B-B, [fresh listing signer, stale listing nothing] in that order", validate_with_anchors(&with_dss(&bb, &p.certs(), &[p.int_crl(fresh, &revoked), p.int_crl(stale, &[]), rfresh.clone()]), &p.anchors(), control));
+            let bt = signed(&p.chain_signer(), Level::T { tsa: &p.tsa_at(8, 0) });
+            show("B-T 08:00, same stale CRLs of 10-22T14:00, nothing revoked (POE keeps DSS's rule)", validate_with_anchors(&with_dss(&bt, &p.certs(), &[p.int_crl(stale, &[]), p.root_crl_at(stale, &[])]), &p.anchors(), control));
+        }
+        "fresh-error" => {
+            let bb = signed(&p.chain_signer(), Level::B);
+            let stale_src = StubSource { pki_int: der(&p.int), int_crl: p.int_crl(time(2026, 10, 22, 8, 30, 0), &[]), root_crl: p.root_crl(&[]) };
+            show("B-B, no /DSS, source answering CRLs of 10-22 (stale)", validate_with_revocation(&bb, &p.anchors(), control, Some(&stale_src)));
+            let fresh_src = StubSource { pki_int: der(&p.int), int_crl: p.int_crl(time(2026, 10, 24, 18, 0, 0), &[]), root_crl: p.root_crl_at(time(2026, 10, 24, 18, 0, 0), &[]) };
+            show("B-B, no /DSS, source answering CRLs of 10-24T18:00 (fresh)", validate_with_revocation(&bb, &p.anchors(), control, Some(&fresh_src)));
+            let rev = with_dss(&bb, &p.certs(), &[p.int_crl(time(2026, 10, 22, 14, 0, 0), &[(&p.signer, time(2026, 10, 22, 12, 0, 0))]), p.root_crl(&[])]);
+            show("B-B revoked, control date UNIX_EPOCH (24 h cannot be subtracted)", validate_with_anchors(&rev, &p.anchors(), SystemTime::UNIX_EPOCH));
+            let forged = crl(&p.int, &key(&[0x7e; 32]), time(2026, 10, 24, 18, 0, 0), time(2026, 12, 1, 0, 0, 0), &[]);
+            show("B-B, fresh /DSS CRL (10-24T18:00) claiming the intermediate but signed by another key, listing nothing", validate_with_anchors(&with_dss(&bb, &p.certs(), &[forged, p.root_crl_at(time(2026, 10, 24, 18, 0, 0), &[])]), &p.anchors(), control));
+            show("B-B, /DSS CRLs dated 10-26 (after the control date), nothing revoked", validate_with_anchors(&with_dss(&bb, &p.certs(), &[p.int_crl(time(2026, 10, 26, 0, 0, 0), &[]), p.root_crl_at(time(2026, 10, 26, 0, 0, 0), &[])]), &p.anchors(), control));
+        }
+        "ac4-near" => {
+            // AC4 and its invalid input with the control date of the repo's tests (10 h after the CRLs).
+            let near = instant(2026, 10, 23, 0, 0, 0);
+            let pdf = signed(&p.chain_signer(), Level::T { tsa: &p.tsa_at(8, 0) });
+            let tsa_rev = with_dss(&pdf, &p.certs(), &[p.int_crl(time(2026, 10, 22, 14, 0, 0), &[(&p.signer, time(2026, 10, 22, 12, 0, 0)), (&p.tsa, time(2026, 10, 22, 13, 0, 0))]), p.root_crl(&[])]);
+            show("control 10-23T00:00: B-T 08:00, signer revoked 12:00, TSA revoked 13:00", validate_with_anchors(&tsa_rev, &p.anchors(), near));
+            let tsa = ForgedTsa { key: p.tk.clone(), certificates: vec![der(&p.tsa)], gen_time: DateTime::new(2026, 10, 22, 8, 0, 0).unwrap(), imprint: Some(vec![0u8; 32]) };
+            let f = with_dss(&signed(&p.chain_signer(), Level::T { tsa: &tsa }), &p.certs(), &[p.int_crl(time(2026, 10, 22, 14, 0, 0), &[(&p.signer, time(2026, 10, 22, 12, 0, 0))]), p.root_crl(&[])]);
+            show("control 10-23T00:00: B-T token over another imprint, signer revoked 12:00", validate_with_anchors(&f, &p.anchors(), near));
+            let rev = with_dss(&signed(&p.chain_signer(), Level::B), &p.certs(), &[p.int_crl(time(2026, 10, 22, 14, 0, 0), &[(&p.signer, time(2026, 10, 22, 12, 0, 0))]), p.root_crl(&[])]);
+            show("control 10-23T00:00: B-B, signer revoked 12:00 (AC2 with data 10 h old)", validate_with_anchors(&rev, &p.anchors(), near));
+        }
+        _ => eprintln!("usage: qa-s17 <ac1|ac1-error|ac2|ac2-error|ac3|ac3-error|ac4|ac4-error>"),
+    }
+}

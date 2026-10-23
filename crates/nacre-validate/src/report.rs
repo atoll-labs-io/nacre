@@ -1,7 +1,9 @@
+use std::time::SystemTime;
+
 use nacre_core::{SubIndication, ValidationReport};
 use nacre_pdf::ObjectId;
 
-use crate::{CertificatePath, ChainDefect};
+use crate::{CertificatePath, ChainDefect, RevocationDefect};
 
 /// The integrity verdict on one signature field.
 #[non_exhaustive]
@@ -19,11 +21,15 @@ pub struct SignatureValidation {
     /// Each revision appended after the one the signed bytes end at, oldest first; empty
     /// when the signed bytes end at no revision.
     pub later_revisions: Vec<LaterRevision>,
-    /// The valid certification path from the signer to a trust anchor, `None` when no
-    /// path was found or the signature failed before its chain was built. `Some` means the
-    /// path is valid at the control date, not that the signature passed: revocation is not
-    /// judged yet, so the report stays `INDETERMINATE` / `TRY_LATER`.
+    /// The certification path from the signer to a trust anchor that RFC 5280 judges
+    /// valid at the best-signature-time, `None` when no path was found or the signature
+    /// failed before its chain was built. `Some` with a [`Defect::Revocation`] means the
+    /// path is valid but its revocation check failed.
     pub chain: Option<CertificatePath>,
+    /// The `genTime` of the earliest signature timestamp whose token verifies and whose
+    /// authority's path and revocation pass at the control date; `None` when no timestamp
+    /// gives that proof, the control date then standing for it.
+    pub best_signature_time: Option<SystemTime>,
 }
 
 /// One revision appended after a signature, and what it changes.
@@ -66,7 +72,8 @@ pub enum AllowedChange {
 
 /// The first rule a signature broke. Every structural defect gives `TOTAL_FAILED` /
 /// `FORMAT_FAILURE`; a [`Defect::Cms`] gives the outcome of its CMS error, a
-/// [`Defect::Chain`] that of its chain defect.
+/// [`Defect::Chain`] that of its chain defect, a [`Defect::Revocation`] that of its
+/// revocation defect.
 #[non_exhaustive]
 #[derive(Debug)]
 pub enum Defect {
@@ -101,28 +108,50 @@ pub enum Defect {
     /// A path reaches a trust anchor but breaks a rule of RFC 5280; judged last, once the
     /// integrity and the later revisions passed. Its report is [`ChainDefect::report`].
     Chain(ChainDefect),
+    /// The path is valid but a certificate of it is revoked at or before the
+    /// best-signature-time, or has no usable revocation data; judged after the chain. Its
+    /// report is [`RevocationDefect::report`].
+    Revocation(RevocationDefect),
 }
 
 impl SignatureValidation {
-    /// A signature every check passed: `chain` is its valid path, `None` when no path
-    /// reaches an anchor.
+    /// A signature every check passed: `chain` is its valid path, whose revocation passed
+    /// too, and the signature `TOTAL_PASSED` with no level; `None` when no path reaches an
+    /// anchor.
     pub(crate) fn sound(
         field: String,
         later_revisions: Vec<LaterRevision>,
         chain: Option<CertificatePath>,
+        best_signature_time: Option<SystemTime>,
     ) -> Self {
-        let sub = match chain {
-            Some(_) => SubIndication::TryLater,
-            None => SubIndication::NoCertificateChainFound,
+        let report = match chain {
+            Some(_) => ValidationReport::passed(None),
+            None => ValidationReport::indeterminate(SubIndication::NoCertificateChainFound, None),
         };
         Self {
             field,
-            report: ValidationReport::indeterminate(sub, None),
+            report,
             digest_verified: true,
             signature_verified: true,
             defect: None,
             later_revisions,
             chain,
+            best_signature_time,
+        }
+    }
+
+    /// A signature whose valid `chain` failed its revocation check.
+    pub(crate) fn revoked(
+        field: String,
+        defect: RevocationDefect,
+        later_revisions: Vec<LaterRevision>,
+        chain: CertificatePath,
+        best_signature_time: Option<SystemTime>,
+    ) -> Self {
+        Self {
+            chain: Some(chain),
+            best_signature_time,
+            ..Self::defective(field, Defect::Revocation(defect), later_revisions)
         }
     }
 
@@ -142,6 +171,7 @@ impl SignatureValidation {
                 (failed(), true, true)
             }
             Defect::Chain(chain) => (chain.report(), true, true),
+            Defect::Revocation(revocation) => (revocation.report(), true, true),
             _ => (failed(), false, false),
         };
         Self {
@@ -152,6 +182,7 @@ impl SignatureValidation {
             defect: Some(defect),
             later_revisions,
             chain: None,
+            best_signature_time: None,
         }
     }
 }

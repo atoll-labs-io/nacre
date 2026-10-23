@@ -13,8 +13,8 @@ use nacre_core::{Indication, SubIndication, TestSigner};
 use nacre_pades::{DateTime, sign};
 use nacre_pdf::{Document, Object};
 use nacre_validate::{
-    AllowedChange, Defect, LaterRevision, RevisionVerdict, SignatureValidation, TrustAnchors,
-    validate, validate_with_anchors,
+    AllowedChange, Defect, LaterRevision, RevisionVerdict, RevocationDefect, SignatureValidation,
+    TrustAnchors, validate, validate_with_anchors,
 };
 
 const UNSIGNED: &[u8] = include_bytes!("corpus/unsigned.pdf");
@@ -361,9 +361,16 @@ fn with_root(pdf: &[u8]) -> SignatureValidation {
     results.remove(0)
 }
 
-/// A signature whose chain is valid, revocation still to judge.
+/// A signature whose chain is valid, with no revocation data to judge it by.
 fn chain_valid(result: &SignatureValidation) {
-    assert!(result.defect.is_none(), "{:?}", result.defect);
+    assert!(
+        matches!(
+            result.defect,
+            Some(Defect::Revocation(RevocationDefect::Missing { depth: 0 }))
+        ),
+        "{:?}",
+        result.defect
+    );
     assert!(result.digest_verified && result.signature_verified);
     let chain = result.chain.as_ref().unwrap();
     assert_eq!(
@@ -373,13 +380,13 @@ fn chain_valid(result: &SignatureValidation) {
     assert_eq!(result.report.indication(), Indication::Indeterminate);
     assert_eq!(
         result.report.sub_indication(),
-        Some(SubIndication::TryLater)
+        Some(SubIndication::CertificateChainGeneralFailure)
     );
     assert_eq!(result.report.level(), None);
 }
 
 #[test]
-fn chain_from_cms_is_valid_but_revocation_pending() {
+fn chain_from_cms_is_valid_but_revocation_missing() {
     let pdf = include_bytes!("corpus/chain/chain-cms.pdf");
 
     chain_valid(&with_root(pdf));
@@ -399,7 +406,10 @@ fn chain_from_dss_is_valid() {
     let result = with_root(include_bytes!("corpus/chain/chain-dss.pdf"));
 
     chain_valid(&result);
-    allowed(&result, &[&[AllowedChange::Dss]]);
+    assert_eq!(
+        verdicts(&result),
+        [&RevisionVerdict::Allowed(vec![AllowedChange::Dss])]
+    );
 }
 
 #[test]
