@@ -1,0 +1,95 @@
+## c2 error — HttpOcspSource on bad addresses and bad answers
+Servers: 127.0.0.1:18081 (s02 emulation of c2.txt) and 127.0.0.1:18392 (walk responder for the walk PKI, whose answer is set per case by a mode file: openssl = 'openssl ocsp -index' signed by the CA; file:<path> = that fixed body; 404; 302 to 127.0.0.1:18393; big = 65 541-byte body)
+
+# default source (HttpOcspSource::new) on the s02 leaves and the walk leaf: loopback refused
+Err display="the revocation source failed <- the revocation source address is not public" kind=Unavailable inner=Err(NonPublicAddress) display="the revocation source address is not public" kind=InvalidInput
+Err display="the revocation source failed <- the revocation source address is not public" kind=Unavailable inner=Err(NonPublicAddress) display="the revocation source address is not public" kind=InvalidInput
+# a responder at 10.1.2.3 (privaia.der), default and loopback-allowing sources
+Ok("http://10.1.2.3/")
+Err display="the revocation source failed <- the revocation source address is not public" kind=Unavailable inner=Err(NonPublicAddress) display="the revocation source address is not public" kind=InvalidInput
+Err display="the revocation source failed <- the revocation source address is not public" kind=Unavailable inner=Err(NonPublicAddress) display="the revocation source address is not public" kind=InvalidInput
+# no authorityInfoAccess (noaia.der), https:// only (httpsaia.der), not a certificate (empty, a response)
+Err("Err(NoOcspResponder) display=\"no usable OCSP responder\" kind=Indeterminate")
+Err display="the revocation source failed <- no usable OCSP responder" kind=Unavailable inner=Err(NoOcspResponder) display="no usable OCSP responder" kind=Indeterminate
+Err("Err(NoOcspResponder) display=\"no usable OCSP responder\" kind=Indeterminate")
+Err display="the revocation source failed <- no usable OCSP responder" kind=Unavailable inner=Err(NoOcspResponder) display="no usable OCSP responder" kind=Indeterminate
+Err("Err(Certificate(Error { kind: Incomplete { expected_len: Length(1), actual_len: Length(0) }, position: Some(Length(0)) })) display=\"invalid certificate <- ASN.1 DER message is incomplete: expected 1, actual 0 at DER byte 0\" kind=InvalidInput")
+Err display="the revocation source failed <- invalid certificate <- ASN.1 DER message is incomplete: expected 1, actual 0 at DER byte 0" kind=Unavailable inner=Err(Certificate(Error { kind: Incomplete { expected_len: Length(1), actual_len: Length(0) }, position: Some(Length(0)) })) display="invalid certificate <- ASN.1 DER message is incomplete: expected 1, actual 0 at DER byte 0" kind=InvalidInput
+Err display="the revocation source failed <- invalid certificate <- unexpected ASN.1 DER tag: expected SEQUENCE, got ENUMERATED" kind=Unavailable inner=Err(Certificate(Error { kind: TagUnexpected { expected: Some(Tag(0x10: SEQUENCE)), actual: Tag(0x0a: ENUMERATED) }, position: None })) display="invalid certificate <- unexpected ASN.1 DER tag: expected SEQUENCE, got ENUMERATED" kind=InvalidInput
+# not the issuer as issuer (walk leaf with ca2.der; s02 signer with the root)
+Ok(Ocsp, 695 bytes)
+Ok(Ocsp, 956 bytes)
+
+# walk responder answers
+-- a valid CA-signed response, but carrying the fixed nonce N of c1 (replay)
+$ ocsp-qa fetch leaf.der ca.der loopback
+Err display="the revocation source failed <- the OCSP response nonce does not match the request" kind=Unavailable inner=Err(NonceMismatch) display="the OCSP response nonce does not match the request" kind=InvalidSignature
+exit=0
+-- responseStatus tryLater
+$ ocsp-qa fetch leaf.der ca.der loopback
+Err display="the revocation source failed <- the OCSP responder answered with status 3" kind=Unavailable inner=Err(ResponseStatus(3)) display="the OCSP responder answered with status 3" kind=Indeterminate
+exit=0
+-- 400 random bytes
+$ ocsp-qa fetch leaf.der ca.der loopback
+Err display="the revocation source failed <- invalid DER <- unexpected ASN.1 DER tag: expected SEQUENCE, got APPLICATION [10] (primitive)" kind=Unavailable inner=Err(Der(Error { kind: TagUnexpected { expected: Some(Tag(0x10: SEQUENCE)), actual: Tag(0x0a: APPLICATION [10] (primitive)) }, position: None })) display="invalid DER <- unexpected ASN.1 DER tag: expected SEQUENCE, got APPLICATION [10] (primitive)" kind=InvalidInput
+exit=0
+-- empty body, 200
+$ ocsp-qa fetch leaf.der ca.der loopback
+Err display="the revocation source failed <- invalid DER <- ASN.1 DER message is incomplete: expected 1, actual 0 at DER byte 0" kind=Unavailable inner=Err(Der(Error { kind: Incomplete { expected_len: Length(1), actual_len: Length(0) }, position: Some(Length(0)) })) display="invalid DER <- ASN.1 DER message is incomplete: expected 1, actual 0 at DER byte 0" kind=InvalidInput
+exit=0
+-- 404
+$ ocsp-qa fetch leaf.der ca.der loopback
+Err display="the revocation source failed <- the revocation download failed <- http status: 404" kind=Unavailable inner=Err(Http(StatusCode(404))) display="the revocation download failed <- http status: 404" kind=Unavailable
+exit=0
+-- 302 to another port
+$ ocsp-qa fetch leaf.der ca.der loopback
+Err display="the revocation source failed <- the revocation download failed <- http status: 302" kind=Unavailable inner=Err(Http(StatusCode(302))) display="the revocation download failed <- http status: 302" kind=Unavailable
+exit=0
+-- body over 64 KiB
+$ ocsp-qa fetch leaf.der ca.der loopback
+Err display="the revocation source failed <- the revocation download failed <- the response body is larger than request limit: 65536" kind=Unavailable inner=Err(Http(BodyExceedsLimit(65536))) display="the revocation download failed <- the response body is larger than request limit: 65536" kind=Unavailable
+exit=0
+-- a certificate
+$ ocsp-qa fetch leaf.der ca.der loopback
+Err display="the revocation source failed <- invalid DER <- unexpected ASN.1 DER tag: expected ENUMERATED, got SEQUENCE" kind=Unavailable inner=Err(Der(Error { kind: TagUnexpected { expected: Some(Tag(0x0a: ENUMERATED)), actual: Tag(0x10: SEQUENCE) }, position: None })) display="invalid DER <- unexpected ASN.1 DER tag: expected ENUMERATED, got SEQUENCE" kind=InvalidInput
+exit=0
+-- server down (nothing on 127.0.0.1:18392 for this case: walk server stopped and restarted around it)
+Err display="the revocation source failed <- the revocation download failed <- io: Connection refused (os error 111)" kind=Unavailable inner=Err(Http(Io(Os { code: 111, kind: ConnectionRefused, message: "Connection refused" }))) display="the revocation download failed <- io: Connection refused (os error 111)" kind=Unavailable
+exit=0
+-- back up, nominal: 
+Ok(Ocsp, 694 bytes)
+Ok(Ocsp, 717 bytes)
+from_der: Ok produced_at=1792748572 this_update=Some("1792748572") nonce=Some("1b5c1a1cabe6e8d25311c357c8dabb9c469c2e129ee7ad141d979d7b5e7ed258")
+check_this_update(at=1792748572, tol=300s): Ok
+status(at=1792748572): Ok(Revoked { date: SystemTime { tv_sec: 1792065600, tv_nsec: 0 }, reason: Some(KeyCompromise) }) date_unix=1792065600
+
+# Fallback<OCSP, CRL>: first fails (10.1.2.3), second fails too (no CRL distribution point) -> second's error
+Err display="the revocation source failed <- no usable CRL distribution point" kind=Unavailable inner=Err(NoDistributionPoint) display="no usable CRL distribution point" kind=Indeterminate
+
+# walk responder log (127.0.0.1:18392)
+POST / Content-Type=application/ocsp-request 122 bytes
+POST /
+POST / Content-Type=application/ocsp-request 122 bytes
+POST /
+POST / Content-Type=application/ocsp-request 122 bytes
+POST /
+POST / Content-Type=application/ocsp-request 122 bytes
+POST /
+POST / Content-Type=application/ocsp-request 122 bytes
+POST /
+POST / Content-Type=application/ocsp-request 122 bytes
+POST /
+POST / Content-Type=application/ocsp-request 122 bytes
+POST /
+POST / Content-Type=application/ocsp-request 122 bytes
+POST /
+POST / Content-Type=application/ocsp-request 122 bytes
+POST /
+POST / Content-Type=application/ocsp-request 122 bytes
+POST /
+POST / Content-Type=application/ocsp-request 122 bytes
+POST /
+(nothing requested 127.0.0.1:18393: no server was there, and no log line for /elsewhere)
+Complété                 setsid python3 -I $T/srv/server.py 18392 walk $T/srv > $T/srv/walk.out 2>&1 < /dev/null
+
+# after the walk: both walk servers stopped (their process groups), ss -ltn shows nothing on 127.0.0.1:18081, 18392 or 18393

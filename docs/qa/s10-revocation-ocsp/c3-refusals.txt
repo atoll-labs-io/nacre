@@ -1,0 +1,189 @@
+## c3 — unauthorized responder, other nonce, thisUpdate out of tolerance: each rejected with its own error
+cwd: $T/pki (walk PKI of c1.txt). Every walk response below is a real 'openssl ocsp -index' answer, correctly signed by the key named, about the REVOKED leaf (serial 0x1002), so a skipped rule would answer Revoked.
+
+-- foreign-delegate: delegate with EKU OCSPSigning, issued by the other CA
+    Responder Id: CN = QA s10 foreign delegate
+    Cert Status: revoked
+$ ocsp-qa judge u-foreign-delegate.der revoked.der ca.der at=1792748577 nonce=N
+from_der: Ok produced_at=1792748577 this_update=Some("1792748577") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+check_nonce(000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f): Ok
+status(at=1792748577): Err(UnauthorizedResponder) display="the OCSP responder is not authorized by the issuer" kind=InvalidSignature
+exit=0
+openssl ocsp -respin -CAfile ca.pem -issuer ca.pem: 40D4E2BE907F0000:error:13800065:OCSP routines:ocsp_verify_signer:certificate verify error:crypto/ocsp/ocsp_vfy.c:64:Verify error: unable to get local issuer certificate
+-- no-eku-delegate: delegate issued by the CA, EKU clientAuth only
+    Responder Id: CN = QA s10 delegate without OCSPSigning
+    Cert Status: revoked
+$ ocsp-qa judge u-no-eku-delegate.der revoked.der ca.der at=1792748577 nonce=N
+from_der: Ok produced_at=1792748577 this_update=Some("1792748577") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+check_nonce(000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f): Ok
+status(at=1792748577): Err(UnauthorizedResponder) display="the OCSP responder is not authorized by the issuer" kind=InvalidSignature
+exit=0
+openssl ocsp -respin -CAfile ca.pem -issuer ca.pem: 409440879C7F0000:error:13800067:OCSP routines:ocsp_check_delegated:missing ocspsigning usage:crypto/ocsp/ocsp_vfy.c:374:
+-- impostor-delegate: delegate with OCSPSigning issued by a CA of the same name 'QA s10 CA' but another key
+    Responder Id: CN = QA s10 impostor delegate
+    Cert Status: revoked
+$ ocsp-qa judge u-impostor-delegate.der revoked.der ca.der at=1792748577 nonce=N
+from_der: Ok produced_at=1792748577 this_update=Some("1792748577") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+check_nonce(000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f): Ok
+status(at=1792748577): Err(UnauthorizedResponder) display="the OCSP responder is not authorized by the issuer" kind=InvalidSignature
+exit=0
+openssl ocsp -respin -CAfile ca.pem -issuer ca.pem: 40247C66837F0000:error:13800065:OCSP routines:ocsp_verify_signer:certificate verify error:crypto/ocsp/ocsp_vfy.c:64:Verify error: unable to get local issuer certificate
+-- expired-delegate: delegate issued by the CA with OCSPSigning, valid 2025-01-01..2025-02-01 only
+    Responder Id: CN = QA s10 expired delegate
+    Cert Status: revoked
+$ ocsp-qa judge u-expired-delegate.der revoked.der ca.der at=1792748577 nonce=N
+from_der: Ok produced_at=1792748577 this_update=Some("1792748577") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+check_nonce(000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f): Ok
+status(at=1792748577): Err(UnauthorizedResponder) display="the OCSP responder is not authorized by the issuer" kind=InvalidSignature
+exit=0
+openssl ocsp -respin -CAfile ca.pem -issuer ca.pem: 40A49EEAE57F0000:error:13800065:OCSP routines:ocsp_verify_signer:certificate verify error:crypto/ocsp/ocsp_vfy.c:64:Verify error: certificate has expired
+-- other-ca: signed by the other CA itself (byName)
+    Responder Id: CN = QA s10 other CA
+    Cert Status: revoked
+$ ocsp-qa judge u-other-ca.der revoked.der ca.der at=1792748577 nonce=N
+from_der: Ok produced_at=1792748577 this_update=Some("1792748577") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+check_nonce(000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f): Ok
+status(at=1792748577): Err(UnauthorizedResponder) display="the OCSP responder is not authorized by the issuer" kind=InvalidSignature
+exit=0
+openssl ocsp -respin -CAfile ca.pem -issuer ca.pem: 40B41A6EE77F0000:error:13800065:OCSP routines:ocsp_verify_signer:certificate verify error:crypto/ocsp/ocsp_vfy.c:64:Verify error: self-signed certificate
+-- other-ca-bykey: signed by the other CA itself (byKey)
+    Responder Id: C6C8A290562F7BAA7B4A9DA530431A2A3C2D1D1C
+    Cert Status: revoked
+$ ocsp-qa judge u-other-ca-bykey.der revoked.der ca.der at=1792748577 nonce=N
+from_der: Ok produced_at=1792748577 this_update=Some("1792748577") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+check_nonce(000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f): Ok
+status(at=1792748577): Err(UnauthorizedResponder) display="the OCSP responder is not authorized by the issuer" kind=InvalidSignature
+exit=0
+openssl ocsp -respin -CAfile ca.pem -issuer ca.pem: 40F49BDC6A7F0000:error:13800065:OCSP routines:ocsp_verify_signer:certificate verify error:crypto/ocsp/ocsp_vfy.c:64:Verify error: self-signed certificate
+-- leaf-as-responder: signed by the good leaf (issued by the CA, no OCSPSigning)
+    Responder Id: CN = QA s10 leaf
+    Cert Status: revoked
+$ ocsp-qa judge u-leaf-as-responder.der revoked.der ca.der at=1792748577 nonce=N
+from_der: Ok produced_at=1792748577 this_update=Some("1792748577") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+check_nonce(000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f): Ok
+status(at=1792748577): Err(UnauthorizedResponder) display="the OCSP responder is not authorized by the issuer" kind=InvalidSignature
+exit=0
+openssl ocsp -respin -CAfile ca.pem -issuer ca.pem: 4004DC6E307F0000:error:13800067:OCSP routines:ocsp_check_delegated:missing ocspsigning usage:crypto/ocsp/ocsp_vfy.c:374:
+-- delegate-no-certs: signed by the genuine delegate, but the response carries no certs (-resp_no_certs)
+    Responder Id: CN = QA s10 delegate
+    Cert Status: revoked
+$ ocsp-qa judge u-delegate-no-certs.der revoked.der ca.der at=1792748577 nonce=N
+from_der: Ok produced_at=1792748577 this_update=Some("1792748577") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+check_nonce(000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f): Ok
+status(at=1792748577): Err(UnauthorizedResponder) display="the OCSP responder is not authorized by the issuer" kind=InvalidSignature
+exit=0
+openssl ocsp -respin -CAfile ca.pem -issuer ca.pem: 40345B01117F0000:error:13800076:OCSP routines:OCSP_basic_verify:signer certificate not found:crypto/ocsp/ocsp_vfy.c:107:
+-- same-name-ca: signed by the same-name CA with another key (byName equals the issuer's name)
+    Responder Id: CN = QA s10 CA
+    Cert Status: revoked
+$ ocsp-qa judge u-same-name-ca.der revoked.der ca.der at=1792748577 nonce=N
+from_der: Ok produced_at=1792748577 this_update=Some("1792748577") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+check_nonce(000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f): Ok
+status(at=1792748577): Err(SignatureInvalid) display="the revocation data signature is invalid" kind=InvalidSignature
+exit=0
+openssl ocsp -respin -CAfile ca.pem -issuer ca.pem: 40647B560A7F0000:error:13800065:OCSP routines:ocsp_verify_signer:certificate verify error:crypto/ocsp/ocsp_vfy.c:64:Verify error: self-signed certificate
+-- same-name-ca-bykey: signed by the same-name CA (byKey)
+    Responder Id: F3216FE0575CDB03284294C4322E69A46EED6642
+    Cert Status: revoked
+$ ocsp-qa judge u-same-name-ca-bykey.der revoked.der ca.der at=1792748577 nonce=N
+from_der: Ok produced_at=1792748577 this_update=Some("1792748577") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+check_nonce(000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f): Ok
+status(at=1792748577): Err(UnauthorizedResponder) display="the OCSP responder is not authorized by the issuer" kind=InvalidSignature
+exit=0
+openssl ocsp -respin -CAfile ca.pem -issuer ca.pem: 4034E178847F0000:error:13800065:OCSP routines:ocsp_verify_signer:certificate verify error:crypto/ocsp/ocsp_vfy.c:64:Verify error: self-signed certificate
+
+# nonce
+$ ocsp-qa judge resp-ca-revoked.der revoked.der ca.der nonce=O (request made with another nonce)
+from_der: Ok produced_at=1792748538 this_update=Some("1792748538") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+check_nonce(ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100): Err(NonceMismatch) display="the OCSP response nonce does not match the request" kind=InvalidSignature
+status(at=1792748577): Ok(Revoked { date: SystemTime { tv_sec: 1792065600, tv_nsec: 0 }, reason: Some(KeyCompromise) }) date_unix=1792065600
+exit=0
+$ ocsp-qa judge resp-ca-revoked.der revoked.der ca.der nonce=N minus its last octet (prefix of the response nonce)
+from_der: Ok produced_at=1792748538 this_update=Some("1792748538") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+check_nonce(000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e): Err(NonceMismatch) display="the OCSP response nonce does not match the request" kind=InvalidSignature
+status(at=1792748577): Ok(Revoked { date: SystemTime { tv_sec: 1792065600, tv_nsec: 0 }, reason: Some(KeyCompromise) }) date_unix=1792065600
+exit=0
+$ ocsp-qa judge resp-sha256.der (response with no nonce) revoked.der ca.der nonce=O
+from_der: Ok produced_at=1792748538 this_update=Some("1792748538") nonce=None
+check_nonce(ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100): Ok
+status(at=1792748577): Ok(Revoked { date: SystemTime { tv_sec: 1792065600, tv_nsec: 0 }, reason: Some(KeyCompromise) }) date_unix=1792065600
+exit=0
+
+# thisUpdate tolerance (response resp-ca-revoked.der, thisUpdate=1792748538 per c1; tolerance 300 s)
+$ check_this_update at=1792748237 (thisUpdate-301s)
+check_this_update(at=1792748237, tol=300s): Err(ThisUpdateOutOfTolerance { this_update: SystemTime { tv_sec: 1792748538, tv_nsec: 0 } }) display="the OCSP response thisUpdate is outside the tolerance" kind=Indeterminate
+$ check_this_update at=1792748238 (thisUpdate-300s)
+check_this_update(at=1792748238, tol=300s): Ok
+$ check_this_update at=1792748538 (thisUpdate+0s)
+check_this_update(at=1792748538, tol=300s): Ok
+$ check_this_update at=1792748838 (thisUpdate+300s)
+check_this_update(at=1792748838, tol=300s): Ok
+$ check_this_update at=1792748839 (thisUpdate+301s)
+check_this_update(at=1792748839, tol=300s): Err(ThisUpdateOutOfTolerance { this_update: SystemTime { tv_sec: 1792748538, tv_nsec: 0 } }) display="the OCSP response thisUpdate is outside the tolerance" kind=Indeterminate
+$ check_this_update at=1792834938 (thisUpdate+86400s)
+check_this_update(at=1792834938, tol=300s): Err(ThisUpdateOutOfTolerance { this_update: SystemTime { tv_sec: 1792748538, tv_nsec: 0 } }) display="the OCSP response thisUpdate is outside the tolerance" kind=Indeterminate
+$ check_this_update with tolerance 0 at thisUpdate
+check_this_update(at=1792748538, tol=0s): Ok
+$ check_this_update for a certificate the response does not cover (leaf.der)
+check_this_update(at=1792748538, tol=300s): Err(CertificateNotInResponse) display="the OCSP response does not cover the certificate" kind=Indeterminate
+
+# committed attack corpus (tests/corpus/ocsp-attacks/), judged at 2027-01-01 (1798761600) against leaf.der/ca.der of the corpus, nonce 4e x 32
+$ ocsp-qa judge ocsp-attacks/base.der leaf.der ca.der at=1798761600 nonce=4e*32
+from_der: Ok produced_at=1790812800 this_update=Some("1790812800") nonce=Some("4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e")
+check_nonce(4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e): Ok
+status(at=1798761600): Ok(Revoked { date: SystemTime { tv_sec: 1775001600, tv_nsec: 0 }, reason: Some(KeyCompromise) }) date_unix=1775001600
+$ ocsp-qa judge ocsp-attacks/foreign-delegate-response.der leaf.der ca.der at=1798761600 nonce=4e*32
+from_der: Ok produced_at=1790812800 this_update=Some("1790812800") nonce=Some("4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e")
+check_nonce(4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e): Ok
+status(at=1798761600): Err(UnauthorizedResponder) display="the OCSP responder is not authorized by the issuer" kind=InvalidSignature
+$ ocsp-qa judge ocsp-attacks/plain-delegate-response.der leaf.der ca.der at=1798761600 nonce=4e*32
+from_der: Ok produced_at=1790812800 this_update=Some("1790812800") nonce=Some("4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e")
+check_nonce(4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e): Ok
+status(at=1798761600): Err(UnauthorizedResponder) display="the OCSP responder is not authorized by the issuer" kind=InvalidSignature
+$ ocsp-qa judge ocsp-attacks/expired-delegate-response.der leaf.der ca.der at=1798761600 nonce=4e*32
+from_der: Ok produced_at=1790812800 this_update=Some("1790812800") nonce=Some("4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e")
+check_nonce(4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e): Ok
+status(at=1798761600): Err(UnauthorizedResponder) display="the OCSP responder is not authorized by the issuer" kind=InvalidSignature
+$ ocsp-qa judge ocsp-attacks/bad-signature.der leaf.der ca.der at=1798761600 nonce=4e*32
+from_der: Ok produced_at=1790812800 this_update=Some("1790812800") nonce=Some("4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e")
+check_nonce(4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e): Ok
+status(at=1798761600): Err(SignatureInvalid) display="the revocation data signature is invalid" kind=InvalidSignature
+$ ocsp-qa judge ocsp-attacks/stale.der leaf.der ca.der at=1798761600 nonce=4e*32
+from_der: Ok produced_at=1790812800 this_update=Some("1790812800") nonce=Some("4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e")
+check_nonce(4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e): Ok
+status(at=1798761600): Err(Expired { next_update: SystemTime { tv_sec: 1780272000, tv_nsec: 0 } }) display="the revocation data expired at its nextUpdate" kind=Indeterminate
+$ ocsp-qa judge ocsp-attacks/critical-single-extension.der leaf.der ca.der at=1798761600 nonce=4e*32
+from_der: Ok produced_at=1790812800 this_update=Some("1790812800") nonce=Some("4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e")
+check_nonce(4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e): Ok
+status(at=1798761600): Err(UnsupportedCriticalExtension(ObjectIdentifier(1.3.6.1.5.5.7.48.1.3))) display="unsupported critical extension 1.3.6.1.5.5.7.48.1.3" kind=Indeterminate
+$ ocsp-qa judge ocsp-attacks/other-serial.der leaf.der ca.der at=1798761600 nonce=4e*32
+from_der: Ok produced_at=1790812800 this_update=Some("1790812800") nonce=Some("4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e")
+check_nonce(4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e): Ok
+status(at=1798761600): Err(CertificateNotInResponse) display="the OCSP response does not cover the certificate" kind=Indeterminate
+$ ocsp-qa judge ocsp-attacks/unknown.der leaf.der ca.der at=1798761600 nonce=4e*32
+from_der: Ok produced_at=1790812800 this_update=Some("1790812800") nonce=Some("4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e")
+check_nonce(4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e): Ok
+status(at=1798761600): Err(UnknownCertificate) display="the OCSP responder does not know the certificate" kind=Indeterminate
+$ ocsp-qa judge ocsp-attacks/try-later.der leaf.der ca.der at=1798761600 nonce=4e*32
+from_der: Err(ResponseStatus(3)) display="the OCSP responder answered with status 3" kind=Indeterminate
+$ base.der against a request of nonce O
+check_nonce(ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100): Err(NonceMismatch) display="the OCSP response nonce does not match the request" kind=InvalidSignature
+$ base.der check_this_update at thisUpdate + 1 day, tolerance 300 s
+check_this_update(at=1790899200, tol=300s): Err(ThisUpdateOutOfTolerance { this_update: SystemTime { tv_sec: 1790812800, tv_nsec: 0 } }) display="the OCSP response thisUpdate is outside the tolerance" kind=Indeterminate
+
+# the corpus is regenerated identically by its example (cwd: $T/copy, output to a scratch dir)
+same  bad-signature.der
+same  base.der
+same  ca.der
+same  critical-single-extension.der
+same  expired-delegate.der
+same  expired-delegate-response.der
+same  foreign-delegate.der
+same  foreign-delegate-response.der
+same  leaf.der
+same  other-serial.der
+same  plain-delegate.der
+same  plain-delegate-response.der
+same  stale.der
+same  try-later.der
+same  unknown.der

@@ -6,31 +6,37 @@
     clippy::indexing_slicing
 )]
 
-//! The address and redirect refusals of `HttpCrlSource`, against a server on 127.0.0.1
-//! that serves a valid CRL: every refusal here would otherwise be a successful fetch.
+//! The address and redirect refusals of `HttpCrlSource` and `HttpOcspSource`, and the
+//! nonce check of the latter, against a server on 127.0.0.1 that serves a valid CRL and a
+//! valid OCSP response: every refusal here would otherwise be a successful fetch.
 
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpListener;
 use std::str::FromStr;
 
+use der::oid::ObjectIdentifier;
 use der::{DateTime, Encode};
 use nacre_core::{ErrorKind, RevocationData, RevocationSource};
-use nacre_revocation::{Error, HttpCrlSource};
+use nacre_revocation::{Error, HttpCrlSource, HttpOcspSource};
 use p256::ecdsa::{DerSignature, SigningKey};
 use x509_cert::builder::profile::cabf;
 use x509_cert::builder::{Builder, CertificateBuilder};
 use x509_cert::der::asn1::Ia5String;
-use x509_cert::ext::pkix::CrlDistributionPoints;
 use x509_cert::ext::pkix::crl::dp::DistributionPoint;
 use x509_cert::ext::pkix::name::{DistributionPointName, GeneralName};
+use x509_cert::ext::pkix::{AccessDescription, AuthorityInfoAccessSyntax, CrlDistributionPoints};
 use x509_cert::name::Name;
 use x509_cert::serial_number::SerialNumber;
 use x509_cert::spki::SubjectPublicKeyInfoOwned;
 use x509_cert::time::{Time, Validity};
 
 const CRL: &[u8] = include_bytes!("corpus/openssl/ec-ca.crl");
+/// A valid OCSP response carrying the nonce `0x4e` × 32.
+const OCSP: &[u8] = include_bytes!("corpus/ocsp-attacks/base.der");
+const OCSP_CA: &[u8] = include_bytes!("corpus/ocsp-attacks/ca.der");
 
-/// Serves `CRL` at `/ca.crl` and a 302 to it at `/redirect`, one request per connection.
+/// Serves `CRL` at `/ca.crl`, `OCSP` to a POST at `/ocsp` and a 302 to the CRL at
+/// `/redirect`, one request per connection.
 fn serve() -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
@@ -41,9 +47,22 @@ fn serve() -> u16 {
             let mut request_line = String::new();
             reader.read_line(&mut request_line).unwrap();
             let mut line = String::new();
+            let mut content_length = 0;
             while reader.read_line(&mut line).unwrap() > 2 {
+                if let Some((name, value)) = line.split_once(':')
+                    && name.eq_ignore_ascii_case("content-length")
+                {
+                    content_length = value.trim().parse().unwrap();
+                }
                 line.clear();
             }
+            let mut body = vec![0; content_length];
+            reader.read_exact(&mut body).unwrap();
+            let served = if request_line.starts_with("POST /ocsp ") {
+                OCSP
+            } else {
+                CRL
+            };
             let response = if request_line.starts_with("GET /redirect ") {
                 format!(
                     "HTTP/1.1 302 Found\r\nLocation: http://127.0.0.1:{port}/ca.crl\r\n\
@@ -53,10 +72,10 @@ fn serve() -> u16 {
             } else {
                 let mut response = format!(
                     "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-                    CRL.len()
+                    served.len()
                 )
                 .into_bytes();
-                response.extend_from_slice(CRL);
+                response.extend_from_slice(served);
                 response
             };
             stream.write_all(&response).unwrap();
@@ -67,6 +86,26 @@ fn serve() -> u16 {
 
 /// A certificate whose only use here is to name `url` as its CRL distribution point.
 fn naming(url: &str) -> Vec<u8> {
+    let point = CrlDistributionPoints(vec![DistributionPoint {
+        distribution_point: Some(DistributionPointName::FullName(vec![
+            GeneralName::UniformResourceIdentifier(Ia5String::new(url).unwrap()),
+        ])),
+        reasons: None,
+        crl_issuer: None,
+    }]);
+    self_signed(|builder| builder.add_extension(&point).unwrap())
+}
+
+/// A certificate whose only use here is to name `url` as its OCSP responder.
+fn naming_responder(url: &str) -> Vec<u8> {
+    let access = AuthorityInfoAccessSyntax(vec![AccessDescription {
+        access_method: ObjectIdentifier::new_unwrap("1.3.6.1.5.5.7.48.1"),
+        access_location: GeneralName::UniformResourceIdentifier(Ia5String::new(url).unwrap()),
+    }]);
+    self_signed(|builder| builder.add_extension(&access).unwrap())
+}
+
+fn self_signed(extend: impl FnOnce(&mut CertificateBuilder<cabf::Root>)) -> Vec<u8> {
     let key = SigningKey::from_slice(&[0x31; 32]).unwrap();
     let name = Name::from_str("CN=Nacre HTTP test,O=Nacre tests,C=FR").unwrap();
     let time = |year| Time::from(DateTime::new(year, 1, 1, 0, 0, 0).unwrap());
@@ -77,15 +116,7 @@ fn naming(url: &str) -> Vec<u8> {
         SubjectPublicKeyInfoOwned::from_key(key.verifying_key()).unwrap(),
     )
     .unwrap();
-    builder
-        .add_extension(&CrlDistributionPoints(vec![DistributionPoint {
-            distribution_point: Some(DistributionPointName::FullName(vec![
-                GeneralName::UniformResourceIdentifier(Ia5String::new(url).unwrap()),
-            ])),
-            reasons: None,
-            crl_issuer: None,
-        }]))
-        .unwrap();
+    extend(&mut builder);
     builder
         .build::<_, DerSignature>(&key)
         .unwrap()
@@ -137,4 +168,36 @@ fn private_addresses_are_refused_even_with_loopback_allowed() {
             );
         }
     }
+}
+
+fn ask(source: &HttpOcspSource, url: &str) -> Result<Vec<u8>, Error> {
+    match source.revocation(&naming_responder(url), OCSP_CA) {
+        Ok(RevocationData::Ocsp(bytes)) => Ok(bytes),
+        Ok(_) => panic!("an OCSP source answered with something else"),
+        Err(nacre_core::Error::Revocation(error)) => Err(*error.downcast::<Error>().unwrap()),
+        Err(error) => panic!("unexpected error {error}"),
+    }
+}
+
+#[test]
+fn ocsp_nonce_mismatch_is_rejected() {
+    let port = serve();
+    // The served response carries a fixed nonce, never the request's random one.
+    let error = ask(
+        &HttpOcspSource::allowing_loopback(),
+        &format!("http://127.0.0.1:{port}/ocsp"),
+    )
+    .unwrap_err();
+    assert!(matches!(error, Error::NonceMismatch), "{error:?}");
+    assert_eq!(error.kind(), ErrorKind::InvalidSignature);
+}
+
+#[test]
+fn ocsp_loopback_responder_is_refused_by_default() {
+    let port = serve();
+    let url = format!("http://127.0.0.1:{port}/ocsp");
+    let error = ask(&HttpOcspSource::new(), &url).unwrap_err();
+    assert!(matches!(error, Error::NonPublicAddress));
+    assert!(!error.to_string().contains("127.0.0.1"));
+    assert!(!format!("{error:?}").contains("127.0.0.1"));
 }

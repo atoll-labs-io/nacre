@@ -1,0 +1,134 @@
+## c1 error — invalid inputs to OcspRequest and OcspResponse
+cwd: $T/pki (walk PKI of c1.txt; responses made in c1.txt); at=1792748538 (the responses' thisUpdate)
+
+# requests
+$ ocsp-qa req - ca.der 0001020304050607…(64 hex) out.der
+Err(Certificate(Error { kind: Incomplete { expected_len: Length(1), actual_len: Length(0) }, position: Some(Length(0)) })) display="invalid certificate <- ASN.1 DER message is incomplete: expected 1, actual 0 at DER byte 0" kind=InvalidInput
+exit=0
+$ ocsp-qa req revoked.der - 0001020304050607…(64 hex) out.der
+Err(IssuerCertificate(Error { kind: Incomplete { expected_len: Length(1), actual_len: Length(0) }, position: Some(Length(0)) })) display="invalid issuer certificate <- ASN.1 DER message is incomplete: expected 1, actual 0 at DER byte 0" kind=InvalidInput
+exit=0
+$ ocsp-qa req revoked.pem ca.der 0001020304050607…(64 hex) out.der
+Err(Certificate(Error { kind: TagUnknown { byte: 45 }, position: Some(Length(1)) })) display="invalid certificate <- unknown/unsupported ASN.1 DER tag: 0x2d at DER byte 1" kind=InvalidInput
+exit=0
+$ ocsp-qa req revoked.der ca.pem 0001020304050607…(64 hex) out.der
+Err(IssuerCertificate(Error { kind: TagUnknown { byte: 45 }, position: Some(Length(1)) })) display="invalid issuer certificate <- unknown/unsupported ASN.1 DER tag: 0x2d at DER byte 1" kind=InvalidInput
+exit=0
+$ ocsp-qa req ca.der revoked.der 0001020304050607…(64 hex) out.der
+Ok nonce=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f (32 octets)
+exit=0
+          Serial Number: 6369BC243507D8201BD764E69205BD593D5C6548
+    Request Extensions:
+        OCSP Nonce: 
+            0420000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F
+$ ocsp-qa req revoked.der ca.der  out.der
+Err(NonceLength(0)) display="the OCSP nonce holds 0 octets, not 1 to 32" kind=InvalidInput
+exit=0
+$ ocsp-qa req revoked.der ca.der ab out.der
+Ok nonce=ab (1 octets)
+exit=0
+          Serial Number: 1002
+    Request Extensions:
+        OCSP Nonce: 
+            0401AB
+$ ocsp-qa req revoked.der ca.der abababababababab…(64 hex) out.der
+Ok nonce=abababababababababababababababababababababababababababababababab (32 octets)
+exit=0
+          Serial Number: 1002
+    Request Extensions:
+        OCSP Nonce: 
+            0420ABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABABAB
+$ ocsp-qa req revoked.der ca.der abababababababab…(66 hex) out.der
+Err(NonceLength(33)) display="the OCSP nonce holds 33 octets, not 1 to 32" kind=InvalidInput
+exit=0
+$ ocsp-qa req revoked.der ca.der abababababababab…(400 hex) out.der
+Err(NonceLength(200)) display="the OCSP nonce holds 200 octets, not 1 to 32" kind=InvalidInput
+exit=0
+$ ocsp-qa req - ca.der  out.der
+Err(NonceLength(0)) display="the OCSP nonce holds 0 octets, not 1 to 32" kind=InvalidInput
+exit=0
+
+# responses: not an OCSP response
+$ ocsp-qa judge empty.der revoked.der ca.der
+from_der: Err(Der(Error { kind: Incomplete { expected_len: Length(1), actual_len: Length(0) }, position: Some(Length(0)) })) display="invalid DER <- ASN.1 DER message is incomplete: expected 1, actual 0 at DER byte 0" kind=InvalidInput
+exit=0
+$ ocsp-qa judge random.der revoked.der ca.der
+from_der: Err(Der(Error { kind: TagUnexpected { expected: Some(Tag(0x10: SEQUENCE)), actual: Tag(0x0a: APPLICATION [10] (primitive)) }, position: None })) display="invalid DER <- unexpected ASN.1 DER tag: expected SEQUENCE, got APPLICATION [10] (primitive)" kind=InvalidInput
+exit=0
+$ ocsp-qa judge trailing.der revoked.der ca.der
+from_der: Err(Der(Error { kind: TrailingData { decoded: Length(717), remaining: Length(1) }, position: Some(Length(717)) })) display="invalid DER <- trailing data at end of DER message: decoded 717 bytes, 1 bytes remaining at DER byte 717" kind=InvalidInput
+exit=0
+$ ocsp-qa judge resp.pem revoked.der ca.der
+from_der: Err(Der(Error { kind: TagUnknown { byte: 45 }, position: Some(Length(1)) })) display="invalid DER <- unknown/unsupported ASN.1 DER tag: 0x2d at DER byte 1" kind=InvalidInput
+exit=0
+$ ocsp-qa judge req-fixed.der revoked.der ca.der
+from_der: Err(Der(Error { kind: TagUnexpected { expected: Some(Tag(0x0a: ENUMERATED)), actual: Tag(0x10: SEQUENCE) }, position: None })) display="invalid DER <- unexpected ASN.1 DER tag: expected ENUMERATED, got SEQUENCE" kind=InvalidInput
+exit=0
+$ ocsp-qa judge (ca.der as response) revoked.der ca.der
+from_der: Err(Der(Error { kind: TagUnexpected { expected: Some(Tag(0x0a: ENUMERATED)), actual: Tag(0x10: SEQUENCE) }, position: None })) display="invalid DER <- unexpected ASN.1 DER tag: expected ENUMERATED, got SEQUENCE" kind=InvalidInput
+exit=0
+
+# responses: good response, wrong arguments
+$ ocsp-qa judge resp-ca-revoked.der leaf.der ca.der
+from_der: Ok produced_at=1792748538 this_update=Some("1792748538") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+status(at=1792748538): Err(CertificateNotInResponse) display="the OCSP response does not cover the certificate" kind=Indeterminate
+exit=0
+$ ocsp-qa judge resp-ca-revoked.der revoked.der ca2.der
+from_der: Ok produced_at=1792748538 this_update=Some("1792748538") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+status(at=1792748538): Err(CertificateNotInResponse) display="the OCSP response does not cover the certificate" kind=Indeterminate
+exit=0
+$ ocsp-qa judge resp-ca-revoked.der revoked.der fake.der
+from_der: Ok produced_at=1792748538 this_update=Some("1792748538") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+status(at=1792748538): Err(CertificateNotInResponse) display="the OCSP response does not cover the certificate" kind=Indeterminate
+exit=0
+$ ocsp-qa judge resp-ca-revoked.der ca.der revoked.der
+from_der: Ok produced_at=1792748538 this_update=Some("1792748538") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+status(at=1792748538): Err(CertificateNotInResponse) display="the OCSP response does not cover the certificate" kind=Indeterminate
+exit=0
+$ ocsp-qa judge resp-ca-revoked.der - ca.der
+from_der: Ok produced_at=1792748538 this_update=Some("1792748538") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+status(at=1792748538): Err(Certificate(Error { kind: Incomplete { expected_len: Length(1), actual_len: Length(0) }, position: Some(Length(0)) })) display="invalid certificate <- ASN.1 DER message is incomplete: expected 1, actual 0 at DER byte 0" kind=InvalidInput
+exit=0
+$ ocsp-qa judge resp-ca-revoked.der revoked.der -
+from_der: Ok produced_at=1792748538 this_update=Some("1792748538") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+status(at=1792748538): Err(IssuerCertificate(Error { kind: Incomplete { expected_len: Length(1), actual_len: Length(0) }, position: Some(Length(0)) })) display="invalid issuer certificate <- ASN.1 DER message is incomplete: expected 1, actual 0 at DER byte 0" kind=InvalidInput
+exit=0
+$ ocsp-qa judge resp-ca-revoked.der resp-ca-leaf.der ca.der
+from_der: Ok produced_at=1792748538 this_update=Some("1792748538") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+status(at=1792748538): Err(Certificate(Error { kind: TagUnexpected { expected: Some(Tag(0x10: SEQUENCE)), actual: Tag(0x0a: ENUMERATED) }, position: None })) display="invalid certificate <- unexpected ASN.1 DER tag: expected SEQUENCE, got ENUMERATED" kind=InvalidInput
+exit=0
+
+# responses: altered after signing
+response signature BIT STRING at offset 268, length 71; byte 340 flipped in flip-sig.der
+$ ocsp-qa judge flip-tbs.der revoked.der ca.der
+from_der: Ok produced_at=1824284538 this_update=Some("1792748538") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+status(at=1792748538): Err(SignatureInvalid) display="the revocation data signature is invalid" kind=InvalidSignature
+exit=0
+$ ocsp-qa judge flip-sig.der revoked.der ca.der
+from_der: Ok produced_at=1792748538 this_update=Some("1792748538") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+status(at=1792748538): Err(SignatureInvalid) display="the revocation data signature is invalid" kind=InvalidSignature
+exit=0
+$ ocsp-qa judge flip-certs.der revoked.der ca.der
+from_der: Ok produced_at=1792748538 this_update=Some("1792748538") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+status(at=1792748538): Ok(Revoked { date: SystemTime { tv_sec: 1792065600, tv_nsec: 0 }, reason: Some(KeyCompromise) }) date_unix=1792065600
+exit=0
+
+# control date after nextUpdate (+30 days +1 s, +1 year)
+$ ocsp-qa judge resp-ca-revoked.der revoked.der ca.der at=1795340538
+from_der: Ok produced_at=1792748538 this_update=Some("1792748538") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+status(at=1795340538): Ok(Revoked { date: SystemTime { tv_sec: 1792065600, tv_nsec: 0 }, reason: Some(KeyCompromise) }) date_unix=1792065600
+exit=0
+$ ocsp-qa judge resp-ca-revoked.der revoked.der ca.der at=1795340539
+from_der: Ok produced_at=1792748538 this_update=Some("1792748538") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+status(at=1795340539): Err(Expired { next_update: SystemTime { tv_sec: 1795340538, tv_nsec: 0 } }) display="the revocation data expired at its nextUpdate" kind=Indeterminate
+exit=0
+$ ocsp-qa judge resp-ca-revoked.der revoked.der ca.der at=1824284538
+from_der: Ok produced_at=1792748538 this_update=Some("1792748538") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+status(at=1824284538): Err(Expired { next_update: SystemTime { tv_sec: 1795340538, tv_nsec: 0 } }) display="the revocation data expired at its nextUpdate" kind=Indeterminate
+exit=0
+
+# response without nextUpdate (openssl ocsp without -ndays)
+    This Update: Oct 23 09:42:39 2026 GMT
+from_der: Ok produced_at=1792748559 this_update=Some("1792748559") nonce=Some("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f")
+status(at=2108108538): Ok(Revoked { date: SystemTime { tv_sec: 1792065600, tv_nsec: 0 }, reason: Some(KeyCompromise) }) date_unix=1792065600
+exit=0

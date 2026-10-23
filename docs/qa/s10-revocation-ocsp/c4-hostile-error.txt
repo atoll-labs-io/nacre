@@ -1,0 +1,66 @@
+## c4 — a hostile response gives an error, never a panic
+tool: ocsp-hostile (scratch crate, source in c0-scratch-source.txt): every truncation, every byte set to 00/7f/80/81/84/ff and every single bit flipped, each through from_der, produced_at, this_update, nonce, check_nonce, check_this_update and status; panics caught with catch_unwind and counted; a mutated input that status() still judges Ok is counted by where the change sits (inside or outside the signed tbsResponseData); then DER bombs through from_der
+
+### release build
+$ ocsp-hostile resp-ca-revoked.der revoked.der ca.der at=1792748538 tbs=[34 256)
+resp-ca-revoked.der: 717 bytes, tbsResponseData [34,256), 10738 inputs, panics=0, status Ok with a byte changed inside tbsResponseData=0, status Ok with a byte changed outside it=3506
+exit=0
+$ ocsp-hostile resp-deleg-leaf.der leaf.der ca.der at=1792748538 tbs=[34 240)
+resp-deleg-leaf.der: 737 bytes, tbsResponseData [34,240), 11039 inputs, panics=0, status Ok with a byte changed inside tbsResponseData=0, status Ok with a byte changed outside it=0
+exit=0
+$ ocsp-hostile bench-revoked.der revoked.der intermediate.der at=1792748564 tbs=[34 321)
+bench-revoked.der: 978 bytes, tbsResponseData [34,321), 14648 inputs, panics=0, status Ok with a byte changed inside tbsResponseData=0, status Ok with a byte changed outside it=5568
+exit=0
+$ ocsp-hostile base.der leaf.der ca.der at=1798761600 tbs=[34 303)
+base.der: 389 bytes, tbsResponseData [34,303), 5826 inputs, panics=0, status Ok with a byte changed inside tbsResponseData=0, status Ok with a byte changed outside it=0
+exit=0
+$ ocsp-hostile delegated-good.der leaf.der ca.der at=1792746526 tbs=[34 243)
+delegated-good.der: 854 bytes, tbsResponseData [34,243), 12789 inputs, panics=0, status Ok with a byte changed inside tbsResponseData=0, status Ok with a byte changed outside it=0
+exit=0
+$ ocsp-hostile (bombs)
+bomb empty: Err(invalid DER)
+bomb 100 nested indefinite SEQUENCEs: Err(invalid DER)
+bomb 100 nested definite SEQUENCEs: Err(invalid DER)
+bomb 10000 nested indefinite SEQUENCEs: Err(invalid DER)
+bomb 10000 nested definite SEQUENCEs: Err(invalid DER)
+bomb 100000 nested indefinite SEQUENCEs: Err(invalid DER)
+bomb 10000 nested definite SEQUENCEs: Err(invalid DER)
+bomb SEQUENCE claiming 2 GiB: Err(invalid DER)
+bomb SEQUENCE with 8-octet length: Err(invalid DER)
+bomb 64 MiB of 0x30: Err(invalid DER)
+
+### debug build (overflow checks on)
+$ ocsp-hostile resp-ca-revoked.der revoked.der ca.der at=1792748538 tbs=[34 256)
+resp-ca-revoked.der: 717 bytes, tbsResponseData [34,256), 10738 inputs, panics=0, status Ok with a byte changed inside tbsResponseData=0, status Ok with a byte changed outside it=3506
+exit=0
+$ ocsp-hostile resp-deleg-leaf.der leaf.der ca.der at=1792748538 tbs=[34 240)
+resp-deleg-leaf.der: 737 bytes, tbsResponseData [34,240), 11039 inputs, panics=0, status Ok with a byte changed inside tbsResponseData=0, status Ok with a byte changed outside it=0
+exit=0
+$ ocsp-hostile bench-revoked.der revoked.der intermediate.der at=1792748564 tbs=[34 321)
+bench-revoked.der: 978 bytes, tbsResponseData [34,321), 14648 inputs, panics=0, status Ok with a byte changed inside tbsResponseData=0, status Ok with a byte changed outside it=5568
+exit=0
+$ ocsp-hostile base.der leaf.der ca.der at=1798761600 tbs=[34 303)
+base.der: 389 bytes, tbsResponseData [34,303), 5826 inputs, panics=0, status Ok with a byte changed inside tbsResponseData=0, status Ok with a byte changed outside it=0
+exit=0
+$ ocsp-hostile delegated-good.der leaf.der ca.der at=1792746526 tbs=[34 243)
+delegated-good.der: 854 bytes, tbsResponseData [34,243), 12789 inputs, panics=0, status Ok with a byte changed inside tbsResponseData=0, status Ok with a byte changed outside it=0
+exit=0
+$ ocsp-hostile (bombs)
+bomb empty: Err(invalid DER)
+bomb 100 nested indefinite SEQUENCEs: Err(invalid DER)
+bomb 100 nested definite SEQUENCEs: Err(invalid DER)
+bomb 10000 nested indefinite SEQUENCEs: Err(invalid DER)
+bomb 10000 nested definite SEQUENCEs: Err(invalid DER)
+bomb 100000 nested indefinite SEQUENCEs: Err(invalid DER)
+bomb 10000 nested definite SEQUENCEs: Err(invalid DER)
+bomb SEQUENCE claiming 2 GiB: Err(invalid DER)
+bomb SEQUENCE with 8-octet length: Err(invalid DER)
+bomb 64 MiB of 0x30: Err(invalid DER)
+
+(the per-mutation OKOUT lines are left out; their first and last offsets follow)
+-- offsets of mutations status() still judged Ok, first and last:
+resp-ca-revoked.der: 361 716
+bench-revoked.der: 427 977
+-- where the certs field [0] starts (openssl asn1parse of the BasicOCSPResponse, offset 30 + 4 header bytes into the file):
+resp-ca-revoked.der (+30):   311:d=1  hl=4 l= 372 cons: cont [ 0 ]        
+bench-revoked.der (+30):   377:d=1  hl=4 l= 567 cons: cont [ 0 ]        

@@ -1,0 +1,46 @@
+## c4 — the fuzz target exists and runs
+cwd: $T/copy/crates/nacre-revocation (copy of the tracked files)
+$ cat fuzz/fuzz_targets/ocsp.rs
+#![no_main]
+
+use std::time::{Duration, SystemTime};
+
+use libfuzzer_sys::fuzz_target;
+use nacre_revocation::{OcspRequest, OcspResponse};
+
+const CA: &[u8] = include_bytes!("../../tests/corpus/ocsp-openssl/ca.der");
+const LEAF: &[u8] = include_bytes!("../../tests/corpus/ocsp-openssl/revoked-leaf.der");
+// 2027-01-01T00:00:00Z: the target never reads the clock.
+const AT: Duration = Duration::from_secs(1_798_761_600);
+
+fuzz_target!(|data: &[u8]| {
+    if let Ok(response) = OcspResponse::from_der(data) {
+        let at = SystemTime::UNIX_EPOCH + AT;
+        let _ = response.produced_at();
+        let _ = response.this_update();
+        let _ = response.nonce();
+        if let Ok(request) = OcspRequest::new(LEAF, CA, &[0x4e; 32]) {
+            let _ = response.check_nonce(&request);
+        }
+        let _ = response.check_this_update(LEAF, CA, at, Duration::from_secs(300));
+        let _ = response.status(LEAF, CA, at);
+    }
+});
+$ cargo +nightly fuzz list
+crl
+ocsp
+exit=0
+seed corpus: 33 files (committed OCSP fixtures and the walk's responses)
+$ cargo +nightly fuzz run ocsp $T/fuzzcorpus -- -max_total_time=60   (progress lines condensed)
+exit=0
+INFO: Seed: 3473393310
+#34	INITED cov: 1543 ft: 1950 corp: 16/9264b exec/s: 0 rss: 55Mb
+#1041603	DONE   cov: 2530 ft: 5240 corp: 551/360Kb lim: 4096 exec/s: 17075 rss: 473Mb
+Done 1041603 runs in 61 second(s)
+[...]
+#1019143	NEW    cov: 2530 ft: 5240 corp: 551/360Kb lim: 4096 exec/s: 17273 rss: 473Mb L: 811/820 MS: 1 ShuffleBytes-
+#1041603	DONE   cov: 2530 ft: 5240 corp: 551/360Kb lim: 4096 exec/s: 17075 rss: 473Mb
+ocsp
+artifacts present
+$ ls -A fuzz/artifacts/ocsp   (the line above only shows that cargo-fuzz created the directory)
+0 files: no crash input was written
