@@ -59,3 +59,11 @@ A decision the person took is not logged here: it is an ADR or a story.
 | 2026-10-22 | s10-revocation-ocsp | Lane sent to the person: ADR-0018 (OCSP structures) | `x509-ocsp` 0.2 is on `der` 0.7; the plan holds `Technical choice: waiting for a human` |
 | 2026-10-23 | s08-pades-bt | Merged PR #87 after reading `bench_signature_is_pades_baseline_t ... ok` in the conformance log | Criterion 1 was seen by neither QA nor the reviewer |
 | 2026-10-23 | s08-pades-bt, s11-pades-blt, s12-pades-blta | Reworded criteria to `sign_at_level`, the TSA designated as the cause, a declared token bound | `sign` keeps its signature for its callers outside s08's Owns (s08 research) |
+| 2026-10-23 | s10-revocation-ocsp | Started fix run 1 although the review allowed the ship | Its one major was an untested security rule (delegate valid at `producedAt`); same call the person made for s15 loop 0 |
+| 2026-10-23 | s10-revocation-ocsp | Plan validated after the person chose ADR-0018 option 1 | Technical choice settled |
+| 2026-10-23 | s11-pades-blt | Plan validated without a human; re-asked the reviewer once for the findings shape | `po-gate findings-shape` refused `- **[minor] …**` items |
+| 2026-10-23 | s11-pades-blt, s39-error-kind-from-sources | Opened both lanes after s10 shipped; reserved ADR-0019 and ADR-0020 | s39's overlap with s10 was gone |
+| 2026-10-23 | s39-error-kind-from-sources | Lane sent to the person: ADR-0020 and whether revocation data is checked by the source | The plan holds `Technical choice: waiting for a human`; its Owns must widen into `crates/nacre-pades/` |
+| 2026-10-23 | s12-pades-blta | Widened Owns with `conformance/pki/`, `conformance/check.sh`, `conformance/README.md` and re-forked the lane | Criterion 5 needs a second bench TSA; po-bounds reads Owns at the fork point; no running lane owns `conformance/` |
+| 2026-10-23 | s11-pades-blt | Reworded criterion 1 with `issuers` | The s11 plan's corrected criterion |
+| 2026-10-23 | — | Closed or labelled the misfiled s02/s07 issues through octo; kept #65 open | The person delegated it; #65's input is the local DSS only |
