@@ -1,0 +1,322 @@
+# Criterion 4 - chain building and judging exposed by a public API of nacre-validate, usable without PDF
+# Scenario program: qa-scen, a scratch binary crate under the QA temp dir depending by path on crates/nacre-validate, nacre-pades, nacre-pdf and nacre-core of the copy; source quoted whole at the end.
+# Tree under test: 9b22467f80aeed829d7d4cc6ffc8f832f16e4241 (copy of git ls-files; cargo fetch: exit 0; cargo build --workspace --all-features: exit 0)
+# Bench PKI: conformance/pki/generate.sh run on the host (OpenSSL 3.6.5) inside the copy, out/ in the temp dir only; fresh keys, so certificate hashes differ from earlier walks.
+# Certificates are shown by the first 8 bytes of their SHA-256.
+## build_chain(signer, pool, anchors, at) on bare DER: forged root, ca, leaf-nr (forge.sh of c3-chain-defects.txt), unrelated.der a self-signed certificate of another key
+root.der sha256 prefix 160feed7894ce3d9
+ca.der sha256 prefix 8f7bad0466d7390f
+leaf-nr.der sha256 prefix b284ae100f1f0964
+unrelated.der sha256 prefix 44e67117eaeced3b
+ca-badsig.der sha256 prefix a4d30077bfa6a8d1
+$ <tmp>/target-scen/debug/qa-scen build leaf-nr.der 2026-10-24 root.der ca.der   (cwd: <tmp>/work/f, stdin: none)
+path: 3 certificates, sha256 prefixes ["b284ae100f1f0964", "8f7bad0466d7390f", "160feed7894ce3d9"]
+[exit code: 0]
+
+## pool: an unrelated certificate, the ca twice, the root itself, in that order
+$ <tmp>/target-scen/debug/qa-scen build leaf-nr.der 2026-10-24 root.der unrelated.der ca.der ca.der root.der   (cwd: <tmp>/work/f, stdin: none)
+path: 3 certificates, sha256 prefixes ["b284ae100f1f0964", "8f7bad0466d7390f", "160feed7894ce3d9"]
+[exit code: 0]
+
+## no anchor, an anchor of another PKI, an empty pool
+$ <tmp>/target-scen/debug/qa-scen build leaf-nr.der 2026-10-24 - ca.der   (cwd: <tmp>/work/f, stdin: none)
+defect: NoPath
+  report: INDETERMINATE / Some("NO_CERTIFICATE_CHAIN_FOUND") level None
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen build leaf-nr.der 2026-10-24 unrelated.der ca.der   (cwd: <tmp>/work/f, stdin: none)
+defect: NoPath
+  report: INDETERMINATE / Some("NO_CERTIFICATE_CHAIN_FOUND") level None
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen build leaf-nr.der 2026-10-24 root.der   (cwd: <tmp>/work/f, stdin: none)
+defect: NoPath
+  report: INDETERMINATE / Some("NO_CERTIFICATE_CHAIN_FOUND") level None
+[exit code: 0]
+
+## the signer is the anchor
+$ <tmp>/target-scen/debug/qa-scen build leaf-nr.der 2026-10-24 leaf-nr.der   (cwd: <tmp>/work/f, stdin: none)
+path: 1 certificates, sha256 prefixes ["b284ae100f1f0964"]
+[exit code: 0]
+
+## a twin of ca.der with a broken signature (ca-badsig.der: same tbsCertificate, last byte XOR 1) placed before the sound one; alone
+$ <tmp>/target-scen/debug/qa-scen build leaf-nr.der 2026-10-24 root.der ca-badsig.der ca.der   (cwd: <tmp>/work/f, stdin: none)
+path: 3 certificates, sha256 prefixes ["b284ae100f1f0964", "8f7bad0466d7390f", "160feed7894ce3d9"]
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen build leaf-nr.der 2026-10-24 root.der ca-badsig.der   (cwd: <tmp>/work/f, stdin: none)
+defect: NoPath
+  report: INDETERMINATE / Some("NO_CERTIFICATE_CHAIN_FOUND") level None
+[exit code: 0]
+
+## look-alike issuers (decoys.sh quoted below: subject and subjectKeyIdentifier of ca.der, cA true, keyCertSign, each its own key, issued by root.der) placed before the real ca in the pool
+# pool: 63 look-alikes (decoys/d1.der .. decoys/d63.der), then ca.der
+$ <tmp>/target-scen/debug/qa-scen build leaf-nr.der 2026-10-24 root.der decoys/d1.der decoys/d2.der decoys/d3.der decoys/d4.der decoys/d5.der decoys/d6.der decoys/d7.der decoys/d8.der decoys/d9.der decoys/d10.der decoys/d11.der decoys/d12.der decoys/d13.der decoys/d14.der decoys/d15.der decoys/d16.der decoys/d17.der decoys/d18.der decoys/d19.der decoys/d20.der decoys/d21.der decoys/d22.der decoys/d23.der decoys/d24.der decoys/d25.der decoys/d26.der decoys/d27.der decoys/d28.der decoys/d29.der decoys/d30.der decoys/d31.der decoys/d32.der decoys/d33.der decoys/d34.der decoys/d35.der decoys/d36.der decoys/d37.der decoys/d38.der decoys/d39.der decoys/d40.der decoys/d41.der decoys/d42.der decoys/d43.der decoys/d44.der decoys/d45.der decoys/d46.der decoys/d47.der decoys/d48.der decoys/d49.der decoys/d50.der decoys/d51.der decoys/d52.der decoys/d53.der decoys/d54.der decoys/d55.der decoys/d56.der decoys/d57.der decoys/d58.der decoys/d59.der decoys/d60.der decoys/d61.der decoys/d62.der decoys/d63.der ca.der   (cwd: <tmp>/work/f, stdin: none)
+path: 3 certificates, sha256 prefixes ["b284ae100f1f0964", "8f7bad0466d7390f", "160feed7894ce3d9"]
+[exit code: 0]
+
+# pool: 255 look-alikes (decoys/d1.der .. decoys/d255.der), then ca.der
+$ <tmp>/target-scen/debug/qa-scen build leaf-nr.der 2026-10-24 root.der decoys/d1.der decoys/d2.der decoys/d3.der decoys/d4.der decoys/d5.der decoys/d6.der decoys/d7.der decoys/d8.der decoys/d9.der decoys/d10.der decoys/d11.der decoys/d12.der decoys/d13.der decoys/d14.der decoys/d15.der decoys/d16.der decoys/d17.der decoys/d18.der decoys/d19.der decoys/d20.der decoys/d21.der decoys/d22.der decoys/d23.der decoys/d24.der decoys/d25.der decoys/d26.der decoys/d27.der decoys/d28.der decoys/d29.der decoys/d30.der decoys/d31.der decoys/d32.der decoys/d33.der decoys/d34.der decoys/d35.der decoys/d36.der decoys/d37.der decoys/d38.der decoys/d39.der decoys/d40.der decoys/d41.der decoys/d42.der decoys/d43.der decoys/d44.der decoys/d45.der decoys/d46.der decoys/d47.der decoys/d48.der decoys/d49.der decoys/d50.der decoys/d51.der decoys/d52.der decoys/d53.der decoys/d54.der decoys/d55.der decoys/d56.der decoys/d57.der decoys/d58.der decoys/d59.der decoys/d60.der decoys/d61.der decoys/d62.der decoys/d63.der decoys/d64.der decoys/d65.der decoys/d66.der decoys/d67.der decoys/d68.der decoys/d69.der decoys/d70.der decoys/d71.der decoys/d72.der decoys/d73.der decoys/d74.der decoys/d75.der decoys/d76.der decoys/d77.der decoys/d78.der decoys/d79.der decoys/d80.der decoys/d81.der decoys/d82.der decoys/d83.der decoys/d84.der decoys/d85.der decoys/d86.der decoys/d87.der decoys/d88.der decoys/d89.der decoys/d90.der decoys/d91.der decoys/d92.der decoys/d93.der decoys/d94.der decoys/d95.der decoys/d96.der decoys/d97.der decoys/d98.der decoys/d99.der decoys/d100.der decoys/d101.der decoys/d102.der decoys/d103.der decoys/d104.der decoys/d105.der decoys/d106.der decoys/d107.der decoys/d108.der decoys/d109.der decoys/d110.der decoys/d111.der decoys/d112.der decoys/d113.der decoys/d114.der decoys/d115.der decoys/d116.der decoys/d117.der decoys/d118.der decoys/d119.der decoys/d120.der decoys/d121.der decoys/d122.der decoys/d123.der decoys/d124.der decoys/d125.der decoys/d126.der decoys/d127.der decoys/d128.der decoys/d129.der decoys/d130.der decoys/d131.der decoys/d132.der decoys/d133.der decoys/d134.der decoys/d135.der decoys/d136.der decoys/d137.der decoys/d138.der decoys/d139.der decoys/d140.der decoys/d141.der decoys/d142.der decoys/d143.der decoys/d144.der decoys/d145.der decoys/d146.der decoys/d147.der decoys/d148.der decoys/d149.der decoys/d150.der decoys/d151.der decoys/d152.der decoys/d153.der decoys/d154.der decoys/d155.der decoys/d156.der decoys/d157.der decoys/d158.der decoys/d159.der decoys/d160.der decoys/d161.der decoys/d162.der decoys/d163.der decoys/d164.der decoys/d165.der decoys/d166.der decoys/d167.der decoys/d168.der decoys/d169.der decoys/d170.der decoys/d171.der decoys/d172.der decoys/d173.der decoys/d174.der decoys/d175.der decoys/d176.der decoys/d177.der decoys/d178.der decoys/d179.der decoys/d180.der decoys/d181.der decoys/d182.der decoys/d183.der decoys/d184.der decoys/d185.der decoys/d186.der decoys/d187.der decoys/d188.der decoys/d189.der decoys/d190.der decoys/d191.der decoys/d192.der decoys/d193.der decoys/d194.der decoys/d195.der decoys/d196.der decoys/d197.der decoys/d198.der decoys/d199.der decoys/d200.der decoys/d201.der decoys/d202.der decoys/d203.der decoys/d204.der decoys/d205.der decoys/d206.der decoys/d207.der decoys/d208.der decoys/d209.der decoys/d210.der decoys/d211.der decoys/d212.der decoys/d213.der decoys/d214.der decoys/d215.der decoys/d216.der decoys/d217.der decoys/d218.der decoys/d219.der decoys/d220.der decoys/d221.der decoys/d222.der decoys/d223.der decoys/d224.der decoys/d225.der decoys/d226.der decoys/d227.der decoys/d228.der decoys/d229.der decoys/d230.der decoys/d231.der decoys/d232.der decoys/d233.der decoys/d234.der decoys/d235.der decoys/d236.der decoys/d237.der decoys/d238.der decoys/d239.der decoys/d240.der decoys/d241.der decoys/d242.der decoys/d243.der decoys/d244.der decoys/d245.der decoys/d246.der decoys/d247.der decoys/d248.der decoys/d249.der decoys/d250.der decoys/d251.der decoys/d252.der decoys/d253.der decoys/d254.der decoys/d255.der ca.der   (cwd: <tmp>/work/f, stdin: none)
+path: 3 certificates, sha256 prefixes ["b284ae100f1f0964", "8f7bad0466d7390f", "160feed7894ce3d9"]
+[exit code: 0]
+
+# pool: ca.der, then 300 look-alikes
+$ <tmp>/target-scen/debug/qa-scen build leaf-nr.der 2026-10-24 root.der ca.der decoys/d1.der decoys/d2.der decoys/d3.der decoys/d4.der decoys/d5.der decoys/d6.der decoys/d7.der decoys/d8.der decoys/d9.der decoys/d10.der decoys/d11.der decoys/d12.der decoys/d13.der decoys/d14.der decoys/d15.der decoys/d16.der decoys/d17.der decoys/d18.der decoys/d19.der decoys/d20.der decoys/d21.der decoys/d22.der decoys/d23.der decoys/d24.der decoys/d25.der decoys/d26.der decoys/d27.der decoys/d28.der decoys/d29.der decoys/d30.der decoys/d31.der decoys/d32.der decoys/d33.der decoys/d34.der decoys/d35.der decoys/d36.der decoys/d37.der decoys/d38.der decoys/d39.der decoys/d40.der decoys/d41.der decoys/d42.der decoys/d43.der decoys/d44.der decoys/d45.der decoys/d46.der decoys/d47.der decoys/d48.der decoys/d49.der decoys/d50.der decoys/d51.der decoys/d52.der decoys/d53.der decoys/d54.der decoys/d55.der decoys/d56.der decoys/d57.der decoys/d58.der decoys/d59.der decoys/d60.der decoys/d61.der decoys/d62.der decoys/d63.der decoys/d64.der decoys/d65.der decoys/d66.der decoys/d67.der decoys/d68.der decoys/d69.der decoys/d70.der decoys/d71.der decoys/d72.der decoys/d73.der decoys/d74.der decoys/d75.der decoys/d76.der decoys/d77.der decoys/d78.der decoys/d79.der decoys/d80.der decoys/d81.der decoys/d82.der decoys/d83.der decoys/d84.der decoys/d85.der decoys/d86.der decoys/d87.der decoys/d88.der decoys/d89.der decoys/d90.der decoys/d91.der decoys/d92.der decoys/d93.der decoys/d94.der decoys/d95.der decoys/d96.der decoys/d97.der decoys/d98.der decoys/d99.der decoys/d100.der decoys/d101.der decoys/d102.der decoys/d103.der decoys/d104.der decoys/d105.der decoys/d106.der decoys/d107.der decoys/d108.der decoys/d109.der decoys/d110.der decoys/d111.der decoys/d112.der decoys/d113.der decoys/d114.der decoys/d115.der decoys/d116.der decoys/d117.der decoys/d118.der decoys/d119.der decoys/d120.der decoys/d121.der decoys/d122.der decoys/d123.der decoys/d124.der decoys/d125.der decoys/d126.der decoys/d127.der decoys/d128.der decoys/d129.der decoys/d130.der decoys/d131.der decoys/d132.der decoys/d133.der decoys/d134.der decoys/d135.der decoys/d136.der decoys/d137.der decoys/d138.der decoys/d139.der decoys/d140.der decoys/d141.der decoys/d142.der decoys/d143.der decoys/d144.der decoys/d145.der decoys/d146.der decoys/d147.der decoys/d148.der decoys/d149.der decoys/d150.der decoys/d151.der decoys/d152.der decoys/d153.der decoys/d154.der decoys/d155.der decoys/d156.der decoys/d157.der decoys/d158.der decoys/d159.der decoys/d160.der decoys/d161.der decoys/d162.der decoys/d163.der decoys/d164.der decoys/d165.der decoys/d166.der decoys/d167.der decoys/d168.der decoys/d169.der decoys/d170.der decoys/d171.der decoys/d172.der decoys/d173.der decoys/d174.der decoys/d175.der decoys/d176.der decoys/d177.der decoys/d178.der decoys/d179.der decoys/d180.der decoys/d181.der decoys/d182.der decoys/d183.der decoys/d184.der decoys/d185.der decoys/d186.der decoys/d187.der decoys/d188.der decoys/d189.der decoys/d190.der decoys/d191.der decoys/d192.der decoys/d193.der decoys/d194.der decoys/d195.der decoys/d196.der decoys/d197.der decoys/d198.der decoys/d199.der decoys/d200.der decoys/d201.der decoys/d202.der decoys/d203.der decoys/d204.der decoys/d205.der decoys/d206.der decoys/d207.der decoys/d208.der decoys/d209.der decoys/d210.der decoys/d211.der decoys/d212.der decoys/d213.der decoys/d214.der decoys/d215.der decoys/d216.der decoys/d217.der decoys/d218.der decoys/d219.der decoys/d220.der decoys/d221.der decoys/d222.der decoys/d223.der decoys/d224.der decoys/d225.der decoys/d226.der decoys/d227.der decoys/d228.der decoys/d229.der decoys/d230.der decoys/d231.der decoys/d232.der decoys/d233.der decoys/d234.der decoys/d235.der decoys/d236.der decoys/d237.der decoys/d238.der decoys/d239.der decoys/d240.der decoys/d241.der decoys/d242.der decoys/d243.der decoys/d244.der decoys/d245.der decoys/d246.der decoys/d247.der decoys/d248.der decoys/d249.der decoys/d250.der decoys/d251.der decoys/d252.der decoys/d253.der decoys/d254.der decoys/d255.der decoys/d256.der decoys/d257.der decoys/d258.der decoys/d259.der decoys/d260.der decoys/d261.der decoys/d262.der decoys/d263.der decoys/d264.der decoys/d265.der decoys/d266.der decoys/d267.der decoys/d268.der decoys/d269.der decoys/d270.der decoys/d271.der decoys/d272.der decoys/d273.der decoys/d274.der decoys/d275.der decoys/d276.der decoys/d277.der decoys/d278.der decoys/d279.der decoys/d280.der decoys/d281.der decoys/d282.der decoys/d283.der decoys/d284.der decoys/d285.der decoys/d286.der decoys/d287.der decoys/d288.der decoys/d289.der decoys/d290.der decoys/d291.der decoys/d292.der decoys/d293.der decoys/d294.der decoys/d295.der decoys/d296.der decoys/d297.der decoys/d298.der decoys/d299.der decoys/d300.der   (cwd: <tmp>/work/f, stdin: none)
+path: 3 certificates, sha256 prefixes ["b284ae100f1f0964", "8f7bad0466d7390f", "160feed7894ce3d9"]
+[exit code: 0]
+
+# pool: 256 look-alikes, then ca.der (past 256 distinct certificates the rest is ignored, as the build_chain rustdoc says)
+$ <tmp>/target-scen/debug/qa-scen build leaf-nr.der 2026-10-24 root.der decoys/d1.der decoys/d2.der decoys/d3.der decoys/d4.der decoys/d5.der decoys/d6.der decoys/d7.der decoys/d8.der decoys/d9.der decoys/d10.der decoys/d11.der decoys/d12.der decoys/d13.der decoys/d14.der decoys/d15.der decoys/d16.der decoys/d17.der decoys/d18.der decoys/d19.der decoys/d20.der decoys/d21.der decoys/d22.der decoys/d23.der decoys/d24.der decoys/d25.der decoys/d26.der decoys/d27.der decoys/d28.der decoys/d29.der decoys/d30.der decoys/d31.der decoys/d32.der decoys/d33.der decoys/d34.der decoys/d35.der decoys/d36.der decoys/d37.der decoys/d38.der decoys/d39.der decoys/d40.der decoys/d41.der decoys/d42.der decoys/d43.der decoys/d44.der decoys/d45.der decoys/d46.der decoys/d47.der decoys/d48.der decoys/d49.der decoys/d50.der decoys/d51.der decoys/d52.der decoys/d53.der decoys/d54.der decoys/d55.der decoys/d56.der decoys/d57.der decoys/d58.der decoys/d59.der decoys/d60.der decoys/d61.der decoys/d62.der decoys/d63.der decoys/d64.der decoys/d65.der decoys/d66.der decoys/d67.der decoys/d68.der decoys/d69.der decoys/d70.der decoys/d71.der decoys/d72.der decoys/d73.der decoys/d74.der decoys/d75.der decoys/d76.der decoys/d77.der decoys/d78.der decoys/d79.der decoys/d80.der decoys/d81.der decoys/d82.der decoys/d83.der decoys/d84.der decoys/d85.der decoys/d86.der decoys/d87.der decoys/d88.der decoys/d89.der decoys/d90.der decoys/d91.der decoys/d92.der decoys/d93.der decoys/d94.der decoys/d95.der decoys/d96.der decoys/d97.der decoys/d98.der decoys/d99.der decoys/d100.der decoys/d101.der decoys/d102.der decoys/d103.der decoys/d104.der decoys/d105.der decoys/d106.der decoys/d107.der decoys/d108.der decoys/d109.der decoys/d110.der decoys/d111.der decoys/d112.der decoys/d113.der decoys/d114.der decoys/d115.der decoys/d116.der decoys/d117.der decoys/d118.der decoys/d119.der decoys/d120.der decoys/d121.der decoys/d122.der decoys/d123.der decoys/d124.der decoys/d125.der decoys/d126.der decoys/d127.der decoys/d128.der decoys/d129.der decoys/d130.der decoys/d131.der decoys/d132.der decoys/d133.der decoys/d134.der decoys/d135.der decoys/d136.der decoys/d137.der decoys/d138.der decoys/d139.der decoys/d140.der decoys/d141.der decoys/d142.der decoys/d143.der decoys/d144.der decoys/d145.der decoys/d146.der decoys/d147.der decoys/d148.der decoys/d149.der decoys/d150.der decoys/d151.der decoys/d152.der decoys/d153.der decoys/d154.der decoys/d155.der decoys/d156.der decoys/d157.der decoys/d158.der decoys/d159.der decoys/d160.der decoys/d161.der decoys/d162.der decoys/d163.der decoys/d164.der decoys/d165.der decoys/d166.der decoys/d167.der decoys/d168.der decoys/d169.der decoys/d170.der decoys/d171.der decoys/d172.der decoys/d173.der decoys/d174.der decoys/d175.der decoys/d176.der decoys/d177.der decoys/d178.der decoys/d179.der decoys/d180.der decoys/d181.der decoys/d182.der decoys/d183.der decoys/d184.der decoys/d185.der decoys/d186.der decoys/d187.der decoys/d188.der decoys/d189.der decoys/d190.der decoys/d191.der decoys/d192.der decoys/d193.der decoys/d194.der decoys/d195.der decoys/d196.der decoys/d197.der decoys/d198.der decoys/d199.der decoys/d200.der decoys/d201.der decoys/d202.der decoys/d203.der decoys/d204.der decoys/d205.der decoys/d206.der decoys/d207.der decoys/d208.der decoys/d209.der decoys/d210.der decoys/d211.der decoys/d212.der decoys/d213.der decoys/d214.der decoys/d215.der decoys/d216.der decoys/d217.der decoys/d218.der decoys/d219.der decoys/d220.der decoys/d221.der decoys/d222.der decoys/d223.der decoys/d224.der decoys/d225.der decoys/d226.der decoys/d227.der decoys/d228.der decoys/d229.der decoys/d230.der decoys/d231.der decoys/d232.der decoys/d233.der decoys/d234.der decoys/d235.der decoys/d236.der decoys/d237.der decoys/d238.der decoys/d239.der decoys/d240.der decoys/d241.der decoys/d242.der decoys/d243.der decoys/d244.der decoys/d245.der decoys/d246.der decoys/d247.der decoys/d248.der decoys/d249.der decoys/d250.der decoys/d251.der decoys/d252.der decoys/d253.der decoys/d254.der decoys/d255.der decoys/d256.der ca.der   (cwd: <tmp>/work/f, stdin: none)
+defect: NoPath
+  report: INDETERMINATE / Some("NO_CERTIFICATE_CHAIN_FOUND") level None
+[exit code: 0]
+
+## dependencies a CAdES, XAdES or JAdES caller compiles with nacre-validate
+$ cargo tree -p nacre-validate -e normal --depth 1   (cwd: <tmp>/copy, stdin: none)
+nacre-validate v0.1.0 (<tmp>/copy/crates/nacre-validate)
+├── der v0.8.2
+├── nacre-cms v0.1.0 (<tmp>/copy/crates/nacre-cms)
+├── nacre-core v0.1.0 (<tmp>/copy/crates/nacre-core)
+├── nacre-pdf v0.1.0 (<tmp>/copy/crates/nacre-pdf)
+├── p256 v0.14.0
+├── rsa v0.10.0-rc.19
+├── sha2 v0.11.1
+├── spki v0.8.1
+├── thiserror v2.0.21
+└── x509-cert v0.3.0
+[exit code: 0]
+
+# Every run above was replayed once with identical output (two full passes compared byte for byte).
+
+# --- decoys.sh ---
+set -eu
+SKI=$(openssl x509 -in ca.pem -noout -ext subjectKeyIdentifier | tail -1 | tr -d ' ')
+for i in $(seq 1 300); do
+  openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out decoys/d$i.key 2>/dev/null
+  openssl req -new -key decoys/d$i.key -subj "/CN=QA CA" -out decoys/d$i.csr 2>/dev/null
+  printf 'basicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign\nsubjectKeyIdentifier=%s\n' "$SKI" > decoys/d$i.ext
+  openssl x509 -req -in decoys/d$i.csr -CA root.pem -CAkey root.key -set_serial $((5000+i)) -days 1000 -sha256 -extfile decoys/d$i.ext -outform DER -out decoys/d$i.der 2>/dev/null
+done
+
+
+# --- forge.sh ---
+set -eu
+k(){ openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out $1.key 2>/dev/null; }
+ext(){ printf '%s\n' "$2" > $1.ext; }
+k root; openssl req -x509 -new -key root.key -subj "/CN=QA Root" -days 3650 -sha256 \
+  -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign" -out root.pem 2>/dev/null
+issue(){ # name subject issuer extensions
+  k $1; openssl req -new -key $1.key -subj "/CN=$2" -out $1.csr 2>/dev/null; ext $1 "$4"
+  openssl x509 -req -in $1.csr -CA $3.pem -CAkey $3.key -set_serial 0x$(openssl rand -hex 8) -days 1000 -sha256 -extfile $1.ext -out $1.pem 2>/dev/null; }
+issue ca "QA CA" root "basicConstraints=critical,CA:TRUE
+keyUsage=critical,keyCertSign
+subjectKeyIdentifier=hash"
+issue ca-nokcs "QA CA no keyCertSign" root "basicConstraints=critical,CA:TRUE
+keyUsage=critical,digitalSignature"
+issue ca-nobc "QA CA no basicConstraints" root "keyUsage=critical,keyCertSign"
+issue ca-eku "QA CA critical EKU serverAuth" root "basicConstraints=critical,CA:TRUE
+keyUsage=critical,keyCertSign
+extendedKeyUsage=critical,serverAuth"
+issue leaf-nr "QA leaf nonRepudiation only" ca "basicConstraints=CA:FALSE
+keyUsage=critical,nonRepudiation"
+issue leaf-ke "QA leaf keyEncipherment only" ca "basicConstraints=CA:FALSE
+keyUsage=critical,keyEncipherment"
+issue leaf-noku "QA leaf no keyUsage" ca "basicConstraints=CA:FALSE"
+issue leaf-under-nokcs "QA leaf under CA without keyCertSign" ca-nokcs "basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature"
+issue leaf-under-nobc "QA leaf under CA without basicConstraints" ca-nobc "basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature"
+issue leaf-nc "QA leaf critical nameConstraints" ca "basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature
+nameConstraints=critical,permitted;DNS:example.org"
+issue leaf-eku-server "QA leaf critical EKU serverAuth" ca "basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature
+extendedKeyUsage=critical,serverAuth"
+issue leaf-eku-server-nc "QA leaf non-critical EKU serverAuth" ca "basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature
+extendedKeyUsage=serverAuth"
+issue leaf-eku-email "QA leaf critical EKU emailProtection" ca "basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature
+extendedKeyUsage=critical,emailProtection"
+issue leaf-eku-docsign "QA leaf critical EKU documentSigning" ca "basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature
+extendedKeyUsage=critical,1.3.6.1.5.5.7.3.36"
+issue leaf-eku-mixed "QA leaf critical EKU serverAuth and anyExtendedKeyUsage" ca "basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature
+extendedKeyUsage=critical,serverAuth,anyExtendedKeyUsage"
+issue leaf-under-ca-eku "QA leaf under CA with critical EKU serverAuth" ca-eku "basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature"
+for f in *.pem; do openssl x509 -in $f -outform DER -out ${f%.pem}.der; done
+
+
+# --- forge-extra.sh ---
+set -eu
+k(){ openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out $1.key 2>/dev/null; }
+issue(){ k $1; openssl req -new -key $1.key -subj "/CN=$2" -out $1.csr 2>/dev/null; printf '%s\n' "$4" > $1.ext
+  openssl x509 -req -in $1.csr -CA $3.pem -CAkey $3.key -set_serial 0x$(openssl rand -hex 8) -days 1000 -sha256 -extfile $1.ext -out $1.pem 2>/dev/null
+  openssl x509 -in $1.pem -outform DER -out $1.der; }
+issue ca-eku-nc "QA CA non-critical EKU serverAuth" root "basicConstraints=critical,CA:TRUE
+keyUsage=critical,keyCertSign
+extendedKeyUsage=serverAuth"
+issue leaf-under-ca-eku-nc "QA leaf under CA with non-critical EKU serverAuth" ca-eku-nc "basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature"
+issue leaf-eku-client-nc "QA leaf non-critical EKU clientAuth" ca "basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature
+extendedKeyUsage=clientAuth"
+# ca-badsig.der: ca.der with its last byte (inside the signature value) XOR 1, so a twin of the same tbsCertificate whose signature fails
+python3 -I -c "b=bytearray(open('ca.der','rb').read());b[-1]^=1;open('ca-badsig.der','wb').write(b)"
+
+# --- qa-scen source (Cargo.toml then src/main.rs) ---
+[package]
+name = "qa-scen"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+nacre-validate = { path = "../copy/crates/nacre-validate" }
+nacre-pades = { path = "../copy/crates/nacre-pades" }
+nacre-pdf = { path = "../copy/crates/nacre-pdf" }
+nacre-core = { path = "../copy/crates/nacre-core" }
+der = { version = "0.8", features = ["alloc", "oid", "pem"] }
+x509-cert = "0.3"
+p256 = { version = "0.14", features = ["ecdsa", "pkcs8", "pem"] }
+sha2 = "0.11"
+
+// QA scenario program for s16-validate-chain: calls the public API of nacre-validate.
+// Usage:
+//   qa-scen validate <pdf>
+//   qa-scen anchors <pdf> <date YYYY-MM-DD> <anchor-file>...        (anchor files raw bytes, DER expected)
+//   qa-scen build <signer-file> <date YYYY-MM-DD> <anchor-file|-> [pool-file...]
+//   qa-scen build-rep <signer-file> <date> <anchor-file> <n> <entry-file> [pool-file...]   (n copies of entry-file, then the pool)
+//   qa-scen bench-sign <pki-dir> <unsigned.pdf> <out.pdf> [leaf-only]
+//   qa-scen dss <in.pdf> <out.pdf> <n> <entry-file>...   (appends one revision with a /DSS /Certs of n unfiltered streams, cycling over the entry files)
+//   qa-scen pem2der <pem> <der>
+use std::time::SystemTime;
+use nacre_core::{SignatureAlgorithm, Signer};
+use nacre_pdf::{Dictionary, Document, Object};
+use nacre_validate::{TrustAnchors, build_chain, validate, validate_with_anchors};
+use p256::ecdsa::signature::hazmat::PrehashSigner;
+use p256::ecdsa::{DerSignature, SigningKey};
+use p256::pkcs8::DecodePrivateKey;
+use sha2::{Digest, Sha256};
+
+fn h(b: &[u8]) -> String { Sha256::digest(b).iter().take(8).map(|x| format!("{x:02x}")).collect() }
+
+fn date(s: &str) -> SystemTime {
+    let p: Vec<u16> = s.split('-').map(|x| x.parse().expect("date YYYY-MM-DD")).collect();
+    x509_cert::time::Time::from(der::DateTime::new(p[0], p[1] as u8, p[2] as u8, 0, 0, 0).expect("valid date")).to_system_time()
+}
+
+fn read(p: &str) -> Vec<u8> { std::fs::read(p).unwrap_or_else(|e| { eprintln!("cannot read {p}: {e}"); std::process::exit(2) }) }
+
+fn pem_to_der(path: &str) -> Vec<u8> {
+    let pem = std::fs::read_to_string(path).expect("pem");
+    der::pem::decode_vec(pem.as_bytes()).expect("pem decode").1
+}
+
+fn print(results: Result<Vec<nacre_validate::SignatureValidation>, nacre_validate::Error>) -> i32 {
+    match results {
+        Err(e) => { println!("error: {e}"); println!("  debug: {e:?}"); println!("  kind: {:?}", e.kind()); 1 }
+        Ok(rs) => {
+            println!("signatures: {}", rs.len());
+            for r in rs {
+                println!("- field {:?}", r.field);
+                println!("  indication: {} / {:?}", r.report.indication().as_str(), r.report.sub_indication().map(|s| s.as_str()));
+                println!("  digest_verified={} signature_verified={}", r.digest_verified, r.signature_verified);
+                println!("  defect: {:?}", r.defect);
+                match &r.chain {
+                    None => println!("  chain: None"),
+                    Some(c) => println!("  chain: {} certificates, sha256 prefixes {:?}", c.certificates.len(), c.certificates.iter().map(|x| h(x)).collect::<Vec<_>>()),
+                }
+                println!("  later_revisions: {}", r.later_revisions.len());
+            }
+            0
+        }
+    }
+}
+
+fn anchors_of(path: &str) -> TrustAnchors {
+    if path == "-" { return TrustAnchors::default(); }
+    let b = read(path);
+    match TrustAnchors::from_certificates([b.as_slice()]) {
+        Ok(x) => x,
+        Err(e) => { println!("anchors error: {e}"); println!("  debug: {e:?}"); println!("  kind: {:?}", e.kind()); std::process::exit(1) }
+    }
+}
+
+fn show_build(signer: &[u8], pool: &[Vec<u8>], an: &TrustAnchors, at: SystemTime) -> i32 {
+    let refs: Vec<&[u8]> = pool.iter().map(Vec::as_slice).collect();
+    match build_chain(signer, &refs, an, at) {
+        Ok(p) => { println!("path: {} certificates, sha256 prefixes {:?}", p.certificates.len(), p.certificates.iter().map(|x| h(x)).collect::<Vec<_>>()); 0 }
+        Err(d) => { let r = d.report(); println!("defect: {d:?}"); println!("  report: {} / {:?} level {:?}", r.indication().as_str(), r.sub_indication().map(|s| s.as_str()), r.level()); 0 }
+    }
+}
+
+struct Bench { key: SigningKey, chain: Vec<Vec<u8>> }
+impl Signer for Bench {
+    fn algorithm(&self) -> SignatureAlgorithm { SignatureAlgorithm::EcdsaP256Sha256 }
+    fn certificate_chain(&self) -> &[Vec<u8>] { &self.chain }
+    fn sign_digest(&self, d: &[u8]) -> Result<Vec<u8>, nacre_core::Error> {
+        let s: DerSignature = self.key.sign_prehash(d).map_err(|e| nacre_core::Error::Signer(Box::new(e)))?;
+        Ok(s.as_bytes().to_vec())
+    }
+}
+
+fn main() {
+    let a: Vec<String> = std::env::args().collect();
+    let code = match a.get(1).map(String::as_str) {
+        Some("validate") => print(validate(&read(&a[2]))),
+        Some("anchors") => {
+            let bytes: Vec<Vec<u8>> = a[4..].iter().map(|p| read(p)).collect();
+            match TrustAnchors::from_certificates(bytes.iter().map(Vec::as_slice)) {
+                Err(e) => { println!("anchors error: {e}"); println!("  debug: {e:?}"); println!("  kind: {:?}", e.kind()); 1 }
+                Ok(an) => print(validate_with_anchors(&read(&a[2]), &an, date(&a[3]))),
+            }
+        }
+        Some("build") => {
+            let pool: Vec<Vec<u8>> = a[5..].iter().map(|p| read(p)).collect();
+            show_build(&read(&a[2]), &pool, &anchors_of(&a[4]), date(&a[3]))
+        }
+        Some("build-rep") => {
+            let n: usize = a[5].parse().expect("n");
+            let entry = read(&a[6]);
+            let mut pool: Vec<Vec<u8>> = std::iter::repeat_n(entry, n).collect();
+            pool.extend(a[7..].iter().map(|p| read(p)));
+            println!("pool entries: {}", pool.len());
+            show_build(&read(&a[2]), &pool, &anchors_of(&a[4]), date(&a[3]))
+        }
+        Some("bench-sign") => {
+            let dir = &a[2];
+            let key = SigningKey::from_pkcs8_pem(&std::fs::read_to_string(format!("{dir}/signer.key.pem")).expect("key")).expect("key parse");
+            let mut chain = vec![pem_to_der(&format!("{dir}/signer.cert.pem"))];
+            if a.get(5).map(String::as_str) != Some("leaf-only") { chain.push(pem_to_der(&format!("{dir}/intermediate.cert.pem"))); }
+            let pdf = nacre_pades::sign(&read(&a[3]), &Bench { key, chain }, nacre_pades::DateTime::new(2026, 10, 22, 8, 0, 0).expect("dt")).expect("sign");
+            std::fs::write(&a[4], pdf).expect("write");
+            println!("signed {} with the bench signer", a[4]); 0
+        }
+        Some("dss") => {
+            let pdf = read(&a[2]);
+            let n: usize = a[4].parse().expect("n");
+            let entries: Vec<Vec<u8>> = a[5..].iter().map(|p| read(p)).collect();
+            let doc = Document::parse(&pdf).expect("parse");
+            let mut update = doc.update();
+            let mut refs = Vec::new();
+            for i in 0..n {
+                let s = update.add_stream(Dictionary::new(), entries[i % entries.len()].clone()).expect("stream");
+                refs.push(Object::Reference(s));
+            }
+            let mut dss = Dictionary::new();
+            dss.insert(b"Certs", Object::Array(refs));
+            let dss = update.add(Object::Dictionary(dss)).expect("dss");
+            update.set_catalog(b"DSS", Object::Reference(dss));
+            std::fs::write(&a[3], update.finish().expect("finish")).expect("write");
+            println!("wrote {} with a /DSS of {} streams", a[3], n); 0
+        }
+        Some("pem2der") => { std::fs::write(&a[3], pem_to_der(&a[2])).expect("write"); 0 }
+        _ => { eprintln!("unknown subcommand"); 2 }
+    };
+    std::process::exit(code);
+}
