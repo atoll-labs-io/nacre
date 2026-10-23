@@ -1,0 +1,19 @@
+## c3 error — the three checks given odd arguments
+cwd: $T/pki; response resp-ca-revoked.der of c1.txt (nonce N, about revoked.der)
+$ check_this_update at=0 (epoch), tolerance 300 s
+check_this_update(at=0, tol=300s): Err(ThisUpdateOutOfTolerance { this_update: SystemTime { tv_sec: 1792748538, tv_nsec: 0 } }) display="the OCSP response thisUpdate is outside the tolerance" kind=Indeterminate
+$ check_this_update at=0, tolerance u64::MAX s
+check_this_update(at=0, tol=18446744073709551615s): Ok
+$ check_this_update at=thisUpdate+10y, tolerance 0
+check_this_update(at=2108108538, tol=0s): Err(ThisUpdateOutOfTolerance { this_update: SystemTime { tv_sec: 1792748538, tv_nsec: 0 } }) display="the OCSP response thisUpdate is outside the tolerance" kind=Indeterminate
+$ check_this_update with the issuer swapped for the other CA
+check_this_update(at=1792748538, tol=300s): Err(CertificateNotInResponse) display="the OCSP response does not cover the certificate" kind=Indeterminate
+$ check_this_update with an empty certificate
+check_this_update(at=1792748538, tol=300s): Err(Certificate(Error { kind: Incomplete { expected_len: Length(1), actual_len: Length(0) }, position: Some(Length(0)) })) display="invalid certificate <- ASN.1 DER message is incomplete: expected 1, actual 0 at DER byte 0" kind=InvalidInput
+$ check_nonce against a request with the same nonce but about another certificate (leaf.der)
+check_nonce(000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f): Ok
+status(at=1792748538): Err(CertificateNotInResponse) display="the OCSP response does not cover the certificate" kind=Indeterminate
+$ status of a fetched response about the leaf when the source was given the wrong issuer (ca2): the response (from c2-http-source-error.txt) judged
+    Cert Status: unknown
+status(at=1792748584): Err(UnauthorizedResponder) display="the OCSP responder is not authorized by the issuer" kind=InvalidSignature
+status(at=1792748584): Err(CertificateNotInResponse) display="the OCSP response does not cover the certificate" kind=Indeterminate

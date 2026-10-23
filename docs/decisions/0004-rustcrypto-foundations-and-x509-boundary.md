@@ -5,7 +5,7 @@ status: accepted
 date: 2026-10-21
 scope: framing
 supersedes: []
-superseded-by: []
+superseded-by: [0018]
 ---
 
 # ADR-0004 — RustCrypto foundations, and where the X.509 boundary lies

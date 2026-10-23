@@ -1,0 +1,561 @@
+## Scratch sources used by the walk (all under the mktemp -d directory $T = $T, removed at the end)
+The scratch crates, servers and scripts are those of the first QA walk of this story (tree a2c01ef), re-extracted from its c0-scratch-source.txt with the temp path changed; the changes made for this walk are marked in the list below.
+- c1e.sh: nonce cases 1, 32 and 33 octets and an empty certificate with an empty nonce added (the fix run bounded the nonce); the response-signature byte is now located after the response's signatureAlgorithm instead of by the first '03 48 00', which for a 71-byte response signature found the embedded CA certificate's signature.
+- c3.sh: the committed expired-delegate-response.der case added to the corpus loop.
+- replay.sh: rewritten for the one finding left.
+- mkpki.sh: the walk PKI script (new in this file; the first walk listed only ext.cnf and index.txt).
+
+===== $T/scratch/qa/Cargo.toml =====
+[package]
+name = "ocsp-qa"
+version = "0.0.0"
+edition = "2024"
+publish = false
+[workspace]
+[dependencies]
+nacre-revocation = { path = "$T/copy/crates/nacre-revocation", features = ["http"] }
+nacre-core = { path = "$T/copy/crates/nacre-core" }
+
+===== $T/scratch/qa/src/main.rs =====
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use nacre_core::{RevocationData, RevocationSource};
+use nacre_revocation::{Error, Fallback, HttpCrlSource, HttpOcspSource, OcspRequest, OcspResponse};
+
+fn hex(b: &[u8]) -> String { b.iter().map(|x| format!("{x:02x}")).collect() }
+fn unhex(s: &str) -> Vec<u8> { (0..s.len()).step_by(2).map(|i| u8::from_str_radix(&s[i..i + 2], 16).unwrap()).collect() }
+fn read(p: &str) -> Vec<u8> { if p == "-" { Vec::new() } else { std::fs::read(p).unwrap() } }
+fn t(s: SystemTime) -> String { format!("{}", s.duration_since(UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap_or(-1)) }
+fn at(s: &str) -> SystemTime { UNIX_EPOCH + Duration::from_secs(s.parse().unwrap()) }
+fn chain(e: &dyn std::error::Error) -> String {
+    let mut out = format!("{e}"); let mut s = e.source();
+    while let Some(x) = s { out.push_str(&format!(" <- {x}")); s = x.source(); }
+    out
+}
+fn err(e: &Error) -> String { format!("Err({e:?}) display=\"{}\" kind={:?}", chain(e), e.kind()) }
+
+fn main() {
+    let a: Vec<String> = std::env::args().collect();
+    match a[1].as_str() {
+        "req" => {
+            let r = if a[4] == "random" { OcspRequest::with_random_nonce(&read(&a[2]), &read(&a[3])) }
+                    else { OcspRequest::new(&read(&a[2]), &read(&a[3]), &unhex(&a[4])) };
+            match r {
+                Ok(r) => { std::fs::write(&a[5], r.to_der().unwrap()).unwrap(); println!("Ok nonce={} ({} octets)", hex(r.nonce()), r.nonce().len()); }
+                Err(e) => println!("{}", err(&e)),
+            }
+        }
+        "judge" => {
+            // judge <resp> <cert> <issuer> <at> [nonce-hex] [tolerance-secs]
+            let resp = match OcspResponse::from_der(&read(&a[2])) { Ok(r) => r, Err(e) => { println!("from_der: {}", err(&e)); return; } };
+            println!("from_der: Ok produced_at={} this_update={:?} nonce={:?}", t(resp.produced_at()), resp.this_update().map(t), resp.nonce().map(hex));
+            let (c, i, when) = (read(&a[3]), read(&a[4]), at(&a[5]));
+            if let Some(n) = a.get(6).filter(|n| *n != "skip") {
+                let req = OcspRequest::new(&c, &i, &unhex(n)).unwrap();
+                println!("check_nonce({n}): {}", match resp.check_nonce(&req) { Ok(()) => "Ok".into(), Err(e) => err(&e) });
+            }
+            if let Some(tol) = a.get(7) {
+                println!("check_this_update(at={}, tol={tol}s): {}", a[5], match resp.check_this_update(&c, &i, when, Duration::from_secs(tol.parse().unwrap())) { Ok(()) => "Ok".into(), Err(e) => err(&e) });
+            }
+            println!("status(at={}): {}", a[5], match resp.status(&c, &i, when) {
+                Ok(s) => format!("Ok({s:?}){}", match s { nacre_revocation::OcspStatus::Revoked { date, .. } => format!(" date_unix={}", t(date)), _ => String::new() }),
+                Err(e) => err(&e) });
+        }
+        "url" => println!("{:?}", HttpOcspSource::responder_url(&read(&a[2])).map_err(|e| err(&e))),
+        "fetch" => {
+            // fetch <cert> <issuer> <loopback|public|fallback> [out]
+            let (c, i) = (read(&a[2]), read(&a[3]));
+            let r = match a[4].as_str() {
+                "loopback" => HttpOcspSource::allowing_loopback().revocation(&c, &i),
+                "public" => HttpOcspSource::new().revocation(&c, &i),
+                "fallback" => Fallback::new(HttpOcspSource::allowing_loopback(), HttpCrlSource::allowing_loopback()).revocation(&c, &i),
+                _ => unreachable!(),
+            };
+            match r {
+                Ok(RevocationData::Ocsp(b)) => { println!("Ok(Ocsp, {} bytes)", b.len()); if let Some(o) = a.get(5) { std::fs::write(o, b).unwrap(); } }
+                Ok(RevocationData::Crl(b)) => println!("Ok(Crl, {} bytes)", b.len()),
+                Ok(_) => println!("Ok(other)"),
+                Err(e) => {
+                    let inner = std::error::Error::source(&e).and_then(|s| s.downcast_ref::<Error>());
+                    println!("Err display=\"{}\" kind={:?} inner={}", chain(&e), e.kind(), inner.map(err).unwrap_or_default());
+                }
+            }
+        }
+        _ => unreachable!(),
+    }
+}
+
+===== $T/scratch/hostile/Cargo.toml =====
+[package]
+name = "ocsp-hostile"
+version = "0.0.0"
+edition = "2024"
+publish = false
+[workspace]
+[dependencies]
+nacre-revocation = { path = "$T/copy/crates/nacre-revocation" }
+
+===== $T/scratch/hostile/src/main.rs =====
+use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::time::{Duration, UNIX_EPOCH};
+use nacre_revocation::{OcspRequest, OcspResponse};
+
+/// Runs every public entry point on `bytes`; Some(true) when status() says Ok.
+fn judge(bytes: &[u8], cert: &[u8], issuer: &[u8], at: u64) -> bool {
+    let Ok(r) = OcspResponse::from_der(bytes) else { return false };
+    let _ = (r.produced_at(), r.this_update(), r.nonce());
+    if let Ok(req) = OcspRequest::new(cert, issuer, &[0x4e; 32]) { let _ = r.check_nonce(&req); }
+    let when = UNIX_EPOCH + Duration::from_secs(at);
+    let _ = r.check_this_update(cert, issuer, when, Duration::from_secs(300));
+    r.status(cert, issuer, when).is_ok()
+}
+
+fn main() {
+    let a: Vec<String> = std::env::args().collect();
+    // hostile <resp> <cert> <issuer> <at> <tbs_start> <tbs_end>
+    let orig = std::fs::read(&a[1]).unwrap();
+    let (cert, issuer) = (std::fs::read(&a[2]).unwrap(), std::fs::read(&a[3]).unwrap());
+    let at: u64 = a[4].parse().unwrap();
+    let (ts, te): (usize, usize) = (a[5].parse().unwrap(), a[6].parse().unwrap());
+    std::panic::set_hook(Box::new(|_| {}));
+    let (mut n, mut panics, mut ok_in_tbs, mut ok_outside) = (0usize, 0usize, 0usize, 0usize);
+    let mut run = |m: &[u8], off: Option<usize>| {
+        n += 1;
+        match catch_unwind(AssertUnwindSafe(|| judge(m, &cert, &issuer, at))) {
+            Err(_) => { panics += 1; eprintln!("PANIC at offset {off:?}"); }
+            Ok(true) if m != orig.as_slice() => match off { Some(o) if o >= ts && o < te => { ok_in_tbs += 1; eprintln!("Ok inside tbsResponseData at {o}"); } _ => { ok_outside += 1; eprintln!("OKOUT {off:?}"); } },
+            _ => {}
+        }
+    };
+    assert!(judge(&orig, &cert, &issuer, at), "the original must judge Ok");
+    for len in 0..orig.len() { run(&orig[..len], None); }
+    for i in 0..orig.len() {
+        for v in [0x00u8, 0x7f, 0x80, 0x81, 0x84, 0xff] { if orig[i] != v { let mut m = orig.clone(); m[i] = v; run(&m, Some(i)); } }
+        for bit in 0..8 { let mut m = orig.clone(); m[i] ^= 1 << bit; run(&m, Some(i)); }
+    }
+    println!("{}: {} bytes, tbsResponseData [{ts},{te}), {n} inputs, panics={panics}, status Ok with a byte changed inside tbsResponseData={ok_in_tbs}, status Ok with a byte changed outside it={ok_outside}", a[1].rsplit('/').next().unwrap(), orig.len());
+    // bombs
+    let mut bombs: Vec<(String, Vec<u8>)> = vec![("empty".into(), vec![])];
+    for depth in [100usize, 10_000, 100_000] {
+        let mut d = Vec::new(); for _ in 0..depth { d.extend([0x30, 0x80]); } for _ in 0..depth { d.extend([0, 0]); }
+        bombs.push((format!("{depth} nested indefinite SEQUENCEs"), d));
+        let mut v: Vec<u8> = vec![];
+        for _ in 0..depth.min(10_000) { let l = v.len(); let mut h = vec![0x30, 0x84]; h.extend((l as u32).to_be_bytes()); h.extend(v); v = h; }
+        bombs.push((format!("{} nested definite SEQUENCEs", depth.min(10_000)), v));
+    }
+    bombs.push(("SEQUENCE claiming 2 GiB".into(), vec![0x30, 0x84, 0x80, 0, 0, 0, 0x0a, 0x01, 0x00]));
+    bombs.push(("SEQUENCE with 8-octet length".into(), vec![0x30, 0x88, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]));
+    bombs.push(("64 MiB of 0x30".into(), vec![0x30; 64 << 20]));
+    for (name, b) in bombs {
+        let r = catch_unwind(AssertUnwindSafe(|| OcspResponse::from_der(&b).map(|_| ())));
+        println!("bomb {name}: {}", match r { Err(_) => "PANIC".to_string(), Ok(Ok(())) => "Ok".into(), Ok(Err(e)) => format!("Err({e})") });
+    }
+}
+
+===== $T/srv/server.py =====
+# Walk server: s02 bench emulation (CGI script of conformance/pki/cgi-bin/ocsp + /crl/) or the walk PKI responder.
+import http.server, subprocess, os, sys
+port, kind, base = int(sys.argv[1]), sys.argv[2], sys.argv[3]
+class H(http.server.BaseHTTPRequestHandler):
+    def log_message(self, fmt, *args):
+        with open(os.path.join(base, f"log-{port}.txt"), "a") as f:
+            f.write("%s %s\n" % (self.command, self.path) + ("" if not args else "") )
+    def send(self, code, ctype, body, extra=()):
+        self.send_response(code); self.send_header("Content-Type", ctype)
+        for k, v in extra: self.send_header(k, v)
+        self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
+    def do_GET(self):
+        p = os.path.join(base, "state", os.path.basename(self.path)) if self.path.startswith("/crl/") else None
+        if p and os.path.exists(p): return self.send(200, "application/pkix-crl", open(p, "rb").read())
+        self.send(404, "text/plain", b"not found\n")
+    def do_POST(self):
+        body = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+        with open(os.path.join(base, f"last-request-{port}.der"), "wb") as f: f.write(body)
+        with open(os.path.join(base, f"log-{port}.txt"), "a") as f: f.write(f"POST {self.path} Content-Type={self.headers.get('Content-Type')} {len(body)} bytes\n")
+        if kind == "bench":
+            if self.path != "/cgi-bin/ocsp": return self.send(404, "text/plain", b"not found\n")
+            env = dict(os.environ, REQUEST_METHOD="POST", CONTENT_LENGTH=str(len(body)), NACRE_PKI_STATE=os.path.join(base, "state"))
+            out = subprocess.run(["sh", os.path.join(base, "ocsp.cgi")], input=body, env=env, capture_output=True).stdout
+            head, _, payload = out.partition(b"\r\n\r\n")
+            hdrs = dict(l.split(": ", 1) for l in head.decode().split("\r\n") if ": " in l)
+            code = int(hdrs.get("Status", "200").split()[0])
+            return self.send(code, hdrs.get("Content-Type", "application/octet-stream"), payload)
+        mode = open(os.path.join(base, "mode")).read().strip()
+        if mode == "openssl":
+            r = os.path.join(base, "req.der"); o = os.path.join(base, "resp.der"); open(r, "wb").write(body)
+            pk = os.path.join(base, "..", "pki")
+            subprocess.run(["openssl", "ocsp", "-index", f"{pk}/index.txt", "-CA", f"{pk}/ca.pem", "-rsigner", f"{pk}/ca.pem", "-rkey", f"{pk}/ca.key", "-reqin", r, "-respout", o, "-ndays", "30"], capture_output=True)
+            return self.send(200, "application/ocsp-response", open(o, "rb").read())
+        if mode.startswith("file:"): return self.send(200, "application/ocsp-response", open(mode[5:], "rb").read())
+        if mode == "404": return self.send(404, "text/plain", b"nope\n")
+        if mode == "302": return self.send(302, "text/plain", b"", [("Location", "http://127.0.0.1:18393/elsewhere")])
+        if mode == "big": return self.send(200, "application/ocsp-response", b"\x30\x83\x01\x00\x00" + b"\x00" * 65536)
+        self.send(500, "text/plain", b"bad mode\n")
+http.server.ThreadingHTTPServer(("127.0.0.1", port), H).serve_forever()
+
+===== $T/tbs.py =====
+import sys
+b=open(sys.argv[1],'rb').read()
+def hdr(i):
+    t=b[i]; l=b[i+1]; i2=i+2
+    if l&0x80: n=l&0x7f; l=int.from_bytes(b[i2:i2+n],'big'); i2+=n
+    return i2,l
+i,_=hdr(0)            # OCSPResponse
+i2,l=hdr(i); i=i2+l   # responseStatus
+i,_=hdr(i)            # [0]
+i,_=hdr(i)            # ResponseBytes SEQ
+i2,l=hdr(i); i=i2+l   # OID
+i,_=hdr(i)            # OCTET STRING content
+s=i; i2,l=hdr(i)      # BasicOCSPResponse
+t=i2; i3,l3=hdr(t)
+print(t, i3+l3)
+
+===== $T/mkpki.sh =====
+set -eu
+T=$1; P=$T/pki; mkdir -p $P; cd $P; cp $T/pkifiles/ext.cnf ext.cnf
+key(){ openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out $1.key 2>/dev/null; }
+ca(){ key $1; openssl req -new -x509 -key $1.key -subj "/CN=$2" -days 3650 -extensions v3ca -config <(printf '[req]\ndistinguished_name=dn\n[dn]\n'; cat ext.cnf) -out $1.pem 2>/dev/null; }
+leaf(){ # name cn serial issuer ext [keyfile]
+ k=${6:-$1}; [ -f $k.key ] || key $k
+ openssl req -new -key $k.key -subj "/CN=$2" -out $1.csr 2>/dev/null
+ openssl x509 -req -in $1.csr -CA $4.pem -CAkey $4.key -set_serial $3 -days 3650 -extfile ext.cnf -extensions $5 -out $1.pem 2>/dev/null; }
+ca ca "QA s10 CA"; ca ca2 "QA s10 other CA"; ca fake "QA s10 CA"
+leaf leaf "QA s10 leaf" 0x1001 ca leaf
+leaf revoked "QA s10 revoked" 0x1002 ca leaf
+leaf deleg "QA s10 delegate" 0x2001 ca ocsp
+leaf nosign "QA s10 delegate without OCSPSigning" 0x2002 ca nosign
+leaf fdeleg "QA s10 foreign delegate" 0x3001 ca2 ocsp
+leaf fakedeleg "QA s10 impostor delegate" 0x4001 fake ocsp
+leaf noaia "QA s10 no AIA" 0x1003 ca noaia
+leaf httpsaia "QA s10 https AIA" 0x1004 ca httpsaia
+leaf privaia "QA s10 private AIA" 0x1005 ca privaia
+for f in *.pem; do openssl x509 -in $f -outform DER -out ${f%.pem}.der; done
+E=$(openssl x509 -in leaf.pem -noout -enddate | cut -d= -f2); EZ=$(date -u -d "$E" +%y%m%d%H%M%SZ)
+printf 'V\t%s\t\t1001\tunknown\t/CN=QA s10 leaf\nR\t%s\t261015120000Z,keyCompromise\t1002\tunknown\t/CN=QA s10 revoked\n' $EZ $EZ > index.txt
+cat index.txt; ls
+
+===== $T/c1.sh =====
+set -u
+T=$1; Q=$T/scratch/qa/target/release/ocsp-qa; S=$T/s; mkdir -p $S; cd $T/pki
+N=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
+NOW=$(date -u +%s)
+echo "## c1 — OcspRequest built, BasicOCSPResponse read and its signature verified (CA and delegated responder)"
+echo "cwd: \$T/pki (walk PKI made with OpenSSL 3.6.5: P-256 CA 'QA s10 CA', leaf serial 0x1001 good, revoked serial 0x1002 keyCompromise at 2026-10-15T12:00:00Z, delegate 0x2001 EKU OCSPSigning issued by the CA; keys only in the temp dir)"
+echo "tool: ocsp-qa = scratch crate on the copied nacre-revocation (feature http); source in c0-scratch-source.txt"
+echo "N = $N; 'at' values are Unix seconds; now=$NOW"
+echo
+echo '$ ocsp-qa req revoked.der ca.der N req-fixed.der'; $Q req revoked.der ca.der $N $S/req-fixed.der; echo "exit=$?"
+echo '$ openssl ocsp -reqin req-fixed.der -req_text'; openssl ocsp -reqin $S/req-fixed.der -req_text 2>&1; echo "exit=$?"
+echo '$ openssl asn1parse -inform DER -in req-fixed.der -i'; openssl asn1parse -inform DER -in $S/req-fixed.der -i; echo
+echo '# reference: OpenSSL request for the same pair (openssl ocsp -issuer ca.pem -cert revoked.pem -no_nonce), its CertID'
+openssl ocsp -issuer ca.pem -cert revoked.pem -no_nonce -reqout $S/req-openssl.der >/dev/null 2>&1
+openssl ocsp -reqin $S/req-openssl.der -req_text 2>&1 | sed -n '/Certificate ID/,/Serial/p'
+echo
+echo '$ ocsp-qa req leaf.der ca.der random req-r1.der ; ocsp-qa req leaf.der ca.der random req-r2.der'; $Q req leaf.der ca.der random $S/req-r1.der; $Q req leaf.der ca.der random $S/req-r2.der
+echo
+for who in ca deleg; do
+ for c in revoked leaf; do
+  $Q req $c.der ca.der $N $S/req-$c.der >/dev/null
+  echo "\$ openssl ocsp -index index.txt -CA ca.pem -rsigner $who.pem -rkey $who.key -reqin req-$c.der -respout resp-$who-$c.der -ndays 30"
+  openssl ocsp -index index.txt -CA ca.pem -rsigner $who.pem -rkey $who.key -reqin $S/req-$c.der -respout $S/resp-$who-$c.der -ndays 30 >/dev/null 2>&1; echo "exit=$?"
+  openssl ocsp -respin $S/resp-$who-$c.der -resp_text -noverify 2>/dev/null | grep -E "Responder Id|Cert Status|Revocation Time|Revocation Reason|Nonce" -A1 | grep -v '^--'
+  echo "\$ ocsp-qa judge resp-$who-$c.der $c.der ca.der at=now nonce=N tolerance=300"
+  $Q judge $S/resp-$who-$c.der $c.der ca.der $NOW $N 300; echo "exit=$?"; echo
+ done
+done
+echo '# ResponderID byKey (openssl -resp_key_id), CA-signed, revoked'
+openssl ocsp -index index.txt -CA ca.pem -rsigner ca.pem -rkey ca.key -resp_key_id -reqin $S/req-revoked.der -respout $S/resp-bykey.der -ndays 30 >/dev/null 2>&1
+openssl ocsp -respin $S/resp-bykey.der -resp_text -noverify 2>/dev/null | grep "Responder Id"
+$Q judge $S/resp-bykey.der revoked.der ca.der $NOW $N; echo "exit=$?"; echo
+echo '# ResponderID byKey, delegate-signed, good'
+openssl ocsp -index index.txt -CA ca.pem -rsigner deleg.pem -rkey deleg.key -resp_key_id -reqin $S/req-leaf.der -respout $S/resp-bykey-deleg.der -ndays 30 >/dev/null 2>&1
+openssl ocsp -respin $S/resp-bykey-deleg.der -resp_text -noverify 2>/dev/null | grep "Responder Id"
+$Q judge $S/resp-bykey-deleg.der leaf.der ca.der $NOW $N; echo "exit=$?"; echo
+echo '# SHA-256 CertID (openssl ocsp -sha256 -issuer ca.pem -cert revoked.pem -no_nonce request), CA-signed, revoked'
+openssl ocsp -sha256 -issuer ca.pem -cert revoked.pem -no_nonce -reqout $S/req-sha256.der >/dev/null 2>&1
+openssl ocsp -index index.txt -CA ca.pem -rsigner ca.pem -rkey ca.key -reqin $S/req-sha256.der -respout $S/resp-sha256.der -ndays 30 >/dev/null 2>&1
+openssl ocsp -respin $S/resp-sha256.der -resp_text -noverify 2>/dev/null | grep -E "Hash Algorithm|Cert Status"
+$Q judge $S/resp-sha256.der revoked.der ca.der $NOW; echo "exit=$?"; echo
+echo '# OpenSSL verifies the responses nacre accepted (openssl ocsp -respin ... -CAfile ca.pem -issuer ca.pem)'
+for r in resp-ca-revoked resp-deleg-leaf resp-bykey-deleg resp-sha256; do printf '%s: ' $r; openssl ocsp -respin $S/$r.der -CAfile ca.pem -issuer ca.pem 2>&1 | head -1; done
+echo
+echo '# committed OpenSSL fixtures (tests/corpus/ocsp-openssl/), judged at their own thisUpdate'
+F=$T/copy/crates/nacre-revocation/tests/corpus/ocsp-openssl
+for r in good:leaf revoked:revoked-leaf delegated-good:leaf; do resp=${r%%:*}; cert=${r##*:}
+ TU=$($Q judge $F/$resp.der $F/$cert.der $F/ca.der 0 | sed -n 's/.*this_update=Some("\([0-9]*\)").*/\1/p')
+ echo "\$ ocsp-qa judge ocsp-openssl/$resp.der $cert.der ca.der at=$TU"; $Q judge $F/$resp.der $F/$cert.der $F/ca.der $TU; echo "exit=$?"
+ openssl ocsp -respin $F/$resp.der -resp_text -noverify 2>/dev/null | grep -E "Cert Status|Revocation Time|Revocation Reason"
+done
+
+===== $T/c1e.sh =====
+set -u
+T=$1; Q=$T/scratch/qa/target/release/ocsp-qa; S=$T/s; cd $T/pki
+N=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
+NOW=$(stat -c %Y $S/resp-ca-revoked.der)
+echo "## c1 error — invalid inputs to OcspRequest and OcspResponse"
+echo "cwd: \$T/pki (walk PKI of c1.txt; responses made in c1.txt); at=$NOW (the responses' thisUpdate)"
+echo
+echo '# requests'
+for args in "- ca.der $N" "revoked.der - $N" "revoked.pem ca.der $N" "revoked.der ca.pem $N" "ca.der revoked.der $N" "revoked.der ca.der ''" "revoked.der ca.der ab" "revoked.der ca.der $(printf 'ab%.0s' $(seq 1 32))" "revoked.der ca.der $(printf 'ab%.0s' $(seq 1 33))" "revoked.der ca.der $(printf 'ab%.0s' $(seq 1 200))" "- ca.der ''"; do
+ eval set -- $args; echo "\$ ocsp-qa req $1 $2 ${3:0:16}$( [ ${#3} -gt 16 ] && echo "…(${#3} hex)") out.der"; $Q req "$1" "$2" "$3" $S/req-err.der; echo "exit=$?"
+ [ -s $S/req-err.der ] && { openssl ocsp -reqin $S/req-err.der -req_text 2>&1 | grep -E "Serial|Nonce" -A1 | grep -v -- -- | head -4; rm -f $S/req-err.der; }
+done
+echo
+echo '# responses: not an OCSP response'
+printf '' > $S/empty.der; head -c 400 /dev/urandom > $S/random.der; cp $S/resp-ca-revoked.der $S/trailing.der; printf '\x00' >> $S/trailing.der
+openssl ocsp -respin $S/resp-ca-revoked.der -resp_text -noverify 2>/dev/null >/dev/null; base64 -w64 $S/resp-ca-revoked.der | (echo '-----BEGIN OCSP RESPONSE-----'; cat; echo '-----END OCSP RESPONSE-----') > $S/resp.pem
+for f in empty.der random.der trailing.der resp.pem req-fixed.der; do echo "\$ ocsp-qa judge $f revoked.der ca.der"; $Q judge $S/$f revoked.der ca.der $NOW; echo "exit=$?"; done
+echo "\$ ocsp-qa judge (ca.der as response) revoked.der ca.der"; $Q judge ca.der revoked.der ca.der $NOW; echo "exit=$?"
+echo
+echo '# responses: good response, wrong arguments'
+for args in "resp-ca-revoked.der leaf.der ca.der" "resp-ca-revoked.der revoked.der ca2.der" "resp-ca-revoked.der revoked.der fake.der" "resp-ca-revoked.der ca.der revoked.der" "resp-ca-revoked.der - ca.der" "resp-ca-revoked.der revoked.der -" "resp-ca-revoked.der $S/resp-ca-leaf.der ca.der"; do
+ set -- $args; f=$1; [ -e $S/$f ] && f=$S/$f; echo "\$ ocsp-qa judge $(basename $1) $(basename $2) $3"; $Q judge $f $2 $3 $NOW; echo "exit=$?"
+done
+echo
+echo '# responses: altered after signing'
+python3 -I - "$S/resp-ca-revoked.der" "$S/flip-tbs.der" "$S/flip-sig.der" "$S/flip-certs.der" <<'PY'
+import sys
+b=bytearray(open(sys.argv[1],'rb').read())
+i=b.find(bytes.fromhex('180f'))  # first GeneralizedTime (producedAt)
+t=bytearray(b); t[i+5]^=1; open(sys.argv[2],'wb').write(t)   # one digit of producedAt
+a=b.find(bytes.fromhex('300a06082a8648ce3d040302'), i)  # the response's signatureAlgorithm, first after producedAt
+j=a+12; assert b[j]==3 and b[j+2]==0; L=b[j+1]  # the response's own signature BIT STRING right after it
+s=bytearray(b); s[j+2+L-1]^=1; open(sys.argv[3],'wb').write(s)   # last byte of that signature
+print(f"response signature BIT STRING at offset {j}, length {L}; byte {j+2+L-1} flipped in flip-sig.der")
+e=bytearray(b); e[-1]^=1; open(sys.argv[4],'wb').write(e)   # last byte of the file: inside the CA certificate openssl puts in certs
+PY
+for f in flip-tbs flip-sig flip-certs; do echo "\$ ocsp-qa judge $f.der revoked.der ca.der"; $Q judge $S/$f.der revoked.der ca.der $NOW; echo "exit=$?"; done
+echo
+echo '# control date after nextUpdate (+30 days +1 s, +1 year)'
+NU=$((NOW + 30*86400)); for d in $NU $((NU+1)) $((NOW+365*86400)); do echo "\$ ocsp-qa judge resp-ca-revoked.der revoked.der ca.der at=$d"; $Q judge $S/resp-ca-revoked.der revoked.der ca.der $d; echo "exit=$?"; done
+echo
+echo '# response without nextUpdate (openssl ocsp without -ndays)'
+openssl ocsp -index index.txt -CA ca.pem -rsigner ca.pem -rkey ca.key -reqin $S/req-revoked.der -respout $S/resp-nonext.der >/dev/null 2>&1
+openssl ocsp -respin $S/resp-nonext.der -resp_text -noverify 2>/dev/null | grep -E "Next Update|This Update"
+$Q judge $S/resp-nonext.der revoked.der ca.der $((NOW+3650*86400)); echo "exit=$?"
+
+===== $T/c2.sh =====
+set -u
+T=$1; Q=$T/scratch/qa/target/release/ocsp-qa; B=$T/bench; S=$T/s; mkdir -p $B/der; cd $B
+for c in intermediate revoked signer root; do openssl x509 -in state/$c.cert.pem -outform DER -out der/$c.der; done
+echo "## c2 — against the s02 responder: revoked -> revoked with its date, signer -> good"
+echo "Responder: the bench's own CGI script conformance/pki/cgi-bin/ocsp (copied unchanged), run on each POST /cgi-bin/ocsp by a walk server on 127.0.0.1:18081, the URL every s02 leaf names; state = a copy of conformance/pki/out/ (the s02 PKI generated at bench start on 2026-10-23); /crl/intermediate.crl served from the same copy"
+echo "cwd: \$T/bench; certificates converted to DER from the s02 PEMs"
+echo
+openssl x509 -in state/revoked.cert.pem -noout -subject -serial -ext authorityInfoAccess
+openssl x509 -in state/signer.cert.pem -noout -subject -serial
+echo "s02 index:"; cat state/intermediate.index
+echo
+for c in revoked signer; do
+ echo "\$ ocsp-qa url der/$c.der"; $Q url der/$c.der
+ echo "\$ ocsp-qa fetch der/$c.der der/intermediate.der loopback   # HttpOcspSource::allowing_loopback() through &dyn RevocationSource"
+ $Q fetch der/$c.der der/intermediate.der loopback $S/bench-$c.der; echo "exit=$?"
+ echo "request the source sent (as the responder received it):"; openssl ocsp -reqin $B/last-request-18081.der -req_text 2>&1 | grep -E "Hash Algorithm|Serial|Nonce" -A1 | grep -v -- '^--'
+ openssl ocsp -respin $S/bench-$c.der -resp_text -noverify 2>/dev/null | grep -E "Responder Id|Cert Status|Revocation Time|Revocation Reason|This Update|Next Update"
+ TU=$($Q judge $S/bench-$c.der der/$c.der der/intermediate.der 0 | sed -n 's/.*this_update=Some("\([0-9]*\)").*/\1/p')
+ echo "\$ ocsp-qa judge bench-$c.der $c.der intermediate.der at=thisUpdate($TU) skip tolerance=300"; $Q judge $S/bench-$c.der der/$c.der der/intermediate.der $TU skip 300; echo "exit=$?"
+ echo
+done
+echo "# the revocation date from the s02 CRL, for comparison: openssl crl -in state/intermediate.crl -text"
+openssl crl -in state/intermediate.crl -noout -text | grep -A3 "Serial Number: 2002"
+echo "  index date 261023091524Z = $(date -u -d '2026-10-23 09:15:24' +%s) (Unix)"
+echo
+echo "# the story's own bench test, in the copy, against this responder"
+echo '$ cargo test -p nacre-revocation --test bench -- --ignored   (cwd: $T/copy)'
+cd $T/copy && cargo test -q -p nacre-revocation --test bench -- --ignored 2>&1 | grep -vE "^\s*(Compiling|Finished|Running)"; echo "exit=${PIPESTATUS[0]}"
+echo
+echo "# Fallback<HttpOcspSource, HttpCrlSource>, both allowing loopback, on the s02 revoked certificate"
+$Q fetch $B/der/revoked.der $B/der/intermediate.der fallback; echo "exit=$?"
+echo
+echo "# walk responder log (127.0.0.1:18081)"; cat $B/log-18081.txt
+
+===== $T/c2e.sh =====
+set -u
+T=$1; Q=$T/scratch/qa/target/release/ocsp-qa; B=$T/bench; P=$T/pki; M=$T/srv/mode; S=$T/s
+F=$T/copy/crates/nacre-revocation/tests/corpus/ocsp-attacks
+echo "## c2 error — HttpOcspSource on bad addresses and bad answers"
+echo "Servers: 127.0.0.1:18081 (s02 emulation of c2.txt) and 127.0.0.1:18392 (walk responder for the walk PKI, whose answer is set per case by a mode file: openssl = 'openssl ocsp -index' signed by the CA; file:<path> = that fixed body; 404; 302 to 127.0.0.1:18393; big = 65 541-byte body)"
+echo
+echo "# default source (HttpOcspSource::new) on the s02 leaves and the walk leaf: loopback refused"
+$Q fetch $B/der/revoked.der $B/der/intermediate.der public; $Q fetch $P/leaf.der $P/ca.der public
+echo "# a responder at 10.1.2.3 (privaia.der), default and loopback-allowing sources"
+$Q url $P/privaia.der; $Q fetch $P/privaia.der $P/ca.der public; $Q fetch $P/privaia.der $P/ca.der loopback
+echo "# no authorityInfoAccess (noaia.der), https:// only (httpsaia.der), not a certificate (empty, a response)"
+for c in $P/noaia.der $P/httpsaia.der; do $Q url $c; $Q fetch $c $P/ca.der loopback; done
+printf '' > $S/empty; $Q url $S/empty; $Q fetch $S/empty $P/ca.der loopback; $Q fetch $S/bench-signer.der $P/ca.der loopback
+echo "# not the issuer as issuer (walk leaf with ca2.der; s02 signer with the root)"
+echo openssl > $M; $Q fetch $P/leaf.der $P/ca2.der loopback; $Q fetch $B/der/signer.der $B/der/root.der loopback
+echo
+echo "# walk responder answers"
+for mode in "file:$S/resp-ca-leaf.der|a valid CA-signed response, but carrying the fixed nonce N of c1 (replay)" "file:$F/try-later.der|responseStatus tryLater" "file:$S/random.der|400 random bytes" "file:$S/empty.der|empty body, 200" "404|404" "302|302 to another port" "big|body over 64 KiB" "file:$P/leaf.der|a certificate"; do
+ echo "${mode%%|*}" > $M; echo "-- ${mode##*|}"; echo '$ ocsp-qa fetch leaf.der ca.der loopback'; $Q fetch $P/leaf.der $P/ca.der loopback; echo "exit=$?"
+done
+echo "-- server down (nothing on 127.0.0.1:18392 for this case: walk server stopped and restarted around it)"
+kill -TERM -- -$(cat $T/srv/walk.pid); sleep 0.5; $Q fetch $P/leaf.der $P/ca.der loopback; echo "exit=$?"
+cd $T && setsid python3 -I $T/srv/server.py 18392 walk $T/srv > $T/srv/walk.out 2>&1 < /dev/null & echo $! > $T/srv/walk.pid; sleep 0.7
+echo openssl > $M; echo "-- back up, nominal: "; $Q fetch $P/leaf.der $P/ca.der loopback $S/walk-live-leaf.der; $Q fetch $P/revoked.der $P/ca.der loopback $S/walk-live-revoked.der
+NOW=$(date -u +%s); $Q judge $S/walk-live-revoked.der $P/revoked.der $P/ca.der $NOW skip 300
+echo
+echo "# Fallback<OCSP, CRL>: first fails (10.1.2.3), second fails too (no CRL distribution point) -> second's error"
+$Q fetch $P/privaia.der $P/ca.der fallback
+echo
+echo "# walk responder log (127.0.0.1:18392)"; cat $T/srv/log-18392.txt; echo "(nothing requested 127.0.0.1:18393: no server was there, and no log line for /elsewhere)"
+
+===== $T/c3.sh =====
+set -u
+T=$1; Q=$T/scratch/qa/target/release/ocsp-qa; P=$T/pki; S=$T/s; cd $P
+N=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
+O=ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100
+echo "## c3 — unauthorized responder, other nonce, thisUpdate out of tolerance: each rejected with its own error"
+echo "cwd: \$T/pki (walk PKI of c1.txt). Every walk response below is a real 'openssl ocsp -index' answer, correctly signed by the key named, about the REVOKED leaf (serial 0x1002), so a skipped rule would answer Revoked."
+echo
+r(){ # name rsigner rkey extra
+ openssl ocsp -index index.txt -CA ca.pem -rsigner $2 -rkey $3 $4 -reqin $S/req-revoked.der -respout $S/u-$1.der -ndays 30 >/dev/null 2>&1; }
+r foreign-delegate fdeleg.pem fdeleg.key ""
+r no-eku-delegate nosign.pem nosign.key ""
+r impostor-delegate fakedeleg.pem fakedeleg.key ""
+r other-ca ca2.pem ca2.key ""
+r other-ca-bykey ca2.pem ca2.key -resp_key_id
+r same-name-ca fake.pem fake.key ""
+r same-name-ca-bykey fake.pem fake.key -resp_key_id
+r leaf-as-responder leaf.pem leaf.key ""
+r delegate-no-certs deleg.pem deleg.key -resp_no_certs
+# a delegate whose validity does not cover producedAt (openssl x509 -not_before/-not_after)
+openssl req -new -key deleg.key -subj "/CN=QA s10 expired delegate" -out $S/xd.csr 2>/dev/null
+openssl x509 -req -in $S/xd.csr -CA ca.pem -CAkey ca.key -set_serial 8197 -not_before 20250101000000Z -not_after 20250201000000Z -extfile ext.cnf -extensions ocsp -out $S/xdeleg.pem 2>/dev/null
+openssl ocsp -index index.txt -CA ca.pem -rsigner $S/xdeleg.pem -rkey deleg.key -reqin $S/req-revoked.der -respout $S/u-expired-delegate.der -ndays 30 >/dev/null 2>&1
+AT=$(stat -c %Y $S/u-foreign-delegate.der)
+for c in foreign-delegate:"delegate with EKU OCSPSigning, issued by the other CA" no-eku-delegate:"delegate issued by the CA, EKU clientAuth only" impostor-delegate:"delegate with OCSPSigning issued by a CA of the same name 'QA s10 CA' but another key" expired-delegate:"delegate issued by the CA with OCSPSigning, valid 2025-01-01..2025-02-01 only" other-ca:"signed by the other CA itself (byName)" other-ca-bykey:"signed by the other CA itself (byKey)" leaf-as-responder:"signed by the good leaf (issued by the CA, no OCSPSigning)" delegate-no-certs:"signed by the genuine delegate, but the response carries no certs (-resp_no_certs)" same-name-ca:"signed by the same-name CA with another key (byName equals the issuer's name)" same-name-ca-bykey:"signed by the same-name CA (byKey)"; do
+ n=${c%%:*}; echo "-- $n: ${c#*:}"
+ openssl ocsp -respin $S/u-$n.der -resp_text -noverify 2>/dev/null | grep -E "Responder Id|Cert Status"
+ echo "\$ ocsp-qa judge u-$n.der revoked.der ca.der at=$AT nonce=N"; $Q judge $S/u-$n.der revoked.der ca.der $AT $N; echo "exit=$?"
+ printf 'openssl ocsp -respin -CAfile ca.pem -issuer ca.pem: '; openssl ocsp -respin $S/u-$n.der -CAfile ca.pem -issuer ca.pem 2>&1 | grep -E "verify|error" | head -1
+done
+echo
+echo "# nonce"
+echo '$ ocsp-qa judge resp-ca-revoked.der revoked.der ca.der nonce=O (request made with another nonce)'; $Q judge $S/resp-ca-revoked.der revoked.der ca.der $AT $O; echo "exit=$?"
+echo '$ ocsp-qa judge resp-ca-revoked.der revoked.der ca.der nonce=N minus its last octet (prefix of the response nonce)'; $Q judge $S/resp-ca-revoked.der revoked.der ca.der $AT ${N:0:62}; echo "exit=$?"
+echo '$ ocsp-qa judge resp-sha256.der (response with no nonce) revoked.der ca.der nonce=O'; $Q judge $S/resp-sha256.der revoked.der ca.der $AT $O; echo "exit=$?"
+echo
+echo "# thisUpdate tolerance (response resp-ca-revoked.der, thisUpdate=$(stat -c %Y $S/resp-ca-revoked.der) per c1; tolerance 300 s)"
+TU=$($Q judge $S/resp-ca-revoked.der revoked.der ca.der 0 | sed -n 's/.*this_update=Some("\([0-9]*\)").*/\1/p')
+for d in $((TU-301)) $((TU-300)) $TU $((TU+300)) $((TU+301)) $((TU+86400)); do echo "\$ check_this_update at=$d (thisUpdate$( [ $d -ge $TU ] && echo + || echo - )$(( d>TU ? d-TU : TU-d ))s)"; $Q judge $S/resp-ca-revoked.der revoked.der ca.der $d skip 300 | grep check_this; done
+echo '$ check_this_update with tolerance 0 at thisUpdate'; $Q judge $S/resp-ca-revoked.der revoked.der ca.der $TU skip 0 | grep check_this
+echo '$ check_this_update for a certificate the response does not cover (leaf.der)'; $Q judge $S/resp-ca-revoked.der leaf.der ca.der $TU skip 300 | grep check_this
+echo
+echo "# committed attack corpus (tests/corpus/ocsp-attacks/), judged at 2027-01-01 (1798761600) against leaf.der/ca.der of the corpus, nonce 4e x 32"
+F=$T/copy/crates/nacre-revocation/tests/corpus/ocsp-attacks; NN=$(printf '4e%.0s' $(seq 1 32))
+for f in base foreign-delegate-response plain-delegate-response expired-delegate-response bad-signature stale critical-single-extension other-serial unknown try-later; do echo "\$ ocsp-qa judge ocsp-attacks/$f.der leaf.der ca.der at=1798761600 nonce=4e*32"; $Q judge $F/$f.der $F/leaf.der $F/ca.der 1798761600 $NN; done
+echo '$ base.der against a request of nonce O'; $Q judge $F/base.der $F/leaf.der $F/ca.der 1798761600 $O | grep check_nonce
+echo '$ base.der check_this_update at thisUpdate + 1 day, tolerance 300 s'; $Q judge $F/base.der $F/leaf.der $F/ca.der $((1790812800+86400)) skip 300 | grep check_this
+echo
+echo "# the corpus is regenerated identically by its example (cwd: \$T/copy, output to a scratch dir)"
+mkdir -p $T/regen && cd $T/copy && cargo run -q -p nacre-revocation --example forge_ocsp_attacks -- $T/regen 2>&1 | tail -3
+for f in $F/*.der; do cmp -s $f $T/regen/$(basename $f) && echo "same  $(basename $f)" || echo "DIFF  $(basename $f)"; done
+
+===== $T/c3e.sh =====
+set -u
+T=$1; Q=$T/scratch/qa/target/release/ocsp-qa; P=$T/pki; S=$T/s; cd $P
+N=000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
+echo "## c3 error — the three checks given odd arguments"
+echo "cwd: \$T/pki; response resp-ca-revoked.der of c1.txt (nonce N, about revoked.der)"
+TU=$($Q judge $S/resp-ca-revoked.der revoked.der ca.der 0 | sed -n 's/.*this_update=Some("\([0-9]*\)").*/\1/p')
+echo '$ check_this_update at=0 (epoch), tolerance 300 s'; $Q judge $S/resp-ca-revoked.der revoked.der ca.der 0 skip 300 | grep -E "check_this"
+echo '$ check_this_update at=0, tolerance u64::MAX s'; $Q judge $S/resp-ca-revoked.der revoked.der ca.der 0 skip 18446744073709551615 | grep -E "check_this"
+echo '$ check_this_update at=thisUpdate+10y, tolerance 0'; $Q judge $S/resp-ca-revoked.der revoked.der ca.der $((TU+315360000)) skip 0 | grep -E "check_this"
+echo '$ check_this_update with the issuer swapped for the other CA'; $Q judge $S/resp-ca-revoked.der revoked.der ca2.der $TU skip 300 | grep check_this
+echo '$ check_this_update with an empty certificate'; $Q judge $S/resp-ca-revoked.der - ca.der $TU skip 300 | grep check_this
+echo '$ check_nonce against a request with the same nonce but about another certificate (leaf.der)'; $Q judge $S/resp-ca-revoked.der leaf.der ca.der $TU $N | grep -E "check_nonce|status"
+echo '$ status of a fetched response about the leaf when the source was given the wrong issuer (ca2): the response (from c2-http-source-error.txt) judged'
+echo openssl > $T/srv/mode; $Q fetch leaf.der ca2.der loopback $S/wrong-issuer.der >/dev/null; openssl ocsp -respin $S/wrong-issuer.der -resp_text -noverify 2>/dev/null | grep -E "Cert Status"; $Q judge $S/wrong-issuer.der leaf.der ca2.der $(date +%s) | grep status; $Q judge $S/wrong-issuer.der leaf.der ca.der $(date +%s) | grep status
+
+===== $T/c4.sh =====
+T=$1; cd $T; F=$T/copy/crates/nacre-revocation/tests/corpus; H=$T/scratch/hostile/target
+echo "## c4 — a hostile response gives an error, never a panic"
+echo "tool: ocsp-hostile (scratch crate, source in c0-scratch-source.txt): every truncation, every byte set to 00/7f/80/81/84/ff and every single bit flipped, each through from_der, produced_at, this_update, nonce, check_nonce, check_this_update and status; panics caught with catch_unwind and counted; a mutated input that status() still judges Ok is counted by where the change sits (inside or outside the signed tbsResponseData); then DER bombs through from_der"
+for build in release debug; do echo; echo "### $build build$( [ $build = debug ] && echo ' (overflow checks on)')"
+ while read r c i at; do
+  R=$(python3 -I $T/tbs.py $r); echo "\$ ocsp-hostile $(basename $r) $(basename $c) $(basename $i) at=$at tbs=[$R)"
+  $H/$build/ocsp-hostile $r $c $i $at $R 2>&1 | grep -v "^bomb"; echo "exit=${PIPESTATUS[0]}"
+ done <<EOF
+$T/s/resp-ca-revoked.der $T/pki/revoked.der $T/pki/ca.der $(stat -c %Y $T/s/resp-ca-revoked.der)
+$T/s/resp-deleg-leaf.der $T/pki/leaf.der $T/pki/ca.der $(stat -c %Y $T/s/resp-ca-revoked.der)
+$T/s/bench-revoked.der $T/bench/der/revoked.der $T/bench/der/intermediate.der $(stat -c %Y $T/s/bench-revoked.der)
+$F/ocsp-attacks/base.der $F/ocsp-attacks/leaf.der $F/ocsp-attacks/ca.der 1798761600
+$F/ocsp-openssl/delegated-good.der $F/ocsp-openssl/leaf.der $F/ocsp-openssl/ca.der 1792746526
+EOF
+ echo "\$ ocsp-hostile (bombs)"; $H/$build/ocsp-hostile $F/ocsp-attacks/base.der $F/ocsp-attacks/leaf.der $F/ocsp-attacks/ca.der 1798761600 0 0 2>/dev/null | grep "^bomb"
+done
+
+===== $T/okout.sh =====
+T=$1; H=$T/scratch/hostile/target/release/ocsp-hostile
+echo "-- offsets of mutations status() still judged Ok, first and last:"
+$H $T/s/resp-ca-revoked.der $T/pki/revoked.der $T/pki/ca.der $(stat -c %Y $T/s/resp-ca-revoked.der) 34 256 2>&1 | grep OKOUT | sed 's/OKOUT Some(\(.*\))/\1/' | sort -n | uniq | sed -n '1p;$p' | paste -sd' ' | sed 's/^/resp-ca-revoked.der: /'
+$H $T/s/bench-revoked.der $T/bench/der/revoked.der $T/bench/der/intermediate.der $(stat -c %Y $T/s/bench-revoked.der) 34 321 2>&1 | grep OKOUT | sed 's/OKOUT Some(\(.*\))/\1/' | sort -n | uniq | sed -n '1p;$p' | paste -sd' ' | sed 's/^/bench-revoked.der: /'
+echo "-- where the certs field [0] starts (openssl asn1parse of the BasicOCSPResponse, offset 30 + 4 header bytes into the file):"
+openssl asn1parse -inform DER -in $T/s/resp-ca-revoked.der -strparse 26 | grep -m1 "d=1.*cont \[ 0 \]" | sed 's/^/resp-ca-revoked.der (+30): /'
+openssl asn1parse -inform DER -in $T/s/bench-revoked.der -strparse 26 | grep -m1 "d=1.*cont \[ 0 \]" | sed 's/^/bench-revoked.der (+30): /'
+
+===== $T/fuzz.sh =====
+T=$1; cd $T/copy/crates/nacre-revocation
+echo "## c4 — the fuzz target exists and runs"
+echo "cwd: \$T/copy/crates/nacre-revocation (copy of the tracked files)"
+echo '$ cat fuzz/fuzz_targets/ocsp.rs'; cat fuzz/fuzz_targets/ocsp.rs
+echo '$ cargo +nightly fuzz list'; cargo +nightly fuzz list; echo "exit=$?"
+mkdir -p $T/fuzzcorpus; cp tests/corpus/ocsp-openssl/{good,revoked,delegated-good}.der tests/corpus/ocsp-attacks/*response*.der tests/corpus/ocsp-attacks/{base,bad-signature,stale,critical-single-extension,other-serial,unknown,try-later}.der $T/s/resp-*.der $T/s/bench-*.der $T/s/u-*.der $T/fuzzcorpus/ 2>/dev/null
+echo "seed corpus: $(ls $T/fuzzcorpus | wc -l) files (committed OCSP fixtures and the walk's responses)"
+echo '$ cargo +nightly fuzz run ocsp $T/fuzzcorpus -- -max_total_time=60   (progress lines condensed)'
+cargo +nightly fuzz run ocsp $T/fuzzcorpus -- -max_total_time=60 > $T/fuzz.log 2>&1; echo "exit=$?"
+grep -E "INFO: Seed|INITED|DONE|Done [0-9]+ runs|crash|panicked|SUMMARY|ERROR" $T/fuzz.log | head -20; echo "[...]"; grep -E "^#[0-9]+" $T/fuzz.log | tail -2
+ls fuzz/artifacts 2>/dev/null && echo "artifacts present" || echo "no artifacts directory: no crash"
+
+===== $T/doc.sh =====
+W=$1; T=$2; cd $W
+echo "## c4 — the known OCSP attacks are in docs/security/attacks/revocation.md, each with an existing case and test"
+echo "cwd: the story worktree, read only"
+echo '$ for each test named in the OCSP tables: is it a #[test] fn in tests/ocsp_attacks.rs or tests/http.rs, and does its corpus case exist'
+for t in $(sed -n '/^## OCSP/,/^## Hors/p' docs/security/attacks/revocation.md | grep -oE '`[a-z_]+_(unauthorized|rejected|refused_by_default)`' | tr -d '`'); do
+ f=$(grep -lE "fn $t\(" crates/nacre-revocation/tests/ocsp_attacks.rs crates/nacre-revocation/tests/http.rs | xargs -n1 basename 2>/dev/null); echo "$t -> ${f:-MISSING}"
+done
+for c in $(sed -n '/^## OCSP/,/^## Hors/p' docs/security/attacks/revocation.md | grep -oE '`[a-z-]+\.der`' | tr -d '`' | sort -u); do [ -f crates/nacre-revocation/tests/corpus/ocsp-attacks/$c ] && echo "case $c present" || echo "case $c MISSING"; done
+echo '$ cargo test -p nacre-revocation --test ocsp_attacks --test ocsp_status --test hostile --test http   (cwd: $T/copy)'
+cd $T/copy && cargo test -q -p nacre-revocation --test ocsp_attacks --test ocsp_status --test hostile --test http 2>&1 | grep -E "^test result|running|FAILED|panicked"; echo "exit=${PIPESTATUS[0]}"
+
+===== $T/replay.sh =====
+T=$1; Q=$T/scratch/qa/target/release/ocsp-qa; P=$T/pki; S=$T/s; cd $P
+echo "## Replay of the finding (second run of its steps, after the walk)"
+echo
+echo "### Finding 1 — through RevocationSource the kind is Unavailable"
+echo "file:$S/resp-ca-leaf.der" > $T/srv/mode; echo '$ ocsp-qa fetch leaf.der ca.der loopback   (walk responder at 127.0.0.1:18392 replaying the nonce-N response of c1)'; $Q fetch leaf.der ca.der loopback
+echo '$ ocsp-qa fetch privaia.der ca.der public   (HttpOcspSource::new(), responder http://10.1.2.3/)'; $Q fetch privaia.der ca.der public
+echo openssl > $T/srv/mode
+echo '$ grep -n "Revocation(_)" crates/nacre-core/src/error.rs   (copy)'; grep -n 'Revocation(_)' $T/copy/crates/nacre-core/src/error.rs
+
+===== walk PKI ext.cnf =====
+[v3ca]
+basicConstraints=critical,CA:TRUE
+keyUsage=critical,keyCertSign,cRLSign
+subjectKeyIdentifier=hash
+[leaf]
+basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature
+authorityInfoAccess=OCSP;URI:http://127.0.0.1:18392/
+[noaia]
+basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature
+[httpsaia]
+basicConstraints=CA:FALSE
+authorityInfoAccess=OCSP;URI:https://127.0.0.1:18392/
+[privaia]
+basicConstraints=CA:FALSE
+authorityInfoAccess=OCSP;URI:http://10.1.2.3/
+[ocsp]
+basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature
+extendedKeyUsage=OCSPSigning
+[nosign]
+basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature
+extendedKeyUsage=clientAuth
+===== walk PKI index.txt =====
+V	361020094124Z		1001	unknown	/CN=QA s10 leaf
+R	361020094124Z	261015120000Z,keyCompromise	1002	unknown	/CN=QA s10 revoked

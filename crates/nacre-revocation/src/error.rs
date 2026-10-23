@@ -4,26 +4,29 @@ use der::oid::ObjectIdentifier;
 
 /// The error every function of this crate returns.
 ///
-/// Every refusal to use a CRL is its own variant: none of them can be read as "not revoked".
+/// Every refusal to use a CRL or an OCSP response is its own variant: none of them can be
+/// read as "not revoked" or "good".
 #[non_exhaustive]
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    /// The CRL, or an extension inside it, is not valid DER for the structure being read.
+    /// The CRL or OCSP response, or an extension inside it, is not valid DER for the
+    /// structure being read.
     #[error("invalid DER")]
     Der(#[from] der::Error),
     /// The certificate whose status is asked, or whose distribution point is read, could
     /// not be read.
     #[error("invalid certificate")]
     Certificate(#[source] der::Error),
-    /// The issuer certificate given to verify the CRL could not be read.
+    /// The issuer certificate given to verify the CRL or OCSP response could not be read.
     #[error("invalid issuer certificate")]
     IssuerCertificate(#[source] der::Error),
-    /// The outer `signatureAlgorithm` differs from `tbsCertList.signature`, or the signature
-    /// algorithm does not match the issuer's key.
+    /// The outer `signatureAlgorithm` of a CRL differs from `tbsCertList.signature`, or the
+    /// signature algorithm of a CRL or OCSP response does not match the signer's key.
     #[error("the signature algorithm does not match")]
     AlgorithmMismatch,
-    /// The signature does not verify with the issuer certificate's key.
-    #[error("the CRL signature is invalid")]
+    /// The signature of the CRL or OCSP response does not verify with the key of its
+    /// signer: the issuer, or the responder it delegated.
+    #[error("the revocation data signature is invalid")]
     SignatureInvalid,
     /// The CRL was issued by another authority than the certificate's issuer.
     #[error("the CRL was issued by another authority")]
@@ -41,25 +44,62 @@ pub enum Error {
     /// The CRL has no `nextUpdate`, so its freshness cannot be shown.
     #[error("the CRL has no nextUpdate")]
     MissingNextUpdate,
-    /// The CRL's `nextUpdate` is before the control date.
-    #[error("the CRL expired at its nextUpdate")]
+    /// The `nextUpdate` of the CRL or OCSP response is before the control date.
+    #[error("the revocation data expired at its nextUpdate")]
     Expired {
-        /// The CRL's `nextUpdate`.
+        /// The `nextUpdate` of the CRL or OCSP response.
         next_update: SystemTime,
     },
     /// The certificate names no `http://` distribution point this crate can use.
     #[error("no usable CRL distribution point")]
     NoDistributionPoint,
-    /// The certificate's distribution point resolves to a loopback, private, link-local or
-    /// other non-public address, which [`crate::HttpCrlSource`] does not reach. The message
+    /// The OCSP responder answered with a `responseStatus` other than `successful` (0).
+    #[error("the OCSP responder answered with status {0}")]
+    ResponseStatus(u8),
+    /// The OCSP response is of another type than `id-pkix-ocsp-basic`.
+    #[error("unsupported OCSP response type {0}")]
+    UnsupportedResponseType(ObjectIdentifier),
+    /// The OCSP response has no single response about the certificate asked.
+    #[error("the OCSP response does not cover the certificate")]
+    CertificateNotInResponse,
+    /// The OCSP responder does not know the certificate (`certStatus` `unknown`).
+    #[error("the OCSP responder does not know the certificate")]
+    UnknownCertificate,
+    /// The OCSP response is signed neither by the issuer nor by a responder the issuer
+    /// delegated with `id-kp-OCSPSigning`.
+    #[error("the OCSP responder is not authorized by the issuer")]
+    UnauthorizedResponder,
+    /// The OCSP response carries a nonce other than the request's: it answers another
+    /// request, or is replayed.
+    #[error("the OCSP response nonce does not match the request")]
+    NonceMismatch,
+    /// The OCSP response's `thisUpdate` is outside the tolerance around the date given.
+    #[error("the OCSP response thisUpdate is outside the tolerance")]
+    ThisUpdateOutOfTolerance {
+        /// The response's `thisUpdate`.
+        this_update: SystemTime,
+    },
+    /// The nonce given for an OCSP request holds this many octets, outside the 1 to 32
+    /// octets of RFC 8954 §2.1.
+    #[error("the OCSP nonce holds {0} octets, not 1 to 32")]
+    NonceLength(usize),
+    /// The certificate names no `http://` OCSP responder this crate can use.
+    #[error("no usable OCSP responder")]
+    NoOcspResponder,
+    /// The system's random generator failed while making a nonce.
+    #[error("the random generator failed")]
+    Random(#[source] getrandom::Error),
+    /// The revocation source address named by the certificate (CRL distribution point or
+    /// OCSP responder) resolves to a loopback, private, link-local or
+    /// other non-public address, which the HTTP sources do not reach. The message
     /// never names the URL, which is the certificate's.
     #[cfg(feature = "http")]
-    #[error("the CRL distribution point is not a public address")]
+    #[error("the revocation source address is not public")]
     NonPublicAddress,
-    /// The CRL download failed, or answered with a redirect, which is not followed. The
+    /// The CRL download or the OCSP exchange failed, or answered with a redirect, which is not followed. The
     /// message stays generic: the URL is the certificate's.
     #[cfg(feature = "http")]
-    #[error("the CRL download failed")]
+    #[error("the revocation download failed")]
     Http(#[source] ureq::Error),
 }
 
@@ -68,17 +108,29 @@ impl Error {
     pub fn kind(&self) -> nacre_core::ErrorKind {
         use nacre_core::ErrorKind;
         match self {
-            Self::Der(_) | Self::Certificate(_) | Self::IssuerCertificate(_) => {
-                ErrorKind::InvalidInput
-            }
-            Self::AlgorithmMismatch | Self::SignatureInvalid => ErrorKind::InvalidSignature,
+            Self::Der(_)
+            | Self::Certificate(_)
+            | Self::IssuerCertificate(_)
+            | Self::NonceLength(_) => ErrorKind::InvalidInput,
+            // A foreign responder or another nonce means a forged or replayed answer.
+            Self::AlgorithmMismatch
+            | Self::SignatureInvalid
+            | Self::UnauthorizedResponder
+            | Self::NonceMismatch => ErrorKind::InvalidSignature,
             Self::WrongIssuer
             | Self::UnsupportedCriticalExtension(_)
             | Self::UnsupportedAlgorithm(_)
             | Self::IssuerNotCrlSigner
             | Self::MissingNextUpdate
             | Self::Expired { .. }
-            | Self::NoDistributionPoint => ErrorKind::Indeterminate,
+            | Self::NoDistributionPoint
+            | Self::ResponseStatus(_)
+            | Self::UnsupportedResponseType(_)
+            | Self::CertificateNotInResponse
+            | Self::UnknownCertificate
+            | Self::ThisUpdateOutOfTolerance { .. }
+            | Self::NoOcspResponder => ErrorKind::Indeterminate,
+            Self::Random(_) => ErrorKind::Unavailable,
             #[cfg(feature = "http")]
             Self::NonPublicAddress => ErrorKind::InvalidInput,
             #[cfg(feature = "http")]
@@ -116,13 +168,28 @@ mod tests {
                 Indeterminate,
             ),
             (Error::NoDistributionPoint, Indeterminate),
+            (Error::ResponseStatus(3), Indeterminate),
+            (Error::UnsupportedResponseType(oid), Indeterminate),
+            (Error::CertificateNotInResponse, Indeterminate),
+            (Error::UnknownCertificate, Indeterminate),
+            (Error::UnauthorizedResponder, InvalidSignature),
+            (Error::NonceMismatch, InvalidSignature),
+            (
+                Error::ThisUpdateOutOfTolerance {
+                    this_update: SystemTime::UNIX_EPOCH,
+                },
+                Indeterminate,
+            ),
+            (Error::NonceLength(0), InvalidInput),
+            (Error::NoOcspResponder, Indeterminate),
+            (Error::Random(getrandom::Error::UNSUPPORTED), Unavailable),
         ];
-        assert_eq!(rows.len(), 12);
+        assert_eq!(rows.len(), 22);
         #[cfg(feature = "http")]
         {
             rows.push((Error::NonPublicAddress, InvalidInput));
             rows.push((Error::Http(ureq::Error::ConnectionFailed), Unavailable));
-            assert_eq!(rows.len(), 14);
+            assert_eq!(rows.len(), 24);
         }
         for (error, kind) in rows {
             assert_eq!(error.kind(), kind, "{error}");
