@@ -7,16 +7,24 @@
 //! and the digest and signature of that `SignedData` verify over the signed bytes. It
 //! returns one [`SignatureValidation`] per signature, in field order.
 //!
+//! Each revision appended after a signature is listed in its result
+//! ([`SignatureValidation::later_revisions`]) with the objects it changes, and qualified by
+//! comparing the objects reachable before and after it: a `/DSS`, a document timestamp, a
+//! new signature, or a form fill the DocMDP and FieldMDP permissions allow. Any other
+//! change fails the signature with [`Defect::RevisionNotAllowed`]. A signature its own
+//! revision refuses as a signature (a visible new signature on a certified document, or one
+//! under DocMDP 1) fails with [`Defect::AddedByRevisionNotAllowed`].
+//!
 //! The certificate chain, revocation and the level are not judged yet, so a sound
 //! signature ends `INDETERMINATE` / `NO_CERTIFICATE_CHAIN_FOUND`, never `TOTAL_PASSED`.
-//! A signature followed by a later revision is refused for now
-//! ([`Defect::LaterRevision`]): qualifying later revisions comes next. Document timestamps
-//! (`/SubFilter /ETSI.RFC3161`) are left out of the result.
+//! Document timestamps (`/SubFilter /ETSI.RFC3161`) are left out of the result.
 
 mod error;
 mod report;
+mod revisions;
 mod validate;
 
 pub use error::Error;
-pub use report::{Defect, SignatureValidation};
+pub use nacre_pdf::ObjectId;
+pub use report::{AllowedChange, Defect, LaterRevision, RevisionVerdict, SignatureValidation};
 pub use validate::validate;

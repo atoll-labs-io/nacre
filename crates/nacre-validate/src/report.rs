@@ -1,4 +1,5 @@
 use nacre_core::{SubIndication, ValidationReport};
+use nacre_pdf::ObjectId;
 
 /// The integrity verdict on one signature field.
 #[non_exhaustive]
@@ -11,8 +12,49 @@ pub struct SignatureValidation {
     pub digest_verified: bool,
     /// The CMS signature verifies with the signer certificate's key.
     pub signature_verified: bool,
-    /// The first rule the signature broke, `None` when both checks passed.
+    /// The first rule the signature broke, `None` when every check passed.
     pub defect: Option<Defect>,
+    /// Each revision appended after the one the signed bytes end at, oldest first; empty
+    /// when the signed bytes end at no revision.
+    pub later_revisions: Vec<LaterRevision>,
+}
+
+/// One revision appended after a signature, and what it changes.
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LaterRevision {
+    /// The offset just past this revision's `%%EOF`.
+    pub end: usize,
+    /// Every object reachable from the catalog that the revision changes or adds, sorted,
+    /// whatever the verdict.
+    pub changed: Vec<ObjectId>,
+    pub verdict: RevisionVerdict,
+}
+
+/// Whether a later revision is one a signed document may receive.
+#[non_exhaustive]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RevisionVerdict {
+    /// Every change matches an allowed kind; an empty list means nothing visible changed.
+    Allowed(Vec<AllowedChange>),
+    /// `refused` lists, sorted, the changed objects no rule accepts.
+    NotAllowed { refused: Vec<ObjectId> },
+    /// The document as of this revision, or of the one before, cannot be read.
+    Unreadable,
+}
+
+/// A kind of change a later revision may make.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AllowedChange {
+    /// The document security store (`/DSS`) is added or extended.
+    Dss,
+    /// A document timestamp is added.
+    DocumentTimestamp,
+    /// A signature is added.
+    Signature,
+    /// Form fields are filled, as the DocMDP and FieldMDP permissions in force allow.
+    FormFill,
 }
 
 /// The first rule a signature broke. Every structural defect gives `TOTAL_FAILED` /
@@ -38,8 +80,12 @@ pub enum Defect {
     GapNotContents,
     /// The signed bytes do not end where a revision ends.
     ByteRangeNotWholeFile,
-    /// A later revision follows the signed one.
-    LaterRevision,
+    /// A later revision, the one ending at `end`, is not allowed or cannot be read.
+    RevisionNotAllowed { end: usize },
+    /// The revision that added this signature, the one ending at `end`, refuses it as a
+    /// signature: a visible new signature on a certified document, or any signature under
+    /// DocMDP 1.
+    AddedByRevisionNotAllowed { end: usize },
     /// `/Contents` is not one DER `SEQUENCE` followed only by zero bytes.
     ContentsNotDer,
     /// The CMS `SignedData` is unreadable or does not verify.
@@ -47,30 +93,41 @@ pub enum Defect {
 }
 
 impl SignatureValidation {
-    pub(crate) fn sound(field: String) -> Self {
+    pub(crate) fn sound(field: String, later_revisions: Vec<LaterRevision>) -> Self {
         Self {
             field,
             report: ValidationReport::indeterminate(SubIndication::NoCertificateChainFound, None),
             digest_verified: true,
             signature_verified: true,
             defect: None,
+            later_revisions,
         }
     }
 
-    pub(crate) fn defective(field: String, defect: Defect) -> Self {
-        let (report, digest_verified) = match &defect {
-            Defect::Cms(error) => cms_outcome(error),
-            _ => (
-                ValidationReport::failed(SubIndication::FormatFailure, None),
-                false,
-            ),
+    pub(crate) fn defective(
+        field: String,
+        defect: Defect,
+        later_revisions: Vec<LaterRevision>,
+    ) -> Self {
+        let failed = || ValidationReport::failed(SubIndication::FormatFailure, None);
+        // The revision rule is judged last, once the digest and the signature verified.
+        let (report, digest_verified, signature_verified) = match &defect {
+            Defect::Cms(error) => {
+                let (report, digest_verified) = cms_outcome(error);
+                (report, digest_verified, false)
+            }
+            Defect::RevisionNotAllowed { .. } | Defect::AddedByRevisionNotAllowed { .. } => {
+                (failed(), true, true)
+            }
+            _ => (failed(), false, false),
         };
         Self {
             field,
             report,
             digest_verified,
-            signature_verified: false,
+            signature_verified,
             defect: Some(defect),
+            later_revisions,
         }
     }
 }
@@ -194,7 +251,7 @@ mod tests {
         assert_eq!(rows.len(), 20);
         for (error, indication, sub, digest_verified) in rows {
             let name = format!("{error:?}");
-            let v = SignatureValidation::defective("f".into(), Defect::Cms(error));
+            let v = SignatureValidation::defective("f".into(), Defect::Cms(error), Vec::new());
             assert_eq!(v.report.indication(), indication, "{name}");
             assert_eq!(v.report.sub_indication(), Some(sub), "{name}");
             assert_eq!(v.digest_verified, digest_verified, "{name}");

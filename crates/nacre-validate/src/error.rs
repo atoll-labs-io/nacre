@@ -9,6 +9,9 @@ pub enum Error {
     /// The PDF holds more signatures than are validated in one call.
     #[error("{count} signatures, at most {max} are validated")]
     TooManySignatures { count: usize, max: usize },
+    /// More revisions follow the oldest signed one than are qualified in one call.
+    #[error("{count} revisions after the oldest signed one, at most {max} are qualified")]
+    TooManyRevisions { count: usize, max: usize },
 }
 
 impl Error {
@@ -16,7 +19,9 @@ impl Error {
     pub fn kind(&self) -> nacre_core::ErrorKind {
         match self {
             Self::Pdf(inner) => inner.kind(),
-            Self::TooManySignatures { .. } => nacre_core::ErrorKind::InvalidInput,
+            Self::TooManySignatures { .. } | Self::TooManyRevisions { .. } => {
+                nacre_core::ErrorKind::InvalidInput
+            }
         }
     }
 }
@@ -35,6 +40,7 @@ mod tests {
             ),
             (Error::Pdf(nacre_pdf::Error::Encrypted), Indeterminate),
             (Error::TooManySignatures { count: 2, max: 1 }, InvalidInput),
+            (Error::TooManyRevisions { count: 65, max: 64 }, InvalidInput),
         ];
         for (error, kind) in rows {
             assert_eq!(error.kind(), kind, "{error}");

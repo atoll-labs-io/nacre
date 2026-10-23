@@ -10,10 +10,66 @@ use nacre_cms::Error as CmsError;
 use nacre_core::{Indication, SubIndication, TestSigner};
 use nacre_pades::{DateTime, sign};
 use nacre_pdf::{Document, Object};
-use nacre_validate::{Defect, validate};
+use nacre_validate::{
+    AllowedChange, Defect, LaterRevision, RevisionVerdict, SignatureValidation, validate,
+};
 
 const UNSIGNED: &[u8] = include_bytes!("corpus/unsigned.pdf");
 const CERTIFIED_DSS: &[u8] = include_bytes!("corpus/certified-dss.pdf");
+
+fn signer() -> TestSigner {
+    TestSigner::from_secret(&[0x11; 32]).unwrap()
+}
+
+fn time() -> DateTime {
+    DateTime::new(2026, 10, 22, 8, 0, 0).unwrap()
+}
+
+/// The result of the signature in `field`.
+fn of<'r>(results: &'r [SignatureValidation], field: &str) -> &'r SignatureValidation {
+    results
+        .iter()
+        .find(|r| r.field == field)
+        .unwrap_or_else(|| panic!("no signature {field} in {results:?}"))
+}
+
+fn verdicts(result: &SignatureValidation) -> Vec<&RevisionVerdict> {
+    result.later_revisions.iter().map(|r| &r.verdict).collect()
+}
+
+/// A signature whose later revisions are all allowed, with exactly `kinds`.
+fn allowed(result: &SignatureValidation, kinds: &[&[AllowedChange]]) {
+    assert!(result.defect.is_none(), "{:?}", result.later_revisions);
+    assert_eq!(result.report.indication(), Indication::Indeterminate);
+    let expected: Vec<RevisionVerdict> = kinds
+        .iter()
+        .map(|k| RevisionVerdict::Allowed(k.to_vec()))
+        .collect();
+    assert_eq!(verdicts(result), expected.iter().collect::<Vec<_>>());
+}
+
+/// A sound signature failed by its later revision ending at `end`.
+fn refused_revision(result: &SignatureValidation) -> &LaterRevision {
+    let Some(Defect::RevisionNotAllowed { end }) = result.defect else {
+        panic!("{:?}: {:?}", result.defect, result.later_revisions);
+    };
+    assert_eq!(result.report.indication(), Indication::TotalFailed);
+    assert_eq!(
+        result.report.sub_indication(),
+        Some(SubIndication::FormatFailure)
+    );
+    assert!(result.digest_verified && result.signature_verified);
+    let revision = result
+        .later_revisions
+        .iter()
+        .find(|r| r.end == end)
+        .unwrap();
+    assert!(
+        matches!(&revision.verdict, RevisionVerdict::NotAllowed { refused } if !refused.is_empty()),
+        "{revision:?}"
+    );
+    revision
+}
 
 fn signed() -> Vec<u8> {
     let signer = TestSigner::from_secret(&[0x11; 32]).unwrap();
@@ -120,4 +176,157 @@ fn altered_signature_value_is_sig_crypto_failure() {
     );
     assert!(result.digest_verified);
     assert!(!result.signature_verified);
+}
+
+#[test]
+fn twice_signed_first_signature_has_an_allowed_signature_revision() {
+    let twice = sign(&signed(), &signer(), time()).unwrap();
+
+    let results = validate(&twice).unwrap();
+
+    allowed(of(&results, "Signature1"), &[&[AllowedChange::Signature]]);
+    allowed(of(&results, "Signature2"), &[]);
+}
+
+#[test]
+fn pyhanko_twice_signed_is_allowed() {
+    let results = validate(include_bytes!("corpus/signed-twice-pyhanko.pdf")).unwrap();
+
+    assert_eq!(results.len(), 2);
+    allowed(of(&results, "Sig1"), &[]);
+    allowed(of(&results, "Sig2"), &[&[AllowedChange::Signature]]);
+}
+
+#[test]
+fn lta_dss_and_timestamp_are_allowed() {
+    let pdf = include_bytes!("corpus/signed-lta-pyhanko.pdf");
+    let results = validate(pdf).unwrap();
+
+    assert_eq!(results.len(), 1);
+    let sig = of(&results, "Sig1");
+    allowed(
+        sig,
+        &[
+            &[AllowedChange::Dss, AllowedChange::DocumentTimestamp],
+            &[AllowedChange::Dss],
+        ],
+    );
+    let catalog = Document::parse(pdf).unwrap().catalog_id();
+    assert!(sig.later_revisions[0].changed.contains(&catalog));
+}
+
+#[test]
+fn signing_a_certified_p3_document_is_allowed() {
+    let pdf = sign(CERTIFIED_DSS, &signer(), time()).unwrap();
+
+    let results = validate(&pdf).unwrap();
+
+    allowed(
+        of(&results, "signature-test"),
+        &[&[AllowedChange::Signature]],
+    );
+}
+
+#[test]
+fn certified_form_fill_is_allowed() {
+    let results = validate(include_bytes!("corpus/certified-form-fill.pdf")).unwrap();
+
+    allowed(of(&results, "Certification"), &[&[AllowedChange::FormFill]]);
+}
+
+#[test]
+fn form_fill_under_p1_is_not_allowed() {
+    let results = validate(include_bytes!("corpus/certified-p1-form-fill.pdf")).unwrap();
+
+    let revision = refused_revision(of(&results, "Certification"));
+    assert!(revision.changed.contains(&nacre_pdf::ObjectId::new(7, 0)));
+}
+
+#[test]
+fn locked_field_fill_is_not_allowed() {
+    let results = validate(include_bytes!("corpus/fieldmdp-locked-fill.pdf")).unwrap();
+
+    let certification = of(&results, "Certification");
+    assert_eq!(
+        verdicts(certification)[0],
+        &RevisionVerdict::Allowed(vec![AllowedChange::Signature])
+    );
+    refused_revision(certification);
+    refused_revision(of(&results, "Approval"));
+}
+
+#[test]
+fn second_signer_beside_a_refused_fill_is_judged_alone() {
+    let results = validate(include_bytes!("corpus/fill-and-second-signature.pdf")).unwrap();
+
+    let revision = refused_revision(of(&results, "Signature1"));
+    assert!(revision.changed.contains(&nacre_pdf::ObjectId::new(7, 0)));
+    let bob = of(&results, "Bob");
+    assert!(bob.later_revisions.is_empty());
+    allowed(bob, &[]);
+}
+
+#[test]
+fn revision_over_the_docmdp_cap_lists_its_objects() {
+    let pdf = include_bytes!("corpus/docmdp-reference-cap.pdf");
+    let doc = Document::parse(pdf).unwrap();
+    let catalog = doc.catalog_id();
+    let Some(Object::Dictionary(perms)) = doc.catalog().get(b"Perms") else {
+        panic!("no direct /Perms");
+    };
+    let Some(Object::Reference(hostile)) = perms.get(b"DocMDP") else {
+        panic!("no /DocMDP reference");
+    };
+
+    let results = validate(pdf).unwrap();
+
+    let certification = of(&results, "Certification");
+    let revisions = &certification.later_revisions;
+    assert_eq!(revisions.len(), 3);
+    assert_eq!(
+        verdicts(certification)[..2],
+        [
+            &RevisionVerdict::Allowed(vec![AllowedChange::FormFill]),
+            &RevisionVerdict::Unreadable,
+        ]
+    );
+    // The permission no longer reads, so the next revisions are judged under /P 1.
+    assert!(
+        matches!(&revisions[2].verdict, RevisionVerdict::NotAllowed { refused } if !refused.is_empty()),
+        "{:?}",
+        revisions[2]
+    );
+    assert_eq!(revisions[1].changed, {
+        let mut ids = vec![catalog, *hostile];
+        ids.sort_unstable();
+        ids
+    });
+    assert!(
+        matches!(certification.defect, Some(Defect::RevisionNotAllowed { end }) if end == revisions[1].end),
+        "{:?}",
+        certification.defect
+    );
+    let late = of(&results, "Late");
+    assert!(late.digest_verified && late.signature_verified);
+    assert!(
+        matches!(late.defect, Some(Defect::AddedByRevisionNotAllowed { end }) if end == pdf.len()),
+        "{:?}",
+        late.defect
+    );
+}
+
+#[test]
+fn signature_added_under_p1_is_refused_with_its_revision() {
+    let pdf = include_bytes!("corpus/certified-p1-second-signature.pdf");
+    let results = validate(pdf).unwrap();
+
+    refused_revision(of(&results, "Certification"));
+    let late = of(&results, "Late");
+    assert_eq!(late.report.indication(), Indication::TotalFailed);
+    assert!(late.digest_verified && late.signature_verified);
+    assert!(
+        matches!(late.defect, Some(Defect::AddedByRevisionNotAllowed { end }) if end == pdf.len()),
+        "{:?}",
+        late.defect
+    );
 }

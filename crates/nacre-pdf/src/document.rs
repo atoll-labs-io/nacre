@@ -119,6 +119,108 @@ impl<'a> Document<'a> {
         .object(id)
     }
 
+    /// Every indirect object reachable from the newest trailer's `/Root`, through the
+    /// references held in dictionaries, arrays and stream dictionaries, each read once. The
+    /// trailer's `/Info` is not followed. A reference to a free or absent object stands for
+    /// `null` (ISO 32000-1, 7.3.10) and is left out. Only object streams are decoded, each
+    /// once, so the whole walk stays within the decoding budget of one parse.
+    pub fn reachable(&self) -> Result<HashMap<ObjectId, Object>, Error> {
+        let mut resolver = Resolver::new(
+            self.input,
+            &self.entries,
+            self.limits,
+            self.limits.max_total_decoded,
+        );
+        let mut found = HashMap::new();
+        let mut pending = vec![self.catalog_id];
+        while let Some(id) = pending.pop() {
+            if found.contains_key(&id) {
+                continue;
+            }
+            let object = match resolver.object(id) {
+                Ok(object) => object,
+                Err(Error::ObjectNotFound { .. }) => continue,
+                Err(error) => return Err(error),
+            };
+            references(&object, &mut pending);
+            found.insert(id, object);
+            if found.len() > self.limits.max_reachable {
+                return Err(Error::Limit {
+                    what: "reachable objects",
+                    offset: 0,
+                });
+            }
+        }
+        Ok(found)
+    }
+
+    /// The DocMDP permission level of a certified document, following references at each
+    /// step: `None` when the catalog's `/Perms` names no DocMDP signature, 2 when its
+    /// transform parameters give no `/P`. A `/Reference` array longer than 32 entries is an
+    /// [`Error::Limit`].
+    pub fn doc_mdp_level(&self) -> Result<Option<i64>, Error> {
+        let Some(perms) = self.catalog.get(b"Perms") else {
+            return Ok(None);
+        };
+        // One resolver for the whole reading: each entry looked up through a fresh one would
+        // decode its object stream again.
+        let mut resolver = Resolver::new(
+            self.input,
+            &self.entries,
+            self.limits,
+            self.limits.max_total_decoded,
+        );
+        let perms = dictionary(
+            &mut resolver,
+            perms,
+            self.catalog_id,
+            "permissions dictionary",
+        )?;
+        let Some(mdp) = perms.1.get(b"DocMDP") else {
+            return Ok(None);
+        };
+        let mdp = dictionary(&mut resolver, mdp, perms.0, "signature dictionary")?;
+        let Some(references) = mdp.1.get(b"Reference") else {
+            return Ok(None);
+        };
+        let (id, references) = resolver.follow(references)?;
+        let Object::Array(references) = references else {
+            return Err(Error::WrongType {
+                object: id.unwrap_or(mdp.0),
+                expected: "array of signature references",
+            });
+        };
+        if references.len() > self.limits.max_signature_references {
+            return Err(Error::Limit {
+                what: "signature references",
+                offset: 0,
+            });
+        }
+        for reference in &references {
+            let (owner, reference) =
+                dictionary(&mut resolver, reference, mdp.0, "signature reference")?;
+            if !reference
+                .get(b"TransformMethod")
+                .is_some_and(|m| m.is_name(b"DocMDP"))
+            {
+                continue;
+            }
+            let Some(params) = reference.get(b"TransformParams") else {
+                return Ok(Some(2));
+            };
+            let (owner, params) = dictionary(&mut resolver, params, owner, "transform parameters")?;
+            return match params.get(b"P").map(|p| resolver.follow(p)).transpose()? {
+                None => Ok(Some(2)),
+                Some((_, Object::Integer(p))) => Ok(Some(p)),
+                Some((id, _)) => Err(Error::WrongType {
+                    object: id.unwrap_or(owner),
+                    expected: "DocMDP permission level",
+                }),
+            };
+        }
+        Ok(None)
+    }
+
     /// Starts one incremental revision appended to this document.
     pub fn update(&self) -> Update<'_, 'a> {
         Update::new(self)
@@ -146,6 +248,36 @@ impl<'a> Document<'a> {
             self.limits.max_total_decoded,
         )
         .follow(value)
+    }
+}
+
+/// Follows `value` to a dictionary, returning the id it lives under (else `owner`).
+fn dictionary(
+    resolver: &mut Resolver<'_, '_>,
+    value: &Object,
+    owner: ObjectId,
+    expected: &'static str,
+) -> Result<(ObjectId, Dictionary), Error> {
+    match resolver.follow(value)? {
+        (id, Object::Dictionary(d)) => Ok((id.unwrap_or(owner), d)),
+        (id, _) => Err(Error::WrongType {
+            object: id.unwrap_or(owner),
+            expected,
+        }),
+    }
+}
+
+/// Pushes every reference `object` holds, at any depth, onto `out`.
+fn references(object: &Object, out: &mut Vec<ObjectId>) {
+    let mut stack = vec![object];
+    while let Some(current) = stack.pop() {
+        match current {
+            Object::Reference(id) => out.push(*id),
+            Object::Array(items) => stack.extend(items),
+            Object::Dictionary(dict) => stack.extend(dict.iter().map(|(_, v)| v)),
+            Object::Stream(stream) => stack.extend(stream.dict.iter().map(|(_, v)| v)),
+            _ => {}
+        }
     }
 }
 
