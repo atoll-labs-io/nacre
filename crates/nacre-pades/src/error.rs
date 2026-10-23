@@ -139,7 +139,7 @@ mod tests {
                 ErrorKind::Signer,
             ),
             (
-                Error::Timestamp(nacre_core::Error::Timestamp("x".into())),
+                Error::Timestamp(nacre_core::Error::timestamp("x")),
                 Unavailable,
             ),
             (
@@ -150,7 +150,7 @@ mod tests {
             (
                 Error::Revocation {
                     certificate: "CN=x".into(),
-                    source: nacre_core::Error::Revocation("x".into()),
+                    source: nacre_core::Error::revocation("x"),
                 },
                 Unavailable,
             ),

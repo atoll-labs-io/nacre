@@ -22,8 +22,16 @@ fn core_kinds() {
             ErrorKind::InvalidInput,
         ),
         (Error::Signer(boxed()), ErrorKind::Signer),
-        (Error::Timestamp(boxed()), ErrorKind::Unavailable),
-        (Error::Revocation(boxed()), ErrorKind::Unavailable),
+        (Error::timestamp(boxed()), ErrorKind::Unavailable),
+        (Error::revocation(boxed()), ErrorKind::Unavailable),
+        (
+            Error::timestamp_with_kind(ErrorKind::InvalidSignature, boxed()),
+            ErrorKind::InvalidSignature,
+        ),
+        (
+            Error::revocation_with_kind(ErrorKind::InvalidInput, boxed()),
+            ErrorKind::InvalidInput,
+        ),
     ];
     for (error, kind) in rows {
         assert_eq!(error.kind(), kind, "{error}");

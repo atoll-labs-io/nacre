@@ -203,7 +203,7 @@ impl RevocationSource for HttpOcspSource {
     ) -> Result<RevocationData, nacre_core::Error> {
         self.fetch(certificate, issuer)
             .map(RevocationData::Ocsp)
-            .map_err(|error| nacre_core::Error::Revocation(Box::new(error)))
+            .map_err(|error| nacre_core::Error::revocation_with_kind(error.kind(), error))
     }
 }
 
@@ -308,7 +308,7 @@ impl RevocationSource for HttpCrlSource {
     ) -> Result<RevocationData, nacre_core::Error> {
         self.fetch(certificate)
             .map(RevocationData::Crl)
-            .map_err(|error| nacre_core::Error::Revocation(Box::new(error)))
+            .map_err(|error| nacre_core::Error::revocation_with_kind(error.kind(), error))
     }
 }
 

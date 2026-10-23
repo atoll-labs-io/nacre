@@ -35,8 +35,8 @@ const CRL: &[u8] = include_bytes!("corpus/openssl/ec-ca.crl");
 const OCSP: &[u8] = include_bytes!("corpus/ocsp-attacks/base.der");
 const OCSP_CA: &[u8] = include_bytes!("corpus/ocsp-attacks/ca.der");
 
-/// Serves `CRL` at `/ca.crl`, `OCSP` to a POST at `/ocsp` and a 302 to the CRL at
-/// `/redirect`, one request per connection.
+/// Serves `CRL` at `/ca.crl`, `OCSP` to a POST at `/ocsp`, a 302 to the CRL at
+/// `/redirect` and bytes that are not DER at `/garbage.crl`, one request per connection.
 fn serve() -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
@@ -60,6 +60,8 @@ fn serve() -> u16 {
             reader.read_exact(&mut body).unwrap();
             let served = if request_line.starts_with("POST /ocsp ") {
                 OCSP
+            } else if request_line.starts_with("GET /garbage.crl ") {
+                b"not a CRL".as_slice()
             } else {
                 CRL
             };
@@ -128,7 +130,9 @@ fn fetch(source: &HttpCrlSource, url: &str) -> Result<Vec<u8>, Error> {
     match source.revocation(&naming(url), &[]) {
         Ok(RevocationData::Crl(bytes)) => Ok(bytes),
         Ok(_) => panic!("a CRL source answered with something else"),
-        Err(nacre_core::Error::Revocation(error)) => Err(*error.downcast::<Error>().unwrap()),
+        Err(nacre_core::Error::Revocation { source, .. }) => {
+            Err(*source.downcast::<Error>().unwrap())
+        }
         Err(error) => panic!("unexpected error {error}"),
     }
 }
@@ -174,7 +178,9 @@ fn ask(source: &HttpOcspSource, url: &str) -> Result<Vec<u8>, Error> {
     match source.revocation(&naming_responder(url), OCSP_CA) {
         Ok(RevocationData::Ocsp(bytes)) => Ok(bytes),
         Ok(_) => panic!("an OCSP source answered with something else"),
-        Err(nacre_core::Error::Revocation(error)) => Err(*error.downcast::<Error>().unwrap()),
+        Err(nacre_core::Error::Revocation { source, .. }) => {
+            Err(*source.downcast::<Error>().unwrap())
+        }
         Err(error) => panic!("unexpected error {error}"),
     }
 }
@@ -200,4 +206,51 @@ fn ocsp_loopback_responder_is_refused_by_default() {
     assert!(matches!(error, Error::NonPublicAddress));
     assert!(!error.to_string().contains("127.0.0.1"));
     assert!(!format!("{error:?}").contains("127.0.0.1"));
+}
+
+/// The core error a source returns, as an application sees it.
+fn core_error(result: Result<RevocationData, nacre_core::Error>) -> nacre_core::Error {
+    let error = result.unwrap_err();
+    assert!(
+        matches!(error, nacre_core::Error::Revocation { .. }),
+        "{error}"
+    );
+    error
+}
+
+#[test]
+fn malformed_crl_is_invalid_input() {
+    let port = serve();
+    let url = format!("http://127.0.0.1:{port}/garbage.crl");
+    let error = core_error(HttpCrlSource::allowing_loopback().revocation(&naming(&url), &[]));
+    assert_eq!(error.kind(), ErrorKind::InvalidInput);
+}
+
+#[test]
+fn refused_crl_address_is_invalid_input() {
+    let port = serve();
+    let url = format!("http://127.0.0.1:{port}/ca.crl");
+    let error = core_error(HttpCrlSource::new().revocation(&naming(&url), &[]));
+    assert_eq!(error.kind(), ErrorKind::InvalidInput);
+}
+
+#[test]
+fn unreachable_crl_server_is_unavailable() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    drop(listener);
+    let url = format!("http://127.0.0.1:{port}/ca.crl");
+    let error = core_error(HttpCrlSource::allowing_loopback().revocation(&naming(&url), &[]));
+    assert_eq!(error.kind(), ErrorKind::Unavailable);
+}
+
+#[test]
+fn replayed_ocsp_response_is_invalid_signature() {
+    let port = serve();
+    // The served response carries a fixed nonce, never the request's random one.
+    let url = format!("http://127.0.0.1:{port}/ocsp");
+    let error = core_error(
+        HttpOcspSource::allowing_loopback().revocation(&naming_responder(&url), OCSP_CA),
+    );
+    assert_eq!(error.kind(), ErrorKind::InvalidSignature);
 }

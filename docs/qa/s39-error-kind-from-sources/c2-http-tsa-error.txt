@@ -1,0 +1,31 @@
+Criterion 2, invalid input — a TSA answering bytes that are not a TimeStampResp, a TSA
+answering 500, a URL that is not a URL, an empty imprint.
+Program: program.txt (scenario "tsa-error"). Run twice, outputs byte-identical.
+
+cwd:     $QA_TMP/run
+command: $QA_TMP/target/debug/qa-s39 tsa-error
+stdin:   none
+stderr:  (empty)
+stdout:
+TSA answers garbage: Err(nacre_core::Error::Timestamp { .. })
+  kind()    = InvalidInput ("invalid input")
+  Display   = the timestamp authority failed
+  source    = invalid DER: unexpected ASN.1 DER tag: expected SEQUENCE, got APPLICATION [14] (constructed)
+  source    = unexpected ASN.1 DER tag: expected SEQUENCE, got APPLICATION [14] (constructed)
+  downcast  = nacre_tsp::Error, its kind() = InvalidInput
+TSA answers 500: Err(nacre_core::Error::Timestamp { .. })
+  kind()    = Unavailable ("service unavailable")
+  Display   = the timestamp authority failed
+  source    = TSA request failed: http status: 500
+  source    = http status: 500
+  downcast  = nacre_tsp::Error, its kind() = Unavailable
+URL that is not a URL: Err(nacre_core::Error::Timestamp { .. })
+  kind()    = Unavailable ("service unavailable")
+  Display   = the timestamp authority failed
+  source    = TSA request failed: http: invalid uri character
+  source    = http: invalid uri character
+  downcast  = nacre_tsp::Error, its kind() = Unavailable
+empty imprint: Err(nacre_core::Error::DigestLength { .. })
+  kind()    = InvalidInput ("invalid input")
+  Display   = digest length is 0 bytes, the signature algorithm expects 32
+exit code: 0

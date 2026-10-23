@@ -57,7 +57,7 @@ impl TimestampAuthority for HttpTsa {
                 Error::DigestLength { expected, actual } => {
                     nacre_core::Error::DigestLength { expected, actual }
                 }
-                error => nacre_core::Error::Timestamp(Box::new(error)),
+                error => nacre_core::Error::timestamp_with_kind(error.kind(), error),
             })
     }
 }

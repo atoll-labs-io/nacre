@@ -9,7 +9,9 @@
 //! Certificates, tokens, CRLs and OCSP responses cross the traits as DER bytes, and every
 //! trait method returns the single [`Error`] of this crate; an implementation's own error
 //! travels as its boxed [`std::error::Error::source`].
-//! [`Error::kind`] gives the coarse [`ErrorKind`] an application may show to a third party.
+//! [`Error::kind`] gives the coarse [`ErrorKind`] an application may show to a third party;
+//! for a timestamp or revocation failure it is the kind the source reported, `Unavailable`
+//! unless the source set another.
 //!
 //! The `test-signer` feature, never enabled by default, adds [`TestSigner`], a software
 //! P-256 signer for tests only.

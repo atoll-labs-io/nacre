@@ -1,0 +1,31 @@
+Criterion 1 — Error::Timestamp and Error::Revocation carry an ErrorKind set by the source,
+Unavailable by default, and kind() returns it.
+Program: program.txt (scenario "core"). Run twice, outputs byte-identical.
+
+cwd:     $QA_TMP/run
+command: $QA_TMP/target/debug/qa-s39 core
+stdin:   none
+stderr:  (empty)
+stdout:
+Error::timestamp(io::Error): Err(nacre_core::Error::Timestamp { .. })
+  kind()    = Unavailable ("service unavailable")
+  Display   = the timestamp authority failed
+  source    = tsa down
+Error::revocation("down"): Err(nacre_core::Error::Revocation { .. })
+  kind()    = Unavailable ("service unavailable")
+  Display   = the revocation source failed
+  source    = down
+Error::timestamp_with_kind(InvalidSignature, ..): Err(nacre_core::Error::Timestamp { .. })
+  kind()    = InvalidSignature ("invalid signature")
+  Display   = the timestamp authority failed
+  source    = forged
+Error::revocation_with_kind(InvalidInput, ..): Err(nacre_core::Error::Revocation { .. })
+  kind()    = InvalidInput ("invalid input")
+  Display   = the revocation source failed
+  source    = bad crl
+Error::Revocation { kind: Indeterminate, .. } (struct literal): Err(nacre_core::Error::Revocation { .. })
+  kind()    = Indeterminate ("indeterminate")
+  Display   = the revocation source failed
+  source    = x
+source downcasts to io::Error: true
+exit code: 0
