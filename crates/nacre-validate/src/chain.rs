@@ -59,6 +59,18 @@ const SIGNING_PURPOSES: [ObjectIdentifier; 6] = [
     ObjectIdentifier::new_unwrap("1.3.6.1.4.1.311.10.3.12"),
 ];
 
+const TIME_STAMPING: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.3.6.1.5.5.7.3.8");
+
+/// What the leaf of a path is judged fit for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Purpose {
+    /// Signing documents: an `extendedKeyUsage`, when present, names one of
+    /// `SIGNING_PURPOSES`.
+    Signing,
+    /// Time-stamping: the `extendedKeyUsage` is present and names `id-kp-timeStamping`.
+    Timestamping,
+}
+
 /// The certificates a caller trusts. A path ends at one of them; neither its validity nor
 /// its extensions are judged (RFC 5280 §6.1). [`TrustAnchors::default`] trusts none.
 #[derive(Debug, Clone, Default)]
@@ -112,7 +124,7 @@ pub enum ChainDefect {
     /// The signer's `keyUsage` allows neither `digitalSignature` nor `nonRepudiation`.
     KeyUsage,
     /// The signer's certificate (`depth` 0) has an `extendedKeyUsage` naming no document
-    /// signing purpose.
+    /// signing purpose; for a timestamp authority's path, one lacking `id-kp-timeStamping`.
     ExtendedKeyUsage { depth: usize },
     /// The issuing certificate at `depth` is not a CA (`basicConstraints` absent or `cA`
     /// false).
@@ -171,6 +183,17 @@ pub fn build_chain(
     anchors: &TrustAnchors,
     at: SystemTime,
 ) -> Result<CertificatePath, ChainDefect> {
+    build_path(signer, pool, anchors, at, Purpose::Signing)
+}
+
+/// [`build_chain`] with the leaf judged for `purpose`.
+pub(crate) fn build_path(
+    signer: &[u8],
+    pool: &[&[u8]],
+    anchors: &TrustAnchors,
+    at: SystemTime,
+    purpose: Purpose,
+) -> Result<CertificatePath, ChainDefect> {
     let leaf = Node::read(signer).map_err(|_| ChainDefect::SignerUnreadable)?;
     if anchors.anchors.iter().any(|anchor| anchor.der == leaf.der) {
         return Ok(CertificatePath {
@@ -205,6 +228,7 @@ pub fn build_chain(
         nodes: &nodes,
         anchors: &anchors.anchors,
         at,
+        purpose,
         issued: HashMap::new(),
         certified: vec![false; nodes.len()],
         steps: 0,
@@ -284,6 +308,7 @@ struct Search<'n> {
     nodes: &'n [Node],
     anchors: &'n [Node],
     at: SystemTime,
+    purpose: Purpose,
     /// Whether the issuer (second) signed the child (first), once verified.
     issued: HashMap<(Id, Id), bool>,
     /// Pool certificates an anchor certifies, directly or through certified ones.
@@ -352,7 +377,7 @@ impl<'n> Search<'n> {
                 continue;
             }
             let nodes: Vec<&Node> = path.iter().map(|id| self.node(*id)).collect();
-            match judge(&nodes, self.at) {
+            match judge(&nodes, self.at, self.purpose) {
                 Ok(()) => return self.anchors.get(a),
                 Err(defect) => {
                     self.first_defect.get_or_insert(defect);
@@ -390,8 +415,9 @@ impl<'n> Search<'n> {
     }
 }
 
-/// Judges `path`, leaf first, its anchor left out, at `at` (RFC 5280 §6.1.3, §6.1.4).
-fn judge(path: &[&Node], at: SystemTime) -> Result<(), ChainDefect> {
+/// Judges `path`, leaf first, its anchor left out, at `at` (RFC 5280 §6.1.3, §6.1.4), its
+/// leaf for `purpose`.
+fn judge(path: &[&Node], at: SystemTime, purpose: Purpose) -> Result<(), ChainDefect> {
     for (depth, node) in path.iter().enumerate() {
         let tbs = node.certificate.tbs_certificate();
         let validity = tbs.validity();
@@ -419,9 +445,15 @@ fn judge(path: &[&Node], at: SystemTime) -> Result<(), ChainDefect> {
             // RFC 5280 §4.2.1.12: when present, critical or not, the signer may only be used
             // for the purposes it lists. An issuer's EKU is decoded but not judged: RFC 5280
             // does not chain it.
-            if let Some((_, purposes)) = extended_key_usage
-                && !purposes.0.iter().any(|p| SIGNING_PURPOSES.contains(p))
-            {
+            let fit = match (purpose, extended_key_usage) {
+                (Purpose::Signing, None) => true,
+                (Purpose::Signing, Some((_, purposes))) => {
+                    purposes.0.iter().any(|p| SIGNING_PURPOSES.contains(p))
+                }
+                (Purpose::Timestamping, None) => false,
+                (Purpose::Timestamping, Some((_, purposes))) => purposes.0.contains(&TIME_STAMPING),
+            };
+            if !fit {
                 return Err(ChainDefect::ExtendedKeyUsage { depth });
             }
             // RFC 5280 §4.2.1.3: an absent keyUsage restricts nothing.

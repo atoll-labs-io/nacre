@@ -1,20 +1,30 @@
 use std::time::SystemTime;
 
-use der::{Decode, Header, Reader, SliceReader, Tag};
+use der::asn1::ObjectIdentifier;
+use der::{Decode, Encode, Header, Reader, SliceReader, Tag};
 use nacre_cms::SignedData;
+use nacre_core::{DigestAlgorithm, RevocationData, RevocationSource};
 use nacre_pdf::{Dictionary, Document, Object};
 use sha2::{Digest, Sha256};
 
+use crate::chain::{Purpose, build_path};
 use crate::revisions::{Qualified, qualify};
+use crate::revocation::{FRESHNESS_TOLERANCE, RevocationPool, judge_path};
 use crate::{
     ChainDefect, Defect, Error, LaterRevision, RevisionVerdict, SignatureValidation, TrustAnchors,
-    build_chain,
 };
 
 /// Bounds the hashing one call may do to 64 times the largest accepted input (50 MB).
 const MAX_SIGNATURES: usize = 64;
 
 const SUB_FILTERS: [&[u8]; 2] = [b"ETSI.CAdES.detached", b"adbe.pkcs7.detached"];
+
+/// `id-aa-signatureTimeStampToken` (RFC 3161 Appendix A).
+const SIGNATURE_TIME_STAMP_TOKEN: ObjectIdentifier =
+    ObjectIdentifier::new_unwrap("1.2.840.113549.1.9.16.2.14");
+
+/// Signature timestamps of one signature that are judged; later ones are ignored.
+const MAX_TIMESTAMPS: usize = 16;
 
 /// Validates the integrity of every signature of `pdf`, in field order, and qualifies each
 /// revision appended after it, trusting no certificate.
@@ -32,26 +42,63 @@ pub fn validate(pdf: &[u8]) -> Result<Vec<SignatureValidation>, Error> {
     validate_with_anchors(pdf, &TrustAnchors::default(), SystemTime::UNIX_EPOCH)
 }
 
-/// Validates as [`validate`] does, then builds and judges, at the control date `at`, the
-/// chain of each signature that passed every other check, from the certificates of its CMS
-/// and of the document's `/DSS` (`/Certs`, unfiltered streams only) up to `anchors`.
-///
-/// No path gives `INDETERMINATE` / `NO_CERTIFICATE_CHAIN_FOUND` with no defect; a path with
-/// a defect gives [`Defect::Chain`] and its report; a valid path is kept in
-/// [`SignatureValidation::chain`] and gives `INDETERMINATE` / `TRY_LATER`, its revocation
-/// not being judged yet.
+/// [`validate_with_revocation`] with no [`RevocationSource`]: only the revocation data the
+/// document carries is read.
 pub fn validate_with_anchors(
     pdf: &[u8],
     anchors: &TrustAnchors,
     at: SystemTime,
 ) -> Result<Vec<SignatureValidation>, Error> {
-    validate_with(pdf, anchors, at, MAX_SIGNATURES)
+    validate_with_revocation(pdf, anchors, at, None)
+}
+
+/// Validates as [`validate`] does, then, for each signature that passed every other check,
+/// judges its certificate chain and its revocation up to `anchors`, the control date being
+/// `at`.
+///
+/// The best-signature-time is the `genTime` of the earliest signature timestamp whose token
+/// verifies over the signature value, whose authority's path (leaf `id-kp-timeStamping`)
+/// reaches `anchors` valid at `at`, and whose revocation passes at `at`; with no such
+/// timestamp, or one dated after `at`, it is `at`. It is returned in
+/// [`SignatureValidation::best_signature_time`]. At most 16 timestamps are judged, each
+/// against a SHA-256 imprint of the signature value only: a token whose imprint uses
+/// another algorithm gives no proof of time.
+///
+/// The signer's path is built and judged (RFC 5280) at the best-signature-time from the
+/// certificates of the CMS and of the document's `/DSS` (`/Certs`, unfiltered streams
+/// only). Then each certificate of it below the anchor is judged against the CRLs of the
+/// CMS and of the timestamp tokens, the `/DSS` `/CRLs` and `/OCSPs`, and the one answer of
+/// `source` when given: of the data that verifies and was issued after the certificate's
+/// `notBefore`, the latest decides. With a best-signature-time from a timestamp,
+/// freshness is not judged, as DSS 6.5.1 does. Without one, only data issued within 24
+/// hours before `at` (the CRL's `thisUpdate`, the response's `producedAt`) counts, so an
+/// old "not revoked" in the `/DSS` cannot pass a key revoked since: a deliberate departure
+/// from DSS, which ignores freshness there too. A revocation at or before the
+/// best-signature-time gives [`Defect::Revocation`], `INDETERMINATE` / `REVOKED_NO_POE`
+/// (`REVOKED_CA_NO_POE` for a CA), and a certificate with no usable data gives
+/// `INDETERMINATE` / `CERTIFICATE_CHAIN_GENERAL_FAILURE`; both keep the path in
+/// [`SignatureValidation::chain`]. A path whose revocation passes gives `TOTAL_PASSED`,
+/// with no level.
+///
+/// No path gives `INDETERMINATE` / `NO_CERTIFICATE_CHAIN_FOUND` with no defect; a path with
+/// a defect gives [`Defect::Chain`] and its report.
+///
+/// `source` is reached only for certificates of a path an anchor certifies, and its
+/// failures count as no answer. Nothing else here opens a connection or reads the clock.
+pub fn validate_with_revocation(
+    pdf: &[u8],
+    anchors: &TrustAnchors,
+    at: SystemTime,
+    source: Option<&dyn RevocationSource>,
+) -> Result<Vec<SignatureValidation>, Error> {
+    validate_with(pdf, anchors, at, source, MAX_SIGNATURES)
 }
 
 fn validate_with(
     pdf: &[u8],
     anchors: &TrustAnchors,
     at: SystemTime,
+    source: Option<&dyn RevocationSource>,
     max_signatures: usize,
 ) -> Result<Vec<SignatureValidation>, Error> {
     let doc = Document::parse(pdf)?;
@@ -90,9 +137,9 @@ fn validate_with(
         None => Vec::new(),
     };
     let dss = if anchors.is_empty() {
-        Vec::new()
+        Dss::default()
     } else {
-        dss_certificates(&doc, pdf)
+        Dss::read(&doc, pdf)
     };
 
     Ok(checked
@@ -130,23 +177,141 @@ fn validate_with(
                     SignatureValidation::defective(field, Defect::RevisionNotAllowed { end }, mine)
                 }
                 (Ok(signed), None, None) => {
-                    let pool: Vec<&[u8]> = signed
-                        .certificates
-                        .iter()
-                        .chain(&dss)
-                        .map(Vec::as_slice)
-                        .collect();
-                    match build_chain(&signed.signer, &pool, anchors, at) {
-                        Ok(path) => SignatureValidation::sound(field, mine, Some(path)),
-                        Err(ChainDefect::NoPath) => SignatureValidation::sound(field, mine, None),
-                        Err(defect) => {
-                            SignatureValidation::defective(field, Defect::Chain(defect), mine)
-                        }
-                    }
+                    let context = Context {
+                        anchors,
+                        at,
+                        source,
+                        dss: &dss,
+                    };
+                    context.judge(field, mine, &signed)
                 }
             }
         })
         .collect())
+}
+
+/// A signature timestamp token, with the certificates and CRLs its `SignedData` carries.
+struct Token<'a> {
+    der: &'a [u8],
+    certificates: Vec<Vec<u8>>,
+    crls: Vec<Vec<u8>>,
+}
+
+/// What a sound signature's chain, timestamps and revocation are judged with.
+struct Context<'a> {
+    anchors: &'a TrustAnchors,
+    at: SystemTime,
+    source: Option<&'a dyn RevocationSource>,
+    dss: &'a Dss,
+}
+
+impl Context<'_> {
+    fn judge(
+        &self,
+        field: String,
+        mine: Vec<LaterRevision>,
+        signed: &Signed,
+    ) -> SignatureValidation {
+        if self.anchors.is_empty() {
+            return SignatureValidation::sound(field, mine, None, None);
+        }
+        let tokens: Vec<Token<'_>> = signed
+            .timestamps
+            .iter()
+            .map(|der| {
+                let (certificates, crls) = SignedData::from_der(der)
+                    .map(|data| (data.certificates, data.crls))
+                    .unwrap_or_default();
+                Token {
+                    der,
+                    certificates,
+                    crls,
+                }
+            })
+            .collect();
+        // The signature's own data first, so whatever `/DSS` appends cannot push it out of
+        // the capped pool.
+        let revocation: Vec<RevocationData> = signed
+            .crls
+            .iter()
+            .chain(tokens.iter().flat_map(|token| &token.crls))
+            .chain(&self.dss.crls)
+            .cloned()
+            .map(RevocationData::Crl)
+            .chain(self.dss.ocsps.iter().cloned().map(RevocationData::Ocsp))
+            .collect();
+        let pool = RevocationPool::from_der(&revocation);
+
+        let best_signature_time = tokens
+            .iter()
+            .filter_map(|token| self.proven_time(token, signed, &pool))
+            .min();
+        let time = best_signature_time.unwrap_or(self.at);
+        // With no proof of existence, data issued long before the control date could
+        // predate a revocation the signer's key already suffered.
+        let issued_from = best_signature_time
+            .is_none()
+            .then(|| self.at.checked_sub(FRESHNESS_TOLERANCE).unwrap_or(self.at));
+
+        let certificates: Vec<&[u8]> = signed
+            .certificates
+            .iter()
+            .chain(&self.dss.certificates)
+            .map(Vec::as_slice)
+            .collect();
+        match build_path(
+            &signed.signer,
+            &certificates,
+            self.anchors,
+            time,
+            Purpose::Signing,
+        ) {
+            Ok(path) => match judge_path(&path, &pool, self.source, time, issued_from) {
+                Ok(()) => SignatureValidation::sound(field, mine, Some(path), best_signature_time),
+                Err(defect) => {
+                    SignatureValidation::revoked(field, defect, mine, path, best_signature_time)
+                }
+            },
+            Err(ChainDefect::NoPath) => {
+                SignatureValidation::sound(field, mine, None, best_signature_time)
+            }
+            Err(defect) => SignatureValidation {
+                best_signature_time,
+                ..SignatureValidation::defective(field, Defect::Chain(defect), mine)
+            },
+        }
+    }
+
+    /// The `genTime` `token` proves for `signed`, when it verifies over the signature value,
+    /// its authority's path reaches an anchor at the control date and passes revocation
+    /// there, and it is not after the control date.
+    fn proven_time(
+        &self,
+        token: &Token<'_>,
+        signed: &Signed,
+        pool: &RevocationPool,
+    ) -> Option<SystemTime> {
+        let verified =
+            nacre_tsp::verify_token(token.der, DigestAlgorithm::Sha256, &signed.imprint).ok()?;
+        let certificates: Vec<&[u8]> = token
+            .certificates
+            .iter()
+            .chain(&signed.certificates)
+            .chain(&self.dss.certificates)
+            .map(Vec::as_slice)
+            .collect();
+        let path = build_path(
+            verified.tsa_certificate(),
+            &certificates,
+            self.anchors,
+            self.at,
+            Purpose::Timestamping,
+        )
+        .ok()?;
+        judge_path(&path, pool, self.source, self.at, None).ok()?;
+        let time = x509_cert::time::Time::from(verified.gen_time()).to_system_time();
+        (time <= self.at).then_some(time)
+    }
 }
 
 fn is_document_timestamp(dict: &Dictionary) -> bool {
@@ -205,11 +370,15 @@ fn signed_bytes(
     Ok((end, contents, [b, c]))
 }
 
-/// What a verified CMS gives the chain: the signer's certificate and every certificate it
-/// carries, as DER.
+/// What a verified CMS gives the chain and revocation, as DER: the signer's certificate,
+/// every certificate and CRL it carries, the SHA-256 of the signature value and the first
+/// signature timestamp tokens.
 struct Signed {
     signer: Vec<u8>,
     certificates: Vec<Vec<u8>>,
+    crls: Vec<Vec<u8>>,
+    imprint: Vec<u8>,
+    timestamps: Vec<Vec<u8>>,
 }
 
 fn verify(pdf: &[u8], contents: &[u8], [b, c, end]: [usize; 3]) -> Result<Signed, Defect> {
@@ -220,27 +389,57 @@ fn verify(pdf: &[u8], contents: &[u8], [b, c, end]: [usize; 3]) -> Result<Signed
     hasher.update(pdf.get(c..end).unwrap_or_default());
     let digest = hasher.finalize();
     let signed = SignedData::from_der(der).map_err(Defect::Cms)?;
-    let signer = signed
+    let verified = signed
         .verify_detached_digest(&digest)
-        .map_err(Defect::Cms)?
-        .certificate()
-        .to_vec();
+        .map_err(Defect::Cms)?;
+    let info = verified.signer_info();
+    let timestamps = info
+        .unsigned_attrs
+        .iter()
+        .filter(|attribute| attribute.oid == SIGNATURE_TIME_STAMP_TOKEN)
+        .flat_map(|attribute| &attribute.values)
+        .take(MAX_TIMESTAMPS)
+        .filter_map(|value| value.to_der().ok())
+        .collect();
+    let imprint = Sha256::digest(&info.signature).to_vec();
+    let signer = verified.certificate().to_vec();
     Ok(Signed {
         signer,
-        certificates: signed.certificates,
+        certificates: signed.certificates.clone(),
+        crls: signed.crls.clone(),
+        imprint,
+        timestamps,
     })
 }
 
-/// The raw data of each unfiltered stream the `/DSS /Certs` of `doc` lists. Anything
-/// unreadable is left out: the chain then misses it rather than guesses.
-fn dss_certificates(doc: &Document<'_>, pdf: &[u8]) -> Vec<Vec<u8>> {
-    let Some(Object::Dictionary(dss)) = follow_once(doc, doc.catalog().get(b"DSS")) else {
+/// The raw data of the unfiltered streams the document's `/DSS` lists.
+#[derive(Debug, Default)]
+struct Dss {
+    certificates: Vec<Vec<u8>>,
+    crls: Vec<Vec<u8>>,
+    ocsps: Vec<Vec<u8>>,
+}
+
+impl Dss {
+    fn read(doc: &Document<'_>, pdf: &[u8]) -> Self {
+        let Some(Object::Dictionary(dss)) = follow_once(doc, doc.catalog().get(b"DSS")) else {
+            return Self::default();
+        };
+        Self {
+            certificates: dss_streams(doc, pdf, &dss, b"Certs"),
+            crls: dss_streams(doc, pdf, &dss, b"CRLs"),
+            ocsps: dss_streams(doc, pdf, &dss, b"OCSPs"),
+        }
+    }
+}
+
+/// The raw data of each unfiltered stream the `/DSS` array `key` lists. Anything
+/// unreadable is left out: the judgement then misses it rather than guesses.
+fn dss_streams(doc: &Document<'_>, pdf: &[u8], dss: &Dictionary, key: &[u8]) -> Vec<Vec<u8>> {
+    let Some(Object::Array(items)) = follow_once(doc, dss.get(key)) else {
         return Vec::new();
     };
-    let Some(Object::Array(certs)) = follow_once(doc, dss.get(b"Certs")) else {
-        return Vec::new();
-    };
-    certs
+    items
         .iter()
         .filter_map(|item| match follow_once(doc, Some(item)) {
             Some(Object::Stream(stream)) if stream.dict.get(b"Filter").is_none() => {
@@ -325,8 +524,14 @@ mod tests {
         .unwrap();
         let twice = sign(&once, &signer, time).unwrap();
 
-        let error =
-            validate_with(&twice, &TrustAnchors::default(), SystemTime::UNIX_EPOCH, 1).unwrap_err();
+        let error = validate_with(
+            &twice,
+            &TrustAnchors::default(),
+            SystemTime::UNIX_EPOCH,
+            None,
+            1,
+        )
+        .unwrap_err();
 
         assert!(
             matches!(error, Error::TooManySignatures { count: 2, max: 1 }),
