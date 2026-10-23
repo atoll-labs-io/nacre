@@ -39,11 +39,12 @@ fn signature_imprint(cms: &[u8]) -> Result<Vec<u8>, Error> {
     Ok(Sha256::digest(&info.signature).to_vec())
 }
 
-/// Asks `tsa` to time-stamp the signature value of `cms` and returns `cms` carrying the token.
+/// Asks `tsa` to time-stamp the signature value of `cms` and returns `cms` carrying the token,
+/// then the token's DER.
 pub(crate) fn timestamp_signature(
     cms: &[u8],
     tsa: &dyn TimestampAuthority,
-) -> Result<Vec<u8>, Error> {
+) -> Result<(Vec<u8>, Vec<u8>), Error> {
     let imprint = signature_imprint(cms)?;
     let token = tsa
         .timestamp(DigestAlgorithm::Sha256, &imprint)
@@ -54,6 +55,6 @@ pub(crate) fn timestamp_signature(
             max: TIMESTAMP_TOKEN_MAX,
         });
     }
-    let token = Any::from_der(&token).map_err(Error::TimestampToken)?;
-    with_token(cms, token)
+    let parsed = Any::from_der(&token).map_err(Error::TimestampToken)?;
+    Ok((with_token(cms, parsed)?, token))
 }

@@ -8,12 +8,14 @@
 use std::cell::{Cell, RefCell};
 
 use der::{Decode, Header, Reader, SliceReader};
-use nacre_cms::{SignedData, oid};
+use nacre_cms::{Profile, SignedData, oid};
 use nacre_core::{
-    DigestAlgorithm, ErrorKind, SignatureAlgorithm, Signer, TestSigner, TimestampAuthority,
+    DigestAlgorithm, ErrorKind, RevocationData, RevocationSource, SignatureAlgorithm, Signer,
+    TestSigner, TimestampAuthority,
 };
 use nacre_pades::{DateTime, Error, Level, TIMESTAMP_TOKEN_MAX, sign, sign_at_level};
-use nacre_pdf::{Dictionary, Document, Object};
+use nacre_pdf::{Dictionary, Document, Object, ObjectId};
+use sha1::Sha1;
 use sha2::{Digest, Sha256};
 
 const UNSIGNED: &[u8] = include_bytes!("corpus/unsigned.pdf");
@@ -339,4 +341,360 @@ fn malformed_token_is_refused() {
 
     assert!(matches!(error, Error::TimestampToken(_)), "{error}");
     assert_eq!(error.kind(), ErrorKind::InvalidInput);
+}
+
+const EC_CA: &[u8] = include_bytes!("corpus/pki/ec-ca.der");
+const LEAF: &[u8] = include_bytes!("corpus/pki/leaf.der");
+const REVOKED: &[u8] = include_bytes!("corpus/pki/revoked.der");
+const EC_CA_CRL: &[u8] = include_bytes!("corpus/pki/ec-ca.crl");
+const GOOD_OCSP: &[u8] = include_bytes!("corpus/pki/good.der");
+
+/// Signs with the test key and presents `chain`; nothing here checks one against the other.
+struct Chained {
+    inner: TestSigner,
+    chain: Vec<Vec<u8>>,
+}
+
+impl Signer for Chained {
+    fn algorithm(&self) -> SignatureAlgorithm {
+        self.inner.algorithm()
+    }
+
+    fn certificate_chain(&self) -> &[Vec<u8>] {
+        &self.chain
+    }
+
+    fn sign_digest(&self, digest: &[u8]) -> Result<Vec<u8>, nacre_core::Error> {
+        self.inner.sign_digest(digest)
+    }
+}
+
+fn chained(chain: &[&[u8]]) -> Chained {
+    Chained {
+        inner: signer(),
+        chain: chain.iter().map(|c| c.to_vec()).collect(),
+    }
+}
+
+/// A real `SignedData` carrying `chain`, standing in for a token pades never verifies.
+fn cms_token(chain: &[&[u8]]) -> FakeTsa {
+    FakeTsa::answering(
+        nacre_cms::sign_detached(&[0; 32], &chained(chain), &Profile::CMS, None).unwrap(),
+    )
+}
+
+struct Recording {
+    asked: RefCell<Vec<Vec<u8>>>,
+    failing: Option<&'static [u8]>,
+}
+
+fn recording(failing: Option<&'static [u8]>) -> Recording {
+    Recording {
+        asked: RefCell::new(Vec::new()),
+        failing,
+    }
+}
+
+impl RevocationSource for Recording {
+    fn revocation(
+        &self,
+        certificate: &[u8],
+        _issuer: &[u8],
+    ) -> Result<RevocationData, nacre_core::Error> {
+        self.asked.borrow_mut().push(certificate.to_vec());
+        if self.failing == Some(certificate) {
+            return Err(nacre_core::Error::Revocation("down".into()));
+        }
+        Ok(if certificate == LEAF {
+            RevocationData::Ocsp(GOOD_OCSP.to_vec())
+        } else {
+            RevocationData::Crl(EC_CA_CRL.to_vec())
+        })
+    }
+}
+
+struct Dss {
+    certs: Vec<(ObjectId, Vec<u8>)>,
+    crls: Vec<(ObjectId, Vec<u8>)>,
+    ocsps: Vec<(ObjectId, Vec<u8>)>,
+    /// Each `/VRI` key and its entry's reference, then its `/Cert`, `/CRL` and `/OCSP`.
+    vri: Vec<(Vec<u8>, ObjectId, [Vec<ObjectId>; 3])>,
+}
+
+fn references(value: Option<&Object>) -> Vec<ObjectId> {
+    match value {
+        None => Vec::new(),
+        Some(Object::Array(items)) => items
+            .iter()
+            .map(|item| match item {
+                Object::Reference(id) => *id,
+                _ => panic!("not a reference"),
+            })
+            .collect(),
+        Some(_) => panic!("not an array"),
+    }
+}
+
+fn dictionary_at(doc: &Document<'_>, id: ObjectId) -> Dictionary {
+    let Object::Dictionary(dict) = doc.object(id).unwrap() else {
+        panic!("{id} is not a dictionary");
+    };
+    dict
+}
+
+/// `/DSS` read back, each stream's raw bytes sliced from its data range.
+fn dss(pdf: &[u8]) -> Option<Dss> {
+    let doc = Document::parse(pdf).unwrap();
+    let Object::Reference(id) = doc.catalog().get(b"DSS")? else {
+        panic!("/DSS is not a reference");
+    };
+    let dss = dictionary_at(&doc, *id);
+    let streams = |key: &[u8]| -> Vec<(ObjectId, Vec<u8>)> {
+        references(dss.get(key))
+            .into_iter()
+            .map(|id| {
+                let Object::Stream(stream) = doc.object(id).unwrap() else {
+                    panic!("{id} is not a stream");
+                };
+                (id, pdf[stream.data].to_vec())
+            })
+            .collect()
+    };
+    let Some(Object::Dictionary(vri)) = dss.get(b"VRI") else {
+        panic!("no direct /VRI");
+    };
+    let vri = vri
+        .iter()
+        .map(|(key, value)| {
+            let Object::Reference(id) = value else {
+                panic!("VRI entry is not a reference");
+            };
+            let entry = dictionary_at(&doc, *id);
+            assert_eq!(entry.get(b"Type"), Some(&Object::Name(b"VRI".to_vec())));
+            (
+                key.to_vec(),
+                *id,
+                [
+                    references(entry.get(b"Cert")),
+                    references(entry.get(b"CRL")),
+                    references(entry.get(b"OCSP")),
+                ],
+            )
+        })
+        .collect();
+    Some(Dss {
+        certs: streams(b"Certs"),
+        crls: streams(b"CRLs"),
+        ocsps: streams(b"OCSPs"),
+        vri,
+    })
+}
+
+fn ids(streams: &[(ObjectId, Vec<u8>)]) -> Vec<ObjectId> {
+    streams.iter().map(|(id, _)| *id).collect()
+}
+
+fn bytes(streams: &[(ObjectId, Vec<u8>)]) -> Vec<Vec<u8>> {
+    streams.iter().map(|(_, b)| b.clone()).collect()
+}
+
+fn sign_lt(
+    pdf: &[u8],
+    signer: &Chained,
+    tsa: &FakeTsa,
+    source: &Recording,
+    issuers: &[Vec<u8>],
+) -> Result<Vec<u8>, Error> {
+    sign_at_level(
+        pdf,
+        signer,
+        time(),
+        Level::LT {
+            tsa,
+            revocation: source,
+            issuers,
+        },
+    )
+}
+
+#[test]
+fn level_lt_writes_dss_after_the_signature() {
+    let source = recording(None);
+
+    let signed = sign_lt(
+        UNSIGNED,
+        &chained(&[LEAF, EC_CA]),
+        &cms_token(&[REVOKED, EC_CA]),
+        &source,
+        &[],
+    )
+    .unwrap();
+
+    let dss = dss(&signed).unwrap();
+    let mut certs = bytes(&dss.certs);
+    certs.sort();
+    let mut expected = vec![LEAF.to_vec(), REVOKED.to_vec(), EC_CA.to_vec()];
+    expected.sort();
+    assert_eq!(certs, expected);
+    assert_eq!(bytes(&dss.crls), vec![EC_CA_CRL.to_vec()]);
+    assert_eq!(bytes(&dss.ocsps), vec![GOOD_OCSP.to_vec()]);
+    let asked = source.asked.borrow();
+    assert_eq!(asked.iter().filter(|c| c.as_slice() == LEAF).count(), 1);
+    assert_eq!(asked.iter().filter(|c| c.as_slice() == REVOKED).count(), 1);
+    assert!(!asked.iter().any(|c| c.as_slice() == EC_CA));
+
+    let read = &signatures(&signed)[0];
+    let key: String = Sha1::digest(&read.contents)
+        .iter()
+        .map(|b| format!("{b:02X}"))
+        .collect();
+    assert_eq!(dss.vri.len(), 1);
+    let (vri_key, _, [cert, crl, ocsp]) = &dss.vri[0];
+    assert_eq!(vri_key, key.as_bytes());
+    assert_eq!(cert, &ids(&dss.certs));
+    assert_eq!(crl, &ids(&dss.crls));
+    assert_eq!(ocsp, &ids(&dss.ocsps));
+
+    let revisions = Document::parse(&signed).unwrap().revisions().to_vec();
+    assert_eq!(
+        revisions.len(),
+        Document::parse(UNSIGNED).unwrap().revisions().len() + 2
+    );
+    let [_, _, c, d] = read.byte_range;
+    assert_eq!(revisions[revisions.len() - 2].end, c + d);
+    assert!(dss_free(&signed[..c + d]));
+}
+
+fn dss_free(pdf: &[u8]) -> bool {
+    Document::parse(pdf)
+        .unwrap()
+        .catalog()
+        .get(b"DSS")
+        .is_none()
+}
+
+#[test]
+fn level_lt_adds_nothing_to_the_cms() {
+    let signed = sign_lt(
+        UNSIGNED,
+        &chained(&[LEAF, EC_CA]),
+        &cms_token(&[REVOKED, EC_CA]),
+        &recording(None),
+        &[],
+    )
+    .unwrap();
+
+    let cms = SignedData::from_der(&signatures(&signed)[0].cms).unwrap();
+    assert!(cms.crls.is_empty());
+    let mut certificates = cms.certificates.clone();
+    certificates.sort();
+    let mut chain = vec![LEAF.to_vec(), EC_CA.to_vec()];
+    chain.sort();
+    assert_eq!(certificates, chain);
+    let unsigned = &cms.signer_infos[0].unsigned_attrs;
+    assert_eq!(unsigned.len(), 1);
+    assert_eq!(unsigned[0].oid, SIGNATURE_TIME_STAMP_TOKEN);
+}
+
+/// The B-T file inside a `LongTerm` error: one signature carrying the token, no `/DSS`.
+fn assert_bt(signed: &[u8]) {
+    let reads = signatures(signed);
+    assert_eq!(reads.len(), 1);
+    let cms = SignedData::from_der(&reads[0].cms).unwrap();
+    assert_eq!(cms.signer_infos[0].unsigned_attrs.len(), 1);
+    assert!(dss_free(signed));
+}
+
+#[test]
+fn unavailable_revocation_names_the_certificate_and_returns_bt() {
+    let error = sign_lt(
+        UNSIGNED,
+        &chained(&[LEAF, EC_CA]),
+        &cms_token(&[REVOKED, EC_CA]),
+        &recording(Some(REVOKED)),
+        &[],
+    )
+    .unwrap_err();
+
+    assert!(
+        error
+            .to_string()
+            .contains("Nacre OpenSSL CRL fixture revoked"),
+        "{error}"
+    );
+    assert_eq!(error.kind(), ErrorKind::Unavailable);
+    let Error::LongTerm { signed, source } = error else {
+        panic!("not LongTerm");
+    };
+    let Error::Revocation { certificate, .. } = *source else {
+        panic!("not Revocation: {source}");
+    };
+    assert!(
+        certificate.contains("Nacre OpenSSL CRL fixture revoked"),
+        "{certificate}"
+    );
+    assert_bt(&signed.0);
+}
+
+#[test]
+fn missing_issuer_names_the_certificate() {
+    let error = sign_lt(
+        UNSIGNED,
+        &chained(&[LEAF]),
+        &cms_token(&[REVOKED]),
+        &recording(None),
+        &[],
+    )
+    .unwrap_err();
+
+    assert_eq!(error.kind(), ErrorKind::Indeterminate);
+    let Error::LongTerm { signed, source } = error else {
+        panic!("not LongTerm");
+    };
+    let Error::IssuerMissing { certificate } = *source else {
+        panic!("not IssuerMissing: {source}");
+    };
+    assert!(
+        certificate.contains("Nacre OpenSSL CRL fixture leaf"),
+        "{certificate}"
+    );
+    assert_bt(&signed.0);
+
+    let signed = sign_lt(
+        UNSIGNED,
+        &chained(&[LEAF]),
+        &cms_token(&[REVOKED]),
+        &recording(None),
+        &[EC_CA.to_vec()],
+    )
+    .unwrap();
+
+    assert!(bytes(&dss(&signed).unwrap().certs).contains(&EC_CA.to_vec()));
+}
+
+#[test]
+fn second_lt_signature_keeps_the_earlier_dss() {
+    let signer = chained(&[LEAF, EC_CA]);
+    let tsa = cms_token(&[REVOKED, EC_CA]);
+    let once = sign_lt(UNSIGNED, &signer, &tsa, &recording(None), &[]).unwrap();
+    let twice = sign_lt(&once, &signer, &tsa, &recording(None), &[]).unwrap();
+
+    let first = dss(&once).unwrap();
+    let second = dss(&twice).unwrap();
+    assert_eq!(second.vri.len(), 2);
+    let (first_key, first_entry, _) = &first.vri[0];
+    assert!(
+        second
+            .vri
+            .iter()
+            .any(|(key, entry, _)| key == first_key && entry == first_entry)
+    );
+    for (before, after) in [
+        (&first.certs, &second.certs),
+        (&first.crls, &second.crls),
+        (&first.ocsps, &second.ocsps),
+    ] {
+        assert!(ids(after).starts_with(&ids(before)));
+        assert!(after.len() > before.len());
+    }
 }
