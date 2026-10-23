@@ -1,0 +1,492 @@
+# Criterion 3 - an expired certificate, a signing key usage absent, a violated basic constraint give the matching EN 319 102-1 sub-indication
+# Scenario program: qa-scen, a scratch binary crate under the QA temp dir depending by path on crates/nacre-validate, nacre-pades, nacre-pdf and nacre-core of the copy; source quoted whole at the end.
+# Tree under test: 9b22467f80aeed829d7d4cc6ffc8f832f16e4241 (copy of git ls-files; cargo fetch: exit 0; cargo build --workspace --all-features: exit 0)
+# Bench PKI: conformance/pki/generate.sh run on the host (OpenSSL 3.6.5) inside the copy, out/ in the temp dir only; fresh keys, so certificate hashes differ from earlier walks.
+# Certificates are shown by the first 8 bytes of their SHA-256.
+## corpus attack files (forge_chain_attacks), anchor chain/root.der, control date 2026-10-22
+$ <tmp>/target-scen/debug/qa-scen anchors <tmp>/copy/crates/nacre-validate/tests/corpus/attacks/chain-expired.pdf 2026-10-22 <tmp>/copy/crates/nacre-validate/tests/corpus/chain/root.der   (cwd: <tmp>/work, stdin: none)
+signatures: 1
+- field "Signature1"
+  indication: INDETERMINATE / Some("OUT_OF_BOUNDS_NO_POE")
+  digest_verified=true signature_verified=true
+  defect: Some(Chain(Expired { depth: 0 }))
+  chain: None
+  later_revisions: 0
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen anchors <tmp>/copy/crates/nacre-validate/tests/corpus/attacks/chain-not-yet-valid.pdf 2026-10-22 <tmp>/copy/crates/nacre-validate/tests/corpus/chain/root.der   (cwd: <tmp>/work, stdin: none)
+signatures: 1
+- field "Signature1"
+  indication: INDETERMINATE / Some("OUT_OF_BOUNDS_NO_POE")
+  digest_verified=true signature_verified=true
+  defect: Some(Chain(NotYetValid { depth: 0 }))
+  chain: None
+  later_revisions: 0
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen anchors <tmp>/copy/crates/nacre-validate/tests/corpus/attacks/chain-key-usage.pdf 2026-10-22 <tmp>/copy/crates/nacre-validate/tests/corpus/chain/root.der   (cwd: <tmp>/work, stdin: none)
+signatures: 1
+- field "Signature1"
+  indication: INDETERMINATE / Some("CHAIN_CONSTRAINTS_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(Chain(KeyUsage))
+  chain: None
+  later_revisions: 0
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen anchors <tmp>/copy/crates/nacre-validate/tests/corpus/attacks/chain-extended-key-usage.pdf 2026-10-22 <tmp>/copy/crates/nacre-validate/tests/corpus/chain/root.der   (cwd: <tmp>/work, stdin: none)
+signatures: 1
+- field "Signature1"
+  indication: INDETERMINATE / Some("CHAIN_CONSTRAINTS_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(Chain(ExtendedKeyUsage { depth: 0 }))
+  chain: None
+  later_revisions: 0
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen anchors <tmp>/copy/crates/nacre-validate/tests/corpus/attacks/chain-leaf-as-ca.pdf 2026-10-22 <tmp>/copy/crates/nacre-validate/tests/corpus/chain/root.der   (cwd: <tmp>/work, stdin: none)
+signatures: 1
+- field "Signature1"
+  indication: INDETERMINATE / Some("CHAIN_CONSTRAINTS_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(Chain(NotACa { depth: 1 }))
+  chain: None
+  later_revisions: 0
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen anchors <tmp>/copy/crates/nacre-validate/tests/corpus/attacks/chain-ca-key-usage.pdf 2026-10-22 <tmp>/copy/crates/nacre-validate/tests/corpus/chain/root.der   (cwd: <tmp>/work, stdin: none)
+signatures: 1
+- field "Signature1"
+  indication: INDETERMINATE / Some("CHAIN_CONSTRAINTS_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(Chain(CaKeyUsage { depth: 1 }))
+  chain: None
+  later_revisions: 0
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen anchors <tmp>/copy/crates/nacre-validate/tests/corpus/attacks/chain-path-length.pdf 2026-10-22 <tmp>/copy/crates/nacre-validate/tests/corpus/chain/root.der   (cwd: <tmp>/work, stdin: none)
+signatures: 1
+- field "Signature1"
+  indication: INDETERMINATE / Some("CHAIN_CONSTRAINTS_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(Chain(PathLength { depth: 2 }))
+  chain: None
+  later_revisions: 0
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen anchors <tmp>/copy/crates/nacre-validate/tests/corpus/attacks/chain-critical-extension.pdf 2026-10-22 <tmp>/copy/crates/nacre-validate/tests/corpus/chain/root.der   (cwd: <tmp>/work, stdin: none)
+signatures: 1
+- field "Signature1"
+  indication: INDETERMINATE / Some("CERTIFICATE_CHAIN_GENERAL_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(Chain(UnsupportedCriticalExtension { depth: 1, oid: ObjectIdentifier(1.3.6.1.4.1.32473.1) }))
+  chain: None
+  later_revisions: 0
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen anchors <tmp>/copy/crates/nacre-validate/tests/corpus/attacks/chain-malformed-extension.pdf 2026-10-22 <tmp>/copy/crates/nacre-validate/tests/corpus/chain/root.der   (cwd: <tmp>/work, stdin: none)
+signatures: 1
+- field "Signature1"
+  indication: INDETERMINATE / Some("CERTIFICATE_CHAIN_GENERAL_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(Chain(MalformedExtension { depth: 0 }))
+  chain: None
+  later_revisions: 0
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen anchors <tmp>/copy/crates/nacre-validate/tests/corpus/attacks/chain-impostor-root.pdf 2026-10-22 <tmp>/copy/crates/nacre-validate/tests/corpus/chain/root.der   (cwd: <tmp>/work, stdin: none)
+signatures: 1
+- field "Signature1"
+  indication: INDETERMINATE / Some("NO_CERTIFICATE_CHAIN_FOUND")
+  digest_verified=true signature_verified=true
+  defect: None
+  chain: None
+  later_revisions: 0
+[exit code: 0]
+
+## certificates forged for this walk with OpenSSL (forge.sh and forge-extra.sh quoted below, run in <tmp>/work/f), through build_chain, anchor root.der, control date 2026-10-24
+$ <tmp>/target-scen/debug/qa-scen build leaf-nr.der 2026-10-24 root.der ca.der   (cwd: <tmp>/work/f, stdin: none)
+path: 3 certificates, sha256 prefixes ["b284ae100f1f0964", "8f7bad0466d7390f", "160feed7894ce3d9"]
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen build leaf-ke.der 2026-10-24 root.der ca.der   (cwd: <tmp>/work/f, stdin: none)
+defect: KeyUsage
+  report: INDETERMINATE / Some("CHAIN_CONSTRAINTS_FAILURE") level None
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen build leaf-noku.der 2026-10-24 root.der ca.der   (cwd: <tmp>/work/f, stdin: none)
+path: 3 certificates, sha256 prefixes ["51235a5d8f31af19", "8f7bad0466d7390f", "160feed7894ce3d9"]
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen build leaf-nc.der 2026-10-24 root.der ca.der   (cwd: <tmp>/work/f, stdin: none)
+defect: UnsupportedCriticalExtension { depth: 0, oid: ObjectIdentifier(2.5.29.30) }
+  report: INDETERMINATE / Some("CERTIFICATE_CHAIN_GENERAL_FAILURE") level None
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen build leaf-eku-server.der 2026-10-24 root.der ca.der   (cwd: <tmp>/work/f, stdin: none)
+defect: ExtendedKeyUsage { depth: 0 }
+  report: INDETERMINATE / Some("CHAIN_CONSTRAINTS_FAILURE") level None
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen build leaf-eku-server-nc.der 2026-10-24 root.der ca.der   (cwd: <tmp>/work/f, stdin: none)
+defect: ExtendedKeyUsage { depth: 0 }
+  report: INDETERMINATE / Some("CHAIN_CONSTRAINTS_FAILURE") level None
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen build leaf-eku-client-nc.der 2026-10-24 root.der ca.der   (cwd: <tmp>/work/f, stdin: none)
+path: 3 certificates, sha256 prefixes ["6d19179e80465cfd", "8f7bad0466d7390f", "160feed7894ce3d9"]
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen build leaf-eku-email.der 2026-10-24 root.der ca.der   (cwd: <tmp>/work/f, stdin: none)
+path: 3 certificates, sha256 prefixes ["7ee10f322a9b6e90", "8f7bad0466d7390f", "160feed7894ce3d9"]
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen build leaf-eku-docsign.der 2026-10-24 root.der ca.der   (cwd: <tmp>/work/f, stdin: none)
+path: 3 certificates, sha256 prefixes ["daf6f1f25efc9b80", "8f7bad0466d7390f", "160feed7894ce3d9"]
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen build leaf-eku-mixed.der 2026-10-24 root.der ca.der   (cwd: <tmp>/work/f, stdin: none)
+path: 3 certificates, sha256 prefixes ["a69184f8c579a843", "8f7bad0466d7390f", "160feed7894ce3d9"]
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen build leaf-under-nokcs.der 2026-10-24 root.der ca-nokcs.der   (cwd: <tmp>/work/f, stdin: none)
+defect: CaKeyUsage { depth: 1 }
+  report: INDETERMINATE / Some("CHAIN_CONSTRAINTS_FAILURE") level None
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen build leaf-under-nobc.der 2026-10-24 root.der ca-nobc.der   (cwd: <tmp>/work/f, stdin: none)
+defect: NotACa { depth: 1 }
+  report: INDETERMINATE / Some("CHAIN_CONSTRAINTS_FAILURE") level None
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen build leaf-under-ca-eku.der 2026-10-24 root.der ca-eku.der   (cwd: <tmp>/work/f, stdin: none)
+path: 3 certificates, sha256 prefixes ["479002ae50a44e0d", "69f063c799cc6742", "160feed7894ce3d9"]
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen build leaf-under-ca-eku-nc.der 2026-10-24 root.der ca-eku-nc.der   (cwd: <tmp>/work/f, stdin: none)
+path: 3 certificates, sha256 prefixes ["4750400788f78aed", "bac0109d227f4cb0", "160feed7894ce3d9"]
+[exit code: 0]
+## added in this walk for the rule changed by 7ece192 (EKU judged on the signer only, id-kp-clientAuth accepted): forge-eku.sh quoted below, run in <tmp>/work/f, through build_chain, anchor root.der, control date 2026-10-24
+$ <tmp>/target-scen/debug/qa-scen build leaf-eku-client.der 2026-10-24 root.der ca.der   (cwd: <tmp>/work/f, stdin: none)
+path: 3 certificates, sha256 prefixes ["2e98e032b1ea7fc0", "8f7bad0466d7390f", "160feed7894ce3d9"]
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen build leaf-eku-client-nc.der 2026-10-24 root.der ca.der   (cwd: <tmp>/work/f, stdin: none)
+path: 3 certificates, sha256 prefixes ["6d19179e80465cfd", "8f7bad0466d7390f", "160feed7894ce3d9"]
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen build leaf-eku-client-server.der 2026-10-24 root.der ca.der   (cwd: <tmp>/work/f, stdin: none)
+path: 3 certificates, sha256 prefixes ["b62d2727ecfce6f7", "8f7bad0466d7390f", "160feed7894ce3d9"]
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen build leaf-eku-code.der 2026-10-24 root.der ca.der   (cwd: <tmp>/work/f, stdin: none)
+defect: ExtendedKeyUsage { depth: 0 }
+  report: INDETERMINATE / Some("CHAIN_CONSTRAINTS_FAILURE") level None
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen build leaf-eku-server.der 2026-10-24 root.der ca.der   (cwd: <tmp>/work/f, stdin: none)
+defect: ExtendedKeyUsage { depth: 0 }
+  report: INDETERMINATE / Some("CHAIN_CONSTRAINTS_FAILURE") level None
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen build leaf-server-under-ca-email.der 2026-10-24 root.der ca-eku-email.der   (cwd: <tmp>/work/f, stdin: none)
+defect: ExtendedKeyUsage { depth: 0 }
+  report: INDETERMINATE / Some("CHAIN_CONSTRAINTS_FAILURE") level None
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen build leaf-client-under-ca-eku.der 2026-10-24 root.der ca-eku.der   (cwd: <tmp>/work/f, stdin: none)
+path: 3 certificates, sha256 prefixes ["5a7aecd809ca234e", "69f063c799cc6742", "160feed7894ce3d9"]
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen build leaf-under-ca-eku.der 2026-10-24 root.der ca-eku.der   (cwd: <tmp>/work/f, stdin: none)
+path: 3 certificates, sha256 prefixes ["479002ae50a44e0d", "69f063c799cc6742", "160feed7894ce3d9"]
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen build leaf-under-ca-eku-bad.der 2026-10-24 root.der ca-eku-bad.der   (cwd: <tmp>/work/f, stdin: none)
+defect: MalformedExtension { depth: 1 }
+  report: INDETERMINATE / Some("CERTIFICATE_CHAIN_GENERAL_FAILURE") level None
+[exit code: 0]
+## the same rule through validate_with_anchors: unsigned.pdf signed with qa-scen bench-sign from a directory holding the forged leaf as signer.key.pem / signer.cert.pem and its CA as intermediate.cert.pem (CMS chain [leaf, CA]), anchor f/root.der
+$ <tmp>/target-scen/debug/qa-scen anchors leaf-eku-client.pdf 2026-10-24 f/root.der   (cwd: <tmp>/work, stdin: none)
+signatures: 1
+- field "Signature1"
+  indication: INDETERMINATE / Some("TRY_LATER")
+  digest_verified=true signature_verified=true
+  defect: None
+  chain: 3 certificates, sha256 prefixes ["2e98e032b1ea7fc0", "8f7bad0466d7390f", "160feed7894ce3d9"]
+  later_revisions: 0
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen anchors leaf-server-under-ca-email.pdf 2026-10-24 f/root.der   (cwd: <tmp>/work, stdin: none)
+signatures: 1
+- field "Signature1"
+  indication: INDETERMINATE / Some("CHAIN_CONSTRAINTS_FAILURE")
+  digest_verified=true signature_verified=true
+  defect: Some(Chain(ExtendedKeyUsage { depth: 0 }))
+  chain: None
+  later_revisions: 0
+[exit code: 0]
+
+$ <tmp>/target-scen/debug/qa-scen anchors leaf-client-under-ca-eku.pdf 2026-10-24 f/root.der   (cwd: <tmp>/work, stdin: none)
+signatures: 1
+- field "Signature1"
+  indication: INDETERMINATE / Some("TRY_LATER")
+  digest_verified=true signature_verified=true
+  defect: None
+  chain: 3 certificates, sha256 prefixes ["5a7aecd809ca234e", "69f063c799cc6742", "160feed7894ce3d9"]
+  later_revisions: 0
+[exit code: 0]
+
+# Every run above was replayed once with identical output (two full passes compared byte for byte).
+
+# --- forge.sh ---
+set -eu
+k(){ openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out $1.key 2>/dev/null; }
+ext(){ printf '%s\n' "$2" > $1.ext; }
+k root; openssl req -x509 -new -key root.key -subj "/CN=QA Root" -days 3650 -sha256 \
+  -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign,cRLSign" -out root.pem 2>/dev/null
+issue(){ # name subject issuer extensions
+  k $1; openssl req -new -key $1.key -subj "/CN=$2" -out $1.csr 2>/dev/null; ext $1 "$4"
+  openssl x509 -req -in $1.csr -CA $3.pem -CAkey $3.key -set_serial 0x$(openssl rand -hex 8) -days 1000 -sha256 -extfile $1.ext -out $1.pem 2>/dev/null; }
+issue ca "QA CA" root "basicConstraints=critical,CA:TRUE
+keyUsage=critical,keyCertSign
+subjectKeyIdentifier=hash"
+issue ca-nokcs "QA CA no keyCertSign" root "basicConstraints=critical,CA:TRUE
+keyUsage=critical,digitalSignature"
+issue ca-nobc "QA CA no basicConstraints" root "keyUsage=critical,keyCertSign"
+issue ca-eku "QA CA critical EKU serverAuth" root "basicConstraints=critical,CA:TRUE
+keyUsage=critical,keyCertSign
+extendedKeyUsage=critical,serverAuth"
+issue leaf-nr "QA leaf nonRepudiation only" ca "basicConstraints=CA:FALSE
+keyUsage=critical,nonRepudiation"
+issue leaf-ke "QA leaf keyEncipherment only" ca "basicConstraints=CA:FALSE
+keyUsage=critical,keyEncipherment"
+issue leaf-noku "QA leaf no keyUsage" ca "basicConstraints=CA:FALSE"
+issue leaf-under-nokcs "QA leaf under CA without keyCertSign" ca-nokcs "basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature"
+issue leaf-under-nobc "QA leaf under CA without basicConstraints" ca-nobc "basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature"
+issue leaf-nc "QA leaf critical nameConstraints" ca "basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature
+nameConstraints=critical,permitted;DNS:example.org"
+issue leaf-eku-server "QA leaf critical EKU serverAuth" ca "basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature
+extendedKeyUsage=critical,serverAuth"
+issue leaf-eku-server-nc "QA leaf non-critical EKU serverAuth" ca "basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature
+extendedKeyUsage=serverAuth"
+issue leaf-eku-email "QA leaf critical EKU emailProtection" ca "basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature
+extendedKeyUsage=critical,emailProtection"
+issue leaf-eku-docsign "QA leaf critical EKU documentSigning" ca "basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature
+extendedKeyUsage=critical,1.3.6.1.5.5.7.3.36"
+issue leaf-eku-mixed "QA leaf critical EKU serverAuth and anyExtendedKeyUsage" ca "basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature
+extendedKeyUsage=critical,serverAuth,anyExtendedKeyUsage"
+issue leaf-under-ca-eku "QA leaf under CA with critical EKU serverAuth" ca-eku "basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature"
+for f in *.pem; do openssl x509 -in $f -outform DER -out ${f%.pem}.der; done
+
+
+# --- forge-extra.sh ---
+set -eu
+k(){ openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out $1.key 2>/dev/null; }
+issue(){ k $1; openssl req -new -key $1.key -subj "/CN=$2" -out $1.csr 2>/dev/null; printf '%s\n' "$4" > $1.ext
+  openssl x509 -req -in $1.csr -CA $3.pem -CAkey $3.key -set_serial 0x$(openssl rand -hex 8) -days 1000 -sha256 -extfile $1.ext -out $1.pem 2>/dev/null
+  openssl x509 -in $1.pem -outform DER -out $1.der; }
+issue ca-eku-nc "QA CA non-critical EKU serverAuth" root "basicConstraints=critical,CA:TRUE
+keyUsage=critical,keyCertSign
+extendedKeyUsage=serverAuth"
+issue leaf-under-ca-eku-nc "QA leaf under CA with non-critical EKU serverAuth" ca-eku-nc "basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature"
+issue leaf-eku-client-nc "QA leaf non-critical EKU clientAuth" ca "basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature
+extendedKeyUsage=clientAuth"
+# ca-badsig.der: ca.der with its last byte (inside the signature value) XOR 1, so a twin of the same tbsCertificate whose signature fails
+python3 -I -c "b=bytearray(open('ca.der','rb').read());b[-1]^=1;open('ca-badsig.der','wb').write(b)"
+
+# --- forge-eku.sh ---
+set -eu
+k(){ openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out $1.key 2>/dev/null; }
+issue(){ k $1; openssl req -new -key $1.key -subj "/CN=$2" -out $1.csr 2>/dev/null; printf '%s\n' "$4" > $1.ext
+  openssl x509 -req -in $1.csr -CA $3.pem -CAkey $3.key -set_serial 0x$(openssl rand -hex 8) -days 1000 -sha256 -extfile $1.ext -out $1.pem 2>/dev/null
+  openssl x509 -in $1.pem -outform DER -out $1.der; }
+issue leaf-eku-client "QA leaf critical EKU clientAuth" ca "basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature
+extendedKeyUsage=critical,clientAuth"
+issue leaf-eku-client-server "QA leaf critical EKU clientAuth and serverAuth" ca "basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature
+extendedKeyUsage=critical,serverAuth,clientAuth"
+issue leaf-eku-code "QA leaf critical EKU codeSigning" ca "basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature
+extendedKeyUsage=critical,codeSigning"
+issue ca-eku-email "QA CA critical EKU emailProtection" root "basicConstraints=critical,CA:TRUE
+keyUsage=critical,keyCertSign
+extendedKeyUsage=critical,emailProtection"
+issue leaf-server-under-ca-email "QA leaf EKU serverAuth under CA with EKU emailProtection" ca-eku-email "basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature
+extendedKeyUsage=serverAuth"
+issue leaf-client-under-ca-eku "QA leaf EKU clientAuth under CA with critical EKU serverAuth" ca-eku "basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature
+extendedKeyUsage=clientAuth"
+issue ca-eku-bad "QA CA with an extendedKeyUsage that is not a SEQUENCE" root "basicConstraints=critical,CA:TRUE
+keyUsage=critical,keyCertSign
+2.5.29.37=DER:0500"
+issue leaf-under-ca-eku-bad "QA leaf under CA with a malformed EKU" ca-eku-bad "basicConstraints=CA:FALSE
+keyUsage=critical,digitalSignature"
+
+# --- qa-scen source (Cargo.toml then src/main.rs) ---
+[package]
+name = "qa-scen"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+nacre-validate = { path = "../copy/crates/nacre-validate" }
+nacre-pades = { path = "../copy/crates/nacre-pades" }
+nacre-pdf = { path = "../copy/crates/nacre-pdf" }
+nacre-core = { path = "../copy/crates/nacre-core" }
+der = { version = "0.8", features = ["alloc", "oid", "pem"] }
+x509-cert = "0.3"
+p256 = { version = "0.14", features = ["ecdsa", "pkcs8", "pem"] }
+sha2 = "0.11"
+
+// QA scenario program for s16-validate-chain: calls the public API of nacre-validate.
+// Usage:
+//   qa-scen validate <pdf>
+//   qa-scen anchors <pdf> <date YYYY-MM-DD> <anchor-file>...        (anchor files raw bytes, DER expected)
+//   qa-scen build <signer-file> <date YYYY-MM-DD> <anchor-file|-> [pool-file...]
+//   qa-scen build-rep <signer-file> <date> <anchor-file> <n> <entry-file> [pool-file...]   (n copies of entry-file, then the pool)
+//   qa-scen bench-sign <pki-dir> <unsigned.pdf> <out.pdf> [leaf-only]
+//   qa-scen dss <in.pdf> <out.pdf> <n> <entry-file>...   (appends one revision with a /DSS /Certs of n unfiltered streams, cycling over the entry files)
+//   qa-scen pem2der <pem> <der>
+use std::time::SystemTime;
+use nacre_core::{SignatureAlgorithm, Signer};
+use nacre_pdf::{Dictionary, Document, Object};
+use nacre_validate::{TrustAnchors, build_chain, validate, validate_with_anchors};
+use p256::ecdsa::signature::hazmat::PrehashSigner;
+use p256::ecdsa::{DerSignature, SigningKey};
+use p256::pkcs8::DecodePrivateKey;
+use sha2::{Digest, Sha256};
+
+fn h(b: &[u8]) -> String { Sha256::digest(b).iter().take(8).map(|x| format!("{x:02x}")).collect() }
+
+fn date(s: &str) -> SystemTime {
+    let p: Vec<u16> = s.split('-').map(|x| x.parse().expect("date YYYY-MM-DD")).collect();
+    x509_cert::time::Time::from(der::DateTime::new(p[0], p[1] as u8, p[2] as u8, 0, 0, 0).expect("valid date")).to_system_time()
+}
+
+fn read(p: &str) -> Vec<u8> { std::fs::read(p).unwrap_or_else(|e| { eprintln!("cannot read {p}: {e}"); std::process::exit(2) }) }
+
+fn pem_to_der(path: &str) -> Vec<u8> {
+    let pem = std::fs::read_to_string(path).expect("pem");
+    der::pem::decode_vec(pem.as_bytes()).expect("pem decode").1
+}
+
+fn print(results: Result<Vec<nacre_validate::SignatureValidation>, nacre_validate::Error>) -> i32 {
+    match results {
+        Err(e) => { println!("error: {e}"); println!("  debug: {e:?}"); println!("  kind: {:?}", e.kind()); 1 }
+        Ok(rs) => {
+            println!("signatures: {}", rs.len());
+            for r in rs {
+                println!("- field {:?}", r.field);
+                println!("  indication: {} / {:?}", r.report.indication().as_str(), r.report.sub_indication().map(|s| s.as_str()));
+                println!("  digest_verified={} signature_verified={}", r.digest_verified, r.signature_verified);
+                println!("  defect: {:?}", r.defect);
+                match &r.chain {
+                    None => println!("  chain: None"),
+                    Some(c) => println!("  chain: {} certificates, sha256 prefixes {:?}", c.certificates.len(), c.certificates.iter().map(|x| h(x)).collect::<Vec<_>>()),
+                }
+                println!("  later_revisions: {}", r.later_revisions.len());
+            }
+            0
+        }
+    }
+}
+
+fn anchors_of(path: &str) -> TrustAnchors {
+    if path == "-" { return TrustAnchors::default(); }
+    let b = read(path);
+    match TrustAnchors::from_certificates([b.as_slice()]) {
+        Ok(x) => x,
+        Err(e) => { println!("anchors error: {e}"); println!("  debug: {e:?}"); println!("  kind: {:?}", e.kind()); std::process::exit(1) }
+    }
+}
+
+fn show_build(signer: &[u8], pool: &[Vec<u8>], an: &TrustAnchors, at: SystemTime) -> i32 {
+    let refs: Vec<&[u8]> = pool.iter().map(Vec::as_slice).collect();
+    match build_chain(signer, &refs, an, at) {
+        Ok(p) => { println!("path: {} certificates, sha256 prefixes {:?}", p.certificates.len(), p.certificates.iter().map(|x| h(x)).collect::<Vec<_>>()); 0 }
+        Err(d) => { let r = d.report(); println!("defect: {d:?}"); println!("  report: {} / {:?} level {:?}", r.indication().as_str(), r.sub_indication().map(|s| s.as_str()), r.level()); 0 }
+    }
+}
+
+struct Bench { key: SigningKey, chain: Vec<Vec<u8>> }
+impl Signer for Bench {
+    fn algorithm(&self) -> SignatureAlgorithm { SignatureAlgorithm::EcdsaP256Sha256 }
+    fn certificate_chain(&self) -> &[Vec<u8>] { &self.chain }
+    fn sign_digest(&self, d: &[u8]) -> Result<Vec<u8>, nacre_core::Error> {
+        let s: DerSignature = self.key.sign_prehash(d).map_err(|e| nacre_core::Error::Signer(Box::new(e)))?;
+        Ok(s.as_bytes().to_vec())
+    }
+}
+
+fn main() {
+    let a: Vec<String> = std::env::args().collect();
+    let code = match a.get(1).map(String::as_str) {
+        Some("validate") => print(validate(&read(&a[2]))),
+        Some("anchors") => {
+            let bytes: Vec<Vec<u8>> = a[4..].iter().map(|p| read(p)).collect();
+            match TrustAnchors::from_certificates(bytes.iter().map(Vec::as_slice)) {
+                Err(e) => { println!("anchors error: {e}"); println!("  debug: {e:?}"); println!("  kind: {:?}", e.kind()); 1 }
+                Ok(an) => print(validate_with_anchors(&read(&a[2]), &an, date(&a[3]))),
+            }
+        }
+        Some("build") => {
+            let pool: Vec<Vec<u8>> = a[5..].iter().map(|p| read(p)).collect();
+            show_build(&read(&a[2]), &pool, &anchors_of(&a[4]), date(&a[3]))
+        }
+        Some("build-rep") => {
+            let n: usize = a[5].parse().expect("n");
+            let entry = read(&a[6]);
+            let mut pool: Vec<Vec<u8>> = std::iter::repeat_n(entry, n).collect();
+            pool.extend(a[7..].iter().map(|p| read(p)));
+            println!("pool entries: {}", pool.len());
+            show_build(&read(&a[2]), &pool, &anchors_of(&a[4]), date(&a[3]))
+        }
+        Some("bench-sign") => {
+            let dir = &a[2];
+            let key = SigningKey::from_pkcs8_pem(&std::fs::read_to_string(format!("{dir}/signer.key.pem")).expect("key")).expect("key parse");
+            let mut chain = vec![pem_to_der(&format!("{dir}/signer.cert.pem"))];
+            if a.get(5).map(String::as_str) != Some("leaf-only") { chain.push(pem_to_der(&format!("{dir}/intermediate.cert.pem"))); }
+            let pdf = nacre_pades::sign(&read(&a[3]), &Bench { key, chain }, nacre_pades::DateTime::new(2026, 10, 22, 8, 0, 0).expect("dt")).expect("sign");
+            std::fs::write(&a[4], pdf).expect("write");
+            println!("signed {} with the bench signer", a[4]); 0
+        }
+        Some("dss") => {
+            let pdf = read(&a[2]);
+            let n: usize = a[4].parse().expect("n");
+            let entries: Vec<Vec<u8>> = a[5..].iter().map(|p| read(p)).collect();
+            let doc = Document::parse(&pdf).expect("parse");
+            let mut update = doc.update();
+            let mut refs = Vec::new();
+            for i in 0..n {
+                let s = update.add_stream(Dictionary::new(), entries[i % entries.len()].clone()).expect("stream");
+                refs.push(Object::Reference(s));
+            }
+            let mut dss = Dictionary::new();
+            dss.insert(b"Certs", Object::Array(refs));
+            let dss = update.add(Object::Dictionary(dss)).expect("dss");
+            update.set_catalog(b"DSS", Object::Reference(dss));
+            std::fs::write(&a[3], update.finish().expect("finish")).expect("write");
+            println!("wrote {} with a /DSS of {} streams", a[3], n); 0
+        }
+        Some("pem2der") => { std::fs::write(&a[3], pem_to_der(&a[2])).expect("write"); 0 }
+        _ => { eprintln!("unknown subcommand"); 2 }
+    };
+    std::process::exit(code);
+}

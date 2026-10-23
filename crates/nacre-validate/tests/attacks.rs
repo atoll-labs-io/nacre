@@ -9,7 +9,12 @@
 //! has one defect, so each must fail on its own rule.
 
 use nacre_core::{ErrorKind, Indication, SubIndication};
-use nacre_validate::{Defect, Error, ObjectId, RevisionVerdict, SignatureValidation, validate};
+use std::time::SystemTime;
+
+use nacre_validate::{
+    ChainDefect, Defect, Error, ObjectId, RevisionVerdict, SignatureValidation, TrustAnchors,
+    validate, validate_with_anchors,
+};
 
 /// The single signature of `file`, checked to be refused as a format failure.
 fn rejected(file: &[u8]) -> Defect {
@@ -300,4 +305,152 @@ fn ssa_outside_fields_is_rejected() {
     let file = include_bytes!("corpus/attacks/ssa-outside-fields.pdf");
     assert_eq!(validate(file).unwrap().len(), 1);
     assert_eq!(revision_refused(file), ids(&[3, 11, 12, 13]));
+}
+
+/// The single signature of `file`, validated with the chain corpus root as anchor on
+/// 2026-10-22.
+fn with_chain_root(file: &[u8]) -> SignatureValidation {
+    let anchors =
+        TrustAnchors::from_certificates([&include_bytes!("corpus/chain/root.der")[..]]).unwrap();
+    let at: SystemTime =
+        x509_cert::time::Time::from(der::DateTime::new(2026, 10, 22, 0, 0, 0).unwrap())
+            .to_system_time();
+    let mut results = validate_with_anchors(file, &anchors, at).unwrap();
+    assert_eq!(results.len(), 1);
+    results.remove(0)
+}
+
+/// The chain defect of the single signature of `file`, sound in itself, with `sub`.
+fn chain_rejected(file: &[u8], sub: SubIndication) -> ChainDefect {
+    let result = with_chain_root(file);
+    assert_eq!(result.report.indication(), Indication::Indeterminate);
+    assert_eq!(result.report.sub_indication(), Some(sub));
+    assert!(result.digest_verified && result.signature_verified);
+    assert!(result.chain.is_none());
+    let Some(Defect::Chain(defect)) = result.defect else {
+        panic!("{:?}", result.defect);
+    };
+    defect
+}
+
+#[test]
+fn chain_impostor_root_is_rejected() {
+    let result = with_chain_root(include_bytes!("corpus/attacks/chain-impostor-root.pdf"));
+
+    assert!(result.defect.is_none(), "{:?}", result.defect);
+    assert!(result.chain.is_none());
+    assert!(result.digest_verified && result.signature_verified);
+    assert_eq!(result.report.indication(), Indication::Indeterminate);
+    assert_eq!(
+        result.report.sub_indication(),
+        Some(SubIndication::NoCertificateChainFound)
+    );
+}
+
+#[test]
+fn chain_leaf_as_ca_is_rejected() {
+    let defect = chain_rejected(
+        include_bytes!("corpus/attacks/chain-leaf-as-ca.pdf"),
+        SubIndication::ChainConstraintsFailure,
+    );
+    assert_eq!(defect, ChainDefect::NotACa { depth: 1 });
+}
+
+#[test]
+fn chain_path_length_is_rejected() {
+    let defect = chain_rejected(
+        include_bytes!("corpus/attacks/chain-path-length.pdf"),
+        SubIndication::ChainConstraintsFailure,
+    );
+    assert_eq!(defect, ChainDefect::PathLength { depth: 2 });
+}
+
+#[test]
+fn chain_expired_is_rejected() {
+    let defect = chain_rejected(
+        include_bytes!("corpus/attacks/chain-expired.pdf"),
+        SubIndication::OutOfBoundsNoPoe,
+    );
+    assert_eq!(defect, ChainDefect::Expired { depth: 0 });
+}
+
+#[test]
+fn chain_key_usage_is_rejected() {
+    let defect = chain_rejected(
+        include_bytes!("corpus/attacks/chain-key-usage.pdf"),
+        SubIndication::ChainConstraintsFailure,
+    );
+    assert_eq!(defect, ChainDefect::KeyUsage);
+}
+
+#[test]
+fn chain_critical_extension_is_rejected() {
+    let defect = chain_rejected(
+        include_bytes!("corpus/attacks/chain-critical-extension.pdf"),
+        SubIndication::CertificateChainGeneralFailure,
+    );
+    assert!(
+        matches!(
+            defect,
+            ChainDefect::UnsupportedCriticalExtension { depth: 1, .. }
+        ),
+        "{defect:?}"
+    );
+}
+
+#[test]
+fn chain_not_yet_valid_is_rejected() {
+    let defect = chain_rejected(
+        include_bytes!("corpus/attacks/chain-not-yet-valid.pdf"),
+        SubIndication::OutOfBoundsNoPoe,
+    );
+    assert_eq!(defect, ChainDefect::NotYetValid { depth: 0 });
+}
+
+#[test]
+fn chain_ca_key_usage_is_rejected() {
+    let defect = chain_rejected(
+        include_bytes!("corpus/attacks/chain-ca-key-usage.pdf"),
+        SubIndication::ChainConstraintsFailure,
+    );
+    assert_eq!(defect, ChainDefect::CaKeyUsage { depth: 1 });
+}
+
+#[test]
+fn chain_extended_key_usage_is_rejected() {
+    let defect = chain_rejected(
+        include_bytes!("corpus/attacks/chain-extended-key-usage.pdf"),
+        SubIndication::ChainConstraintsFailure,
+    );
+    assert_eq!(defect, ChainDefect::ExtendedKeyUsage { depth: 0 });
+}
+
+#[test]
+fn chain_malformed_extension_is_rejected() {
+    let defect = chain_rejected(
+        include_bytes!("corpus/attacks/chain-malformed-extension.pdf"),
+        SubIndication::CertificateChainGeneralFailure,
+    );
+    assert_eq!(defect, ChainDefect::MalformedExtension { depth: 0 });
+}
+
+/// `chain-cms.pdf` given an appended `/DSS` of 300 unreadable streams: the unsigned pool is
+/// a hint, so the chain the CMS proves still stands.
+#[test]
+fn chain_dss_junk_does_not_hide_the_chain() {
+    let result = with_chain_root(include_bytes!("corpus/attacks/chain-dss-junk.pdf"));
+
+    assert!(result.defect.is_none(), "{:?}", result.defect);
+    let chain = result.chain.expect("the CMS chain");
+    let expected: [&[u8]; 3] = [
+        include_bytes!("corpus/chain/leaf.der"),
+        include_bytes!("corpus/chain/intermediate.der"),
+        include_bytes!("corpus/chain/root.der"),
+    ];
+    assert_eq!(chain.certificates, expected);
+    assert_eq!(result.report.indication(), Indication::Indeterminate);
+    assert_eq!(
+        result.report.sub_indication(),
+        Some(SubIndication::TryLater)
+    );
 }

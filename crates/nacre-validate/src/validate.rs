@@ -1,10 +1,15 @@
+use std::time::SystemTime;
+
 use der::{Decode, Header, Reader, SliceReader, Tag};
 use nacre_cms::SignedData;
 use nacre_pdf::{Dictionary, Document, Object};
 use sha2::{Digest, Sha256};
 
 use crate::revisions::{Qualified, qualify};
-use crate::{Defect, Error, LaterRevision, RevisionVerdict, SignatureValidation};
+use crate::{
+    ChainDefect, Defect, Error, LaterRevision, RevisionVerdict, SignatureValidation, TrustAnchors,
+    build_chain,
+};
 
 /// Bounds the hashing one call may do to 64 times the largest accepted input (50 MB).
 const MAX_SIGNATURES: usize = 64;
@@ -12,21 +17,43 @@ const MAX_SIGNATURES: usize = 64;
 const SUB_FILTERS: [&[u8]; 2] = [b"ETSI.CAdES.detached", b"adbe.pkcs7.detached"];
 
 /// Validates the integrity of every signature of `pdf`, in field order, and qualifies each
-/// revision appended after it.
+/// revision appended after it, trusting no certificate.
 ///
 /// An empty signature field and a document timestamp (`/SubFilter /ETSI.RFC3161`) are left
 /// out. A signature whose bytes and CMS verify, and whose later revisions are all allowed,
-/// ends `INDETERMINATE` / `NO_CERTIFICATE_CHAIN_FOUND`, since its chain is not judged yet;
+/// ends `INDETERMINATE` / `NO_CERTIFICATE_CHAIN_FOUND`, since no path can reach an anchor;
 /// any defect ends `TOTAL_FAILED` or `INDETERMINATE` with its sub-indication, named in
-/// [`SignatureValidation::defect`].
+/// [`SignatureValidation::defect`]. [`validate_with_anchors`] judges the chain.
 ///
 /// An unreadable PDF, one holding more than 64 signatures, or more than 64 revisions after
 /// its oldest signed one, is an [`Error`].
 pub fn validate(pdf: &[u8]) -> Result<Vec<SignatureValidation>, Error> {
-    validate_with(pdf, MAX_SIGNATURES)
+    // With no anchor no path exists, so the control date is never read.
+    validate_with_anchors(pdf, &TrustAnchors::default(), SystemTime::UNIX_EPOCH)
 }
 
-fn validate_with(pdf: &[u8], max_signatures: usize) -> Result<Vec<SignatureValidation>, Error> {
+/// Validates as [`validate`] does, then builds and judges, at the control date `at`, the
+/// chain of each signature that passed every other check, from the certificates of its CMS
+/// and of the document's `/DSS` (`/Certs`, unfiltered streams only) up to `anchors`.
+///
+/// No path gives `INDETERMINATE` / `NO_CERTIFICATE_CHAIN_FOUND` with no defect; a path with
+/// a defect gives [`Defect::Chain`] and its report; a valid path is kept in
+/// [`SignatureValidation::chain`] and gives `INDETERMINATE` / `TRY_LATER`, its revocation
+/// not being judged yet.
+pub fn validate_with_anchors(
+    pdf: &[u8],
+    anchors: &TrustAnchors,
+    at: SystemTime,
+) -> Result<Vec<SignatureValidation>, Error> {
+    validate_with(pdf, anchors, at, MAX_SIGNATURES)
+}
+
+fn validate_with(
+    pdf: &[u8],
+    anchors: &TrustAnchors,
+    at: SystemTime,
+    max_signatures: usize,
+) -> Result<Vec<SignatureValidation>, Error> {
     let doc = Document::parse(pdf)?;
     let mut signatures = Vec::new();
     for field in doc.signature_fields() {
@@ -62,11 +89,16 @@ fn validate_with(pdf: &[u8], max_signatures: usize) -> Result<Vec<SignatureValid
         Some(first) => qualify(pdf, &doc, first)?,
         None => Vec::new(),
     };
+    let dss = if anchors.is_empty() {
+        Vec::new()
+    } else {
+        dss_certificates(&doc, pdf)
+    };
 
     Ok(checked
         .into_iter()
-        .map(|(field, value, at, result)| {
-            let (own, mine): (Option<&Qualified>, Vec<LaterRevision>) = match (at, first) {
+        .map(|(field, value, revision, result)| {
+            let (own, mine): (Option<&Qualified>, Vec<LaterRevision>) = match (revision, first) {
                 (Some(at), Some(first)) => (
                     (at - first).checked_sub(1).and_then(|i| later.get(i)),
                     later
@@ -89,15 +121,29 @@ fn validate_with(pdf: &[u8], max_signatures: usize) -> Result<Vec<SignatureValid
                 .map(|r| r.end);
             match (result, added_by, refused) {
                 (Err(defect), _, _) => SignatureValidation::defective(field, defect, mine),
-                (Ok(()), Some(end), _) => SignatureValidation::defective(
+                (Ok(_), Some(end), _) => SignatureValidation::defective(
                     field,
                     Defect::AddedByRevisionNotAllowed { end },
                     mine,
                 ),
-                (Ok(()), None, Some(end)) => {
+                (Ok(_), None, Some(end)) => {
                     SignatureValidation::defective(field, Defect::RevisionNotAllowed { end }, mine)
                 }
-                (Ok(()), None, None) => SignatureValidation::sound(field, mine),
+                (Ok(signed), None, None) => {
+                    let pool: Vec<&[u8]> = signed
+                        .certificates
+                        .iter()
+                        .chain(&dss)
+                        .map(Vec::as_slice)
+                        .collect();
+                    match build_chain(&signed.signer, &pool, anchors, at) {
+                        Ok(path) => SignatureValidation::sound(field, mine, Some(path)),
+                        Err(ChainDefect::NoPath) => SignatureValidation::sound(field, mine, None),
+                        Err(defect) => {
+                            SignatureValidation::defective(field, Defect::Chain(defect), mine)
+                        }
+                    }
+                }
             }
         })
         .collect())
@@ -113,7 +159,7 @@ fn check(
     doc: &Document<'_>,
     pdf: &[u8],
     dict: Option<Dictionary>,
-) -> (Option<usize>, Result<(), Defect>) {
+) -> (Option<usize>, Result<Signed, Defect>) {
     match signed_bytes(doc, pdf, dict) {
         Ok((end, contents, [b, c])) => (Some(end), verify(pdf, &contents, [b, c, end])),
         Err(defect) => (None, Err(defect)),
@@ -159,16 +205,50 @@ fn signed_bytes(
     Ok((end, contents, [b, c]))
 }
 
-fn verify(pdf: &[u8], contents: &[u8], [b, c, end]: [usize; 3]) -> Result<(), Defect> {
+/// What a verified CMS gives the chain: the signer's certificate and every certificate it
+/// carries, as DER.
+struct Signed {
+    signer: Vec<u8>,
+    certificates: Vec<Vec<u8>>,
+}
+
+fn verify(pdf: &[u8], contents: &[u8], [b, c, end]: [usize; 3]) -> Result<Signed, Defect> {
     let der = der_prefix(contents).ok_or(Defect::ContentsNotDer)?;
 
     let mut hasher = Sha256::new();
     hasher.update(pdf.get(..b).unwrap_or_default());
     hasher.update(pdf.get(c..end).unwrap_or_default());
     let digest = hasher.finalize();
-    SignedData::from_der(der)
-        .and_then(|signed| signed.verify_detached_digest(&digest).map(|_| ()))
-        .map_err(Defect::Cms)
+    let signed = SignedData::from_der(der).map_err(Defect::Cms)?;
+    let signer = signed
+        .verify_detached_digest(&digest)
+        .map_err(Defect::Cms)?
+        .certificate()
+        .to_vec();
+    Ok(Signed {
+        signer,
+        certificates: signed.certificates,
+    })
+}
+
+/// The raw data of each unfiltered stream the `/DSS /Certs` of `doc` lists. Anything
+/// unreadable is left out: the chain then misses it rather than guesses.
+fn dss_certificates(doc: &Document<'_>, pdf: &[u8]) -> Vec<Vec<u8>> {
+    let Some(Object::Dictionary(dss)) = follow_once(doc, doc.catalog().get(b"DSS")) else {
+        return Vec::new();
+    };
+    let Some(Object::Array(certs)) = follow_once(doc, dss.get(b"Certs")) else {
+        return Vec::new();
+    };
+    certs
+        .iter()
+        .filter_map(|item| match follow_once(doc, Some(item)) {
+            Some(Object::Stream(stream)) if stream.dict.get(b"Filter").is_none() => {
+                pdf.get(stream.data).map(<[u8]>::to_vec)
+            }
+            _ => None,
+        })
+        .collect()
 }
 
 /// The value of an entry, one reference followed.
@@ -245,7 +325,8 @@ mod tests {
         .unwrap();
         let twice = sign(&once, &signer, time).unwrap();
 
-        let error = validate_with(&twice, 1).unwrap_err();
+        let error =
+            validate_with(&twice, &TrustAnchors::default(), SystemTime::UNIX_EPOCH, 1).unwrap_err();
 
         assert!(
             matches!(error, Error::TooManySignatures { count: 2, max: 1 }),

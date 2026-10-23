@@ -16,16 +16,25 @@
 //! the certified state did not place at the same rectangle, or one under DocMDP 1) fails
 //! with [`Defect::AddedByRevisionNotAllowed`].
 //!
-//! The certificate chain, revocation and the level are not judged yet, so a sound
-//! signature ends `INDETERMINATE` / `NO_CERTIFICATE_CHAIN_FOUND`, never `TOTAL_PASSED`.
+//! [`validate_with_anchors`] also builds the signer's certification path from the
+//! certificates of the CMS and of the `/DSS` up to the [`TrustAnchors`] the caller supplies,
+//! and judges it at a control date the caller gives (RFC 5280 path validation: validity,
+//! basic constraints, path length, key usage, extended key usage, critical extensions).
+//! [`build_chain`] does the same with no PDF, for any format. [`validate`] trusts no
+//! anchor, so a sound signature ends `INDETERMINATE` / `NO_CERTIFICATE_CHAIN_FOUND`. A
+//! valid path is returned in [`SignatureValidation::chain`], and the signature still ends
+//! `INDETERMINATE` / `TRY_LATER`: revocation and the level are not judged yet, so no
+//! signature ends `TOTAL_PASSED`.
 //! Document timestamps (`/SubFilter /ETSI.RFC3161`) are left out of the result.
 
+mod chain;
 mod error;
 mod report;
 mod revisions;
 mod validate;
 
+pub use chain::{CertificatePath, ChainDefect, TrustAnchors, build_chain};
 pub use error::Error;
 pub use nacre_pdf::ObjectId;
 pub use report::{AllowedChange, Defect, LaterRevision, RevisionVerdict, SignatureValidation};
-pub use validate::validate;
+pub use validate::{validate, validate_with_anchors};

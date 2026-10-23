@@ -5,13 +5,16 @@
     clippy::indexing_slicing
 )]
 
+use std::time::SystemTime;
+
 use der::{Decode, Header, Reader, SliceReader};
 use nacre_cms::Error as CmsError;
 use nacre_core::{Indication, SubIndication, TestSigner};
 use nacre_pades::{DateTime, sign};
 use nacre_pdf::{Document, Object};
 use nacre_validate::{
-    AllowedChange, Defect, LaterRevision, RevisionVerdict, SignatureValidation, validate,
+    AllowedChange, Defect, LaterRevision, RevisionVerdict, SignatureValidation, TrustAnchors,
+    validate, validate_with_anchors,
 };
 
 const UNSIGNED: &[u8] = include_bytes!("corpus/unsigned.pdf");
@@ -340,4 +343,71 @@ fn signature_added_under_p1_is_refused_with_its_revision() {
         "{:?}",
         late.defect
     );
+}
+
+const CHAIN_ROOT: &[u8] = include_bytes!("corpus/chain/root.der");
+const CHAIN_INTERMEDIATE: &[u8] = include_bytes!("corpus/chain/intermediate.der");
+const CHAIN_LEAF: &[u8] = include_bytes!("corpus/chain/leaf.der");
+
+/// The single signature of `pdf`, validated with the chain corpus root as anchor on
+/// 2026-10-22.
+fn with_root(pdf: &[u8]) -> SignatureValidation {
+    let anchors = TrustAnchors::from_certificates([CHAIN_ROOT]).unwrap();
+    let at: SystemTime =
+        x509_cert::time::Time::from(der::DateTime::new(2026, 10, 22, 0, 0, 0).unwrap())
+            .to_system_time();
+    let mut results = validate_with_anchors(pdf, &anchors, at).unwrap();
+    assert_eq!(results.len(), 1);
+    results.remove(0)
+}
+
+/// A signature whose chain is valid, revocation still to judge.
+fn chain_valid(result: &SignatureValidation) {
+    assert!(result.defect.is_none(), "{:?}", result.defect);
+    assert!(result.digest_verified && result.signature_verified);
+    let chain = result.chain.as_ref().unwrap();
+    assert_eq!(
+        chain.certificates,
+        vec![CHAIN_LEAF, CHAIN_INTERMEDIATE, CHAIN_ROOT]
+    );
+    assert_eq!(result.report.indication(), Indication::Indeterminate);
+    assert_eq!(
+        result.report.sub_indication(),
+        Some(SubIndication::TryLater)
+    );
+    assert_eq!(result.report.level(), None);
+}
+
+#[test]
+fn chain_from_cms_is_valid_but_revocation_pending() {
+    let pdf = include_bytes!("corpus/chain/chain-cms.pdf");
+
+    chain_valid(&with_root(pdf));
+
+    let untrusted = &validate(pdf).unwrap()[0];
+    assert!(untrusted.defect.is_none(), "{:?}", untrusted.defect);
+    assert!(untrusted.chain.is_none());
+    assert_eq!(untrusted.report.indication(), Indication::Indeterminate);
+    assert_eq!(
+        untrusted.report.sub_indication(),
+        Some(SubIndication::NoCertificateChainFound)
+    );
+}
+
+#[test]
+fn chain_from_dss_is_valid() {
+    let result = with_root(include_bytes!("corpus/chain/chain-dss.pdf"));
+
+    chain_valid(&result);
+    allowed(&result, &[&[AllowedChange::Dss]]);
+}
+
+#[test]
+fn revision_defect_outranks_chain() {
+    let result = with_root(include_bytes!(
+        "corpus/chain/chain-cms-refused-revision.pdf"
+    ));
+
+    refused_revision(&result);
+    assert!(result.chain.is_none());
 }

@@ -15,10 +15,18 @@ nacre-pdf = { path = "../nacre-pdf", version = "0.1.0" }
 nacre-cms = { path = "../nacre-cms", version = "0.1.0" }
 sha2 = "0.11"
 der = { version = "0.8", features = ["alloc"] }
+x509-cert = "0.3"
+spki = "0.8"
+p256 = { version = "0.14", features = ["ecdsa"] }
+# Pinned: a release candidate, and no lock file is committed.
+rsa = "=0.10.0-rc.19"
 thiserror = "2"
 
 [dev-dependencies]
 nacre-core = { path = "../nacre-core", features = ["test-signer"] }
 # No version: dev-dependencies are dropped by `cargo publish`.
 nacre-pades = { path = "../nacre-pades" }
-der = { version = "0.8", features = ["alloc", "oid"] }
+nacre-conformance = { path = "../nacre-conformance" }
+der = { version = "0.8", features = ["alloc", "oid", "pem"] }
+x509-cert = { version = "0.3", features = ["builder"] }
+p256 = { version = "0.14", features = ["ecdsa", "pkcs8", "pem"] }
