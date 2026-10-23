@@ -1,9 +1,10 @@
-use der::Decode;
+use der::{Any, Decode, Tag};
 use nacre_cms::Profile;
 use nacre_core::{SignatureAlgorithm, Signer};
 use x509_cert::Certificate;
 
 use crate::Error;
+use crate::timestamp::{TIMESTAMP_TOKEN_MAX, with_token};
 
 /// DER `ECDSA-Sig-Value` for P-256 at its longest: two 33-byte integers and their headers.
 const ECDSA_P256_MAX: usize = 72;
@@ -62,12 +63,19 @@ impl Signer for Sizing<'_> {
 /// The bytes to reserve for `/Contents`: the length of the CMS `signer` would write with its
 /// longest signature value. The CMS length depends on nothing else, so the real one fits.
 ///
-/// This is the single place a later level adds the timestamp token's reserve to;
-/// PAdES-BASELINE-B reserves nothing for a token.
-pub(crate) fn contents_capacity(signer: &dyn Signer) -> Result<usize, Error> {
+/// With `timestamped`, the dry CMS also carries a placeholder token of the maximum length,
+/// pushed through the function the real token goes through. PAdES-BASELINE-B reserves
+/// nothing for a token.
+pub(crate) fn contents_capacity(signer: &dyn Signer, timestamped: bool) -> Result<usize, Error> {
     let digest = [0; 32];
     let dry = nacre_cms::sign_detached(&digest, &Sizing { inner: signer }, &Profile::PADES, None)?;
-    Ok(dry.len())
+    if !timestamped {
+        return Ok(dry.len());
+    }
+    // A 4-byte header (tag, 0x82, two length octets) plus content: DER length exactly the bound.
+    let placeholder = Any::new(Tag::OctetString, vec![0; TIMESTAMP_TOKEN_MAX - 4])
+        .map_err(Error::TimestampToken)?;
+    Ok(with_token(&dry, placeholder)?.len())
 }
 
 #[cfg(test)]

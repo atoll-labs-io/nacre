@@ -1,0 +1,11 @@
+# input not.pdf holds the text: this is not a PDF
+$ cd /tmp/qa-s08.JKa7O6/work && qa-s08 tsa e1.pdf http://127.0.0.1:18491/ not.pdf
+stdin: (none)
+--- stdout+stderr ---
+Err (Display): PDF: the input does not start with %PDF-
+Err (kind): InvalidInput
+  caused by: the input does not start with %PDF-
+output file written: false
+authority asked: 0 time(s)
+--- exit code: 0 ---
+
