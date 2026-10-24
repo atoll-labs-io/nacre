@@ -109,3 +109,4 @@ A decision the person took is not logged here: it is an ADR or a story.
 | 2026-10-24 | s46-dss-parity-3 | The person split s18 a third time: four more `dss()` divergence families become s46, before s18 | Same reason as s43 and s45 |
 | 2026-10-24 | s46-dss-parity-3 | The person chose a twelfth switch `judge_issuer_of_revoked_data` (on in `strict()`) and widened `ignore_expired_certs_on_crl` to OCSP `archiveCutoff` | `strict()` must not get laxer; both extensions answer the same question |
 | 2026-10-24 | s47-pdf-xref-recovery | The person put xref recovery beyond whitespace in its own story after s18; the s18 campaign forges no such case meanwhile | A repairing reader is an attack surface and PDFBox's rule is unknown |
+| 2026-10-24 | s46-dss-parity-3 | AC2 and AC3 aligned on the planner's reading (v5 is the control; e2 under `strict()` needs a proof of existence); lane re-forked | Without one, the 24 h window drops the response first |

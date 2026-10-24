@@ -801,8 +801,8 @@ Découpée de s18 le 2026-10-24 sur décision de la personne, à partir du trois
 
 ### Acceptance criteria
 - [ ] Sous les deux préréglages, un certificat d'AC sans `subjectKeyIdentifier` sur le chemin d'une autorité d'horodatage retire à son jeton toute preuve d'existence, comme chez DSS (cas k1).
-- [ ] Un douzième interrupteur, `judge_issuer_of_revoked_data`, actif sous `strict()` et inactif sous `dss()` : inactif, une donnée qui dit « révoqué » échappe à la règle de validité de son émetteur, comme chez DSS (cas v3, v5) ; actif, la règle s'applique comme aujourd'hui.
-- [ ] Sous les deux préréglages, une réponse OCSP signée par un répondeur délégué valide à `producedAt` mais hors validité à la date de contrôle est rendue `REVOCATION_OUT_OF_BOUNDS_NO_POE`, comme chez DSS (cas e2) ; `nacre-revocation` expose le certificat du répondeur délégué.
+- [ ] Un douzième interrupteur, `judge_issuer_of_revoked_data`, actif sous `strict()` et inactif sous `dss()` : inactif, une donnée qui dit « révoqué » échappe à la règle de validité de son émetteur, comme chez DSS (cas v3 ; le cas v5, témoin, garde `REVOCATION_OUT_OF_BOUNDS_NO_POE`) ; actif, la règle s'applique comme aujourd'hui.
+- [ ] Une réponse OCSP signée par un répondeur délégué valide à `producedAt` mais hors validité à la date de contrôle est rendue `REVOCATION_OUT_OF_BOUNDS_NO_POE`, comme chez DSS : cas e2 sous `dss()`, et sous `strict()` pour une signature avec preuve d'existence (sans elle, la fenêtre de 24 h écarte d'abord la réponse) ; `nacre-revocation` expose le certificat du répondeur délégué.
 - [ ] Le onzième interrupteur `ignore_expired_certs_on_crl` couvre aussi l'extension OCSP `archiveCutoff` : inactif, une réponse OCSP qui la porte compte pour un certificat expiré comme chez DSS (cas e4, e5) ; actif, elle est écartée.
 - [ ] Un ADR ajoute le douzième interrupteur et l'élargissement du onzième à la table de l'ADR-0029 ; les tests d'isolation couvrent les douze interrupteurs et le catalogue les nomme.
 - [ ] Un test de conformité par famille montre le verdict de DSS sous `dss()` et le verdict strict sous `strict()`.
