@@ -1,4 +1,4 @@
-/// The rules only Nacre applies, one switch each (ADR-0026, ADR-0029). Each switch on
+/// The rules only Nacre applies, one switch each (ADR-0026, ADR-0029, ADR-0030). Each switch on
 /// keeps a protection DSS 6.5.1 lacks; each switch off gives DSS's verdict on that case.
 ///
 /// [`ValidationPolicy::strict`], the [`Default`], turns them all on and is what
@@ -76,11 +76,18 @@ pub struct ValidationPolicy {
     ///
     /// [`Error::Pdf`]: crate::Error::Pdf
     pub refuse_misplaced_xref: bool,
-    /// Drop a CRL issued after the `notAfter` of the certificate it covers, even when its
-    /// `expiredCertsOnCRL` extension (RFC 5280, 5.2.7) is at or before that `notAfter`.
-    /// Off, such a CRL counts for that certificate, as DSS does; one whose
-    /// `expiredCertsOnCRL` is later, or absent, is dropped either way.
+    /// Drop a CRL, or an OCSP response, issued after the `notAfter` of the certificate it
+    /// covers, even when the CRL's `expiredCertsOnCRL` extension (RFC 5280, 5.2.7), or the
+    /// response's `archiveCutoff` (RFC 6960, 4.4.4), is at or before that `notAfter`. Off,
+    /// such data counts for that certificate, as DSS does (ADR-0030); data whose date is
+    /// later, or absent, is dropped either way.
     pub ignore_expired_certs_on_crl: bool,
+    /// Require the CA, or the delegated OCSP responder, that issued the deciding revocation
+    /// data of a certificate to be within its validity at the control date even when that
+    /// data says "revoked" (after the best-signature-time, since an earlier revocation
+    /// refuses the path first). Off, such a certificate is skipped by that rule, as DSS does
+    /// (ADR-0030); data saying "not revoked" is judged either way.
+    pub judge_issuer_of_revoked_data: bool,
 }
 
 impl ValidationPolicy {
@@ -98,6 +105,7 @@ impl ValidationPolicy {
             refuse_unsupported_sub_filters: true,
             refuse_misplaced_xref: true,
             ignore_expired_certs_on_crl: true,
+            judge_issuer_of_revoked_data: true,
         }
     }
 
@@ -107,7 +115,8 @@ impl ValidationPolicy {
     /// `%%EOF`, a signer certificate whose key usage forbids signing, a signature under a
     /// `/SubFilter` Nacre does not support, a cross-reference section found only by
     /// skipping whitespace, a CRL issued after a certificate expired, trusted on its
-    /// `expiredCertsOnCRL`, and, for a signature with no timestamp, a stale "not revoked"
+    /// `expiredCertsOnCRL`, or an OCSP response trusted on its `archiveCutoff`, revocation data saying revoked, trusted from a CA or responder
+    /// out of its validity, and, for a signature with no timestamp, a stale "not revoked"
     /// CRL or OCSP response appended to the `/DSS`.
     ///
     /// Every switch off: the verdict DSS 6.5.1 gives, for comparing Nacre with it. Only the
@@ -125,6 +134,7 @@ impl ValidationPolicy {
             refuse_unsupported_sub_filters: false,
             refuse_misplaced_xref: false,
             ignore_expired_certs_on_crl: false,
+            judge_issuer_of_revoked_data: false,
         }
     }
 }
