@@ -11,10 +11,11 @@ use der::oid::ObjectIdentifier;
 use der::{Any, DateTime, Decode, Encode, Header, Length, Tag};
 use nacre_cms::{
     Attribute, EncapsulatedContentInfo, SignedAttributes, SignedData, SignerIdentifier, SignerInfo,
+    sign_detached,
 };
 use nacre_core::{DigestAlgorithm, SignatureAlgorithm, Signer, TimestampAuthority};
 use nacre_pades::{Level, sign_at_level};
-use nacre_pdf::{Dictionary, Document, Object};
+use nacre_pdf::{Dictionary, Document, Object, SignatureSpec};
 use p256::ecdsa::signature::hazmat::PrehashSigner;
 use p256::ecdsa::{DerSignature, SigningKey};
 use sha2::{Digest, Sha256};
@@ -392,6 +393,47 @@ fn tlv(tag: Tag, value: &[u8]) -> Vec<u8> {
 pub fn signed(signer: &dyn Signer, level: Level<'_>) -> Vec<u8> {
     let time = DateTime::new(2026, 10, 22, 8, 0, 0).unwrap();
     sign_at_level(UNSIGNED, signer, time, level).unwrap()
+}
+
+/// `unsigned.pdf` signed once by `signer` in the field `Signature1`, under `/SubFilter
+/// /<sub_filter>`, its `/M` written only when `claimed` is given, its CMS a PAdES one with no
+/// signature timestamp.
+pub fn custom_signed(signer: &dyn Signer, sub_filter: &[u8], claimed: Option<&[u8]>) -> Vec<u8> {
+    let mut entries = Dictionary::new();
+    if let Some(claimed) = claimed {
+        entries.insert(b"M", Object::String(claimed.to_vec()));
+    }
+    let prepared = Document::parse(UNSIGNED)
+        .unwrap()
+        .update()
+        .sign(SignatureSpec {
+            field: "Signature1".into(),
+            sub_filter: sub_filter.to_vec(),
+            contents_len: 40000,
+            entries,
+        })
+        .unwrap();
+    let mut hasher = Sha256::new();
+    for part in prepared.signed_parts() {
+        hasher.update(part);
+    }
+    let cms = sign_detached(&hasher.finalize(), signer, &nacre_cms::Profile::PADES, None).unwrap();
+    prepared.embed(&cms).unwrap()
+}
+
+/// `pdf` with its last occurrence of `from` replaced by `to`, padded with spaces to the same
+/// length so that no offset moves.
+pub fn patch(pdf: &[u8], from: &[u8], to: &[u8]) -> Vec<u8> {
+    assert!(to.len() <= from.len());
+    let mut out = pdf.to_vec();
+    let at = out
+        .windows(from.len())
+        .rposition(|window| window == from)
+        .unwrap();
+    let mut replacement = to.to_vec();
+    replacement.resize(from.len(), b' ');
+    out[at..at + from.len()].copy_from_slice(&replacement);
+    out
 }
 
 /// `pdf` given one revision whose catalog points at a `/DSS` listing `certificates` under

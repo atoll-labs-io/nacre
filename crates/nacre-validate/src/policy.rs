@@ -1,13 +1,14 @@
-/// The rules only Nacre applies, one switch each (ADR-0026). Each switch on keeps a
-/// protection DSS 6.5.1 lacks; each switch off gives DSS's verdict on that case.
+/// The rules only Nacre applies, one switch each (ADR-0026, ADR-0027). Each switch on
+/// keeps a protection DSS 6.5.1 lacks; each switch off gives DSS's verdict on that case.
 ///
 /// [`ValidationPolicy::strict`], the [`Default`], turns them all on and is what
-/// [`validate`](crate::validate), [`validate_with_anchors`](crate::validate_with_anchors) and
-/// [`validate_with_revocation`](crate::validate_with_revocation) apply.
-/// [`ValidationPolicy::dss`] turns them all off. A rule DSS applies and Nacre would otherwise
-/// lack, such as a signing time (`/M`) before the signer's `notBefore`, is no switch: both
-/// presets apply it, so no preset is laxer than DSS. Turning one switch off from `strict()`
-/// reopens that switch's attack only.
+/// [`validate`](crate::validate), [`validate_with_anchors`](crate::validate_with_anchors)
+/// and [`validate_with_revocation`](crate::validate_with_revocation) apply.
+/// [`ValidationPolicy::dss`] turns them all off. A rule DSS applies and Nacre would
+/// otherwise lack, such as a signing time (`/M`) missing or out of the signer's validity,
+/// or revocation data issued after a certificate's `notAfter` not counting, is no switch:
+/// both presets apply it, so no preset is laxer than DSS. Turning one switch off from
+/// `strict()` reopens that switch's attack only.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ValidationPolicy {
@@ -28,9 +29,9 @@ pub struct ValidationPolicy {
     /// Refuse a file with data after its last `startxref … %%EOF`. Off, the file is judged
     /// as it stands before that data, which is ignored.
     pub refuse_trailing_data: bool,
-    /// List a field whose `/Contents` is missing or not DER, or whose `/ByteRange` is
-    /// malformed, as `TOTAL_FAILED`. Off, such a field is left out of the result, as DSS
-    /// does.
+    /// List a field whose `/V` is neither a reference nor names a dictionary, whose
+    /// `/Contents` is missing or not DER, or whose `/ByteRange` is malformed, as
+    /// `TOTAL_FAILED`. Off, such a field is left out of the result, as DSS does.
     pub list_unusable_signatures: bool,
     /// Judge the signer's `keyUsage` and `extendedKeyUsage` ([`ChainDefect::KeyUsage`],
     /// [`ChainDefect::ExtendedKeyUsage`]). A timestamp authority's are judged either way.
@@ -46,17 +47,27 @@ pub struct ValidationPolicy {
     /// [`Defect::OutOfRangeNotRevoked`]: crate::Defect::OutOfRangeNotRevoked
     pub judge_validity_before_revocation: bool,
     /// Give a verdict ([`ChainDefect::MalformedExtension`]) on a certificate that repeats
-    /// an extension. Off, a certificate of a verified signature's CMS that repeats one
-    /// makes the validation fail with [`Error::MalformedCertificate`], as DSS does.
+    /// an extension; a timestamp authority's then gives no proof of time. Off, a
+    /// certificate of a verified signature's CMS, or of one of its signature timestamp
+    /// tokens, that repeats one makes the validation fail with
+    /// [`Error::MalformedCertificate`], as DSS does; a `/DSS` certificate is not scanned.
     ///
     /// [`ChainDefect::MalformedExtension`]: crate::ChainDefect::MalformedExtension
     /// [`Error::MalformedCertificate`]: crate::Error::MalformedCertificate
     pub judge_malformed_extensions: bool,
-    /// With no proof of existence, count only revocation data issued within 24 hours
-    /// before the control date that says "not revoked"; an older revocation dated at or
-    /// before the judged time still counts, unless it is a `certificateHold`. Off, freshness is ignored: an old "not revoked"
-    /// in the `/DSS` passes a key revoked since.
+    /// With no proof of existence, count only revocation data issued within 24 hours before
+    /// the control date that says "not revoked"; an older revocation dated at or before the
+    /// judged time still counts, unless it is a `certificateHold`. Off, freshness is
+    /// ignored: an old "not revoked" in the `/DSS` passes a key revoked since.
     pub require_fresh_revocation: bool,
+    /// Refuse a signature whose `/SubFilter` is neither `/ETSI.CAdES.detached` nor
+    /// `/adbe.pkcs7.detached` ([`Defect::UnsupportedSubFilter`]). Off, any other
+    /// `/SubFilter` name is verified as a detached CMS and gets no ETSI level, as DSS does
+    /// (ADR-0027); a missing `/SubFilter`, or one that is not a name, is refused either
+    /// way.
+    ///
+    /// [`Defect::UnsupportedSubFilter`]: crate::Defect::UnsupportedSubFilter
+    pub refuse_unsupported_sub_filters: bool,
 }
 
 impl ValidationPolicy {
@@ -71,14 +82,16 @@ impl ValidationPolicy {
             judge_validity_before_revocation: true,
             judge_malformed_extensions: true,
             require_fresh_revocation: true,
+            refuse_unsupported_sub_filters: true,
         }
     }
 
-    /// **Unsafe for deciding whether to trust a document**: this preset accepts attacks that
-    /// [`strict`](Self::strict) refuses — shadow attacks and incremental saving attacks
-    /// (any later revision), sneaky signatures, data appended after the last `%%EOF`, a
-    /// signer certificate whose key usage forbids signing, and, for a signature with no
-    /// timestamp, a stale "not revoked" CRL or OCSP response appended to the `/DSS`.
+    /// **Unsafe for deciding whether to trust a document**: this preset accepts attacks
+    /// that [`strict`](Self::strict) refuses — shadow attacks and incremental saving
+    /// attacks (any later revision), sneaky signatures, data appended after the last
+    /// `%%EOF`, a signer certificate whose key usage forbids signing, a signature under a
+    /// `/SubFilter` Nacre does not support, and, for a signature with no timestamp, a stale
+    /// "not revoked" CRL or OCSP response appended to the `/DSS`.
     ///
     /// Every switch off: the verdict DSS 6.5.1 gives, for comparing Nacre with it. Only the
     /// rules DSS also applies remain.
@@ -92,6 +105,7 @@ impl ValidationPolicy {
             judge_validity_before_revocation: false,
             judge_malformed_extensions: false,
             require_fresh_revocation: false,
+            refuse_unsupported_sub_filters: false,
         }
     }
 }

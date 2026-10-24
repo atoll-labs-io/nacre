@@ -764,3 +764,252 @@ fn claimed_time_before_not_before() {
     let strict = nacre(&pdf, Some(&source), &ValidationPolicy::strict());
     assert_eq!(verdict(&strict), expected);
 }
+
+/// The bench root's CRL, written at the bench's start.
+fn root_crl() -> Vec<u8> {
+    std::fs::read(nacre_conformance::pki_dir().join("root.crl")).unwrap()
+}
+
+/// A "not revoked" CRL of the intermediate issued at `issued`, then the bench root's CRL.
+fn chain_crls(issued: SystemTime) -> [Vec<u8>; 2] {
+    [intermediate_crl(issued), root_crl()]
+}
+
+const CONSTRAINTS: Verdict = (
+    Indication::Indeterminate,
+    Some(SubIndication::SigConstraintsFailure),
+);
+const GENERAL_FAILURE: Verdict = (
+    Indication::Indeterminate,
+    Some(SubIndication::CertificateChainGeneralFailure),
+);
+const FORMAT: Verdict = (Indication::TotalFailed, Some(SubIndication::FormatFailure));
+
+/// n11 and m1: a bench B with no `/M`, then with `/M (garbage)`, its CRLs in `/DSS`.
+#[test]
+#[ignore = "conformance"]
+fn claimed_time_missing() {
+    let signer = BenchSigner::load();
+    let crls = chain_crls(SystemTime::now() - hours(1));
+    for (name, claimed) in [
+        ("s43-claimed-time-missing", None),
+        ("s43-claimed-time-garbage", Some(&b"garbage"[..])),
+    ] {
+        let pdf = forge::with_dss(
+            &forge::custom_signed(&signer, b"ETSI.CAdES.detached", claimed),
+            &[],
+            &crls,
+        );
+
+        confront_signatures(name, &pdf, None, &[CONSTRAINTS], &ValidationPolicy::dss());
+        let strict = nacre(&pdf, None, &ValidationPolicy::strict());
+        assert_eq!(verdict(&strict), CONSTRAINTS, "{name}");
+    }
+}
+
+/// n02: a `/M` of 2027-06-01 on a signer valid now and until 30 days from now.
+#[test]
+#[ignore = "conformance"]
+fn claimed_time_after_not_after() {
+    let now = SystemTime::now();
+    let signer = forged_signer(
+        "CN=Nacre s43 short-lived signer,O=Nacre tests,C=FR",
+        0x71,
+        51,
+        (forge::instant(2026, 1, 1, 0, 0, 0), now + hours(30 * 24)),
+        Extensions::Usual,
+    );
+    let pdf = forge::with_dss(
+        &forge::custom_signed(&signer, b"ETSI.CAdES.detached", Some(b"D:20270601000000Z")),
+        &[],
+        &chain_crls(now - hours(1)),
+    );
+
+    confront_signatures(
+        "s43-claimed-time-after-not-after",
+        &pdf,
+        None,
+        &[CONSTRAINTS],
+        &ValidationPolicy::dss(),
+    );
+    let strict = nacre(&pdf, None, &ValidationPolicy::strict());
+    assert_eq!(verdict(&strict), CONSTRAINTS);
+}
+
+/// n01c, n01d and e1: a signer expired yesterday, its CRL in `/DSS` issued after or before
+/// its `notAfter`; e1 is a B-T stamped three days ago, while the signer was valid.
+#[test]
+#[ignore = "conformance"]
+fn data_issued_after_not_after() {
+    let now = SystemTime::now();
+    let expired = |subject: &str, secret: u8, offset: u64| {
+        forged_signer(
+            subject,
+            secret,
+            offset,
+            (forge::instant(2026, 1, 1, 0, 0, 0), now - hours(24)),
+            Extensions::Usual,
+        )
+    };
+    let out_of_bounds = (
+        Indication::Indeterminate,
+        Some(SubIndication::OutOfBoundsNoPoe),
+    );
+
+    let signer = expired("CN=Nacre s43 n01c signer,O=Nacre tests,C=FR", 0x72, 52);
+    let late = forge::with_dss(
+        &forge::signed(&signer, Level::B),
+        &[],
+        &chain_crls(now - hours(1)),
+    );
+    confront_signatures(
+        "s43-n01c-crl-after-not-after",
+        &late,
+        None,
+        &[GENERAL_FAILURE],
+        &ValidationPolicy::dss(),
+    );
+    let strict = nacre(&late, None, &ValidationPolicy::strict());
+    assert_eq!(verdict(&strict), out_of_bounds);
+
+    let signer = expired("CN=Nacre s43 n01d signer,O=Nacre tests,C=FR", 0x73, 53);
+    let early = forge::with_dss(
+        &forge::signed(&signer, Level::B),
+        &[],
+        &chain_crls(now - hours(48)),
+    );
+    confront_signatures(
+        "s43-n01d-crl-before-not-after",
+        &early,
+        None,
+        &[(
+            Indication::Indeterminate,
+            Some(SubIndication::OutOfBoundsNotRevoked),
+        )],
+        &ValidationPolicy::dss(),
+    );
+    let strict = nacre(&early, None, &ValidationPolicy::strict());
+    assert_eq!(verdict(&strict), out_of_bounds);
+
+    let signer = expired("CN=Nacre s43 e1 signer,O=Nacre tests,C=FR", 0x74, 54);
+    let tsa = ForgedTsa {
+        key: bench_key("tsa"),
+        certificates: vec![
+            bench_certificate("tsa.cert.pem"),
+            bench_certificate("intermediate.cert.pem"),
+        ],
+        gen_time: DateTime::from_system_time(now - hours(72)).unwrap(),
+        imprint: None,
+    };
+    let stamped = forge::with_dss(
+        &forge::signed(&signer, Level::T { tsa: &tsa }),
+        &[],
+        &chain_crls(now - hours(1)),
+    );
+    confront_signatures(
+        "s43-e1-stamped-crl-after-not-after",
+        &stamped,
+        None,
+        &[GENERAL_FAILURE],
+        &ValidationPolicy::dss(),
+    );
+    let strict = nacre(&stamped, None, &ValidationPolicy::strict());
+    assert_eq!(verdict(&strict), GENERAL_FAILURE, "{:?}", strict.defect);
+    assert!(strict.best_signature_time.is_some());
+}
+
+/// n04: a B-T whose timestamp authority repeats `keyUsage`, the signer's CRLs in `/DSS`.
+#[test]
+#[ignore = "conformance"]
+fn malformed_timestamp_certificate_policy() {
+    let now = SystemTime::now();
+    let signer = forged_signer(
+        "CN=Nacre s43 stamped signer,O=Nacre tests,C=FR",
+        0x75,
+        55,
+        usual_validity(),
+        Extensions::Usual,
+    );
+    let tsa_key = forge::key(&[0x76; 32]);
+    let intermediate = Certificate::from_der(&bench_certificate("intermediate.cert.pem")).unwrap();
+    let tsa = forge::issue_with(
+        Role::Tsa,
+        "CN=Nacre s43 malformed TSA,O=Nacre tests,C=FR",
+        fresh_serial(56),
+        &tsa_key,
+        Some(&intermediate),
+        &bench_key("intermediate"),
+        (x509(usual_validity().0), x509(usual_validity().1)),
+        Extensions::RepeatedKeyUsage,
+    );
+    let authority = ForgedTsa {
+        key: tsa_key,
+        certificates: vec![
+            tsa.to_der().unwrap(),
+            bench_certificate("intermediate.cert.pem"),
+        ],
+        gen_time: DateTime::from_system_time(now).unwrap(),
+        imprint: None,
+    };
+    let pdf = forge::with_dss(
+        &forge::signed(&signer, Level::T { tsa: &authority }),
+        &[],
+        &chain_crls(now - hours(1)),
+    );
+
+    let error = confront_error(
+        "s43-malformed-timestamp-certificate",
+        &pdf,
+        &ValidationPolicy::dss(),
+    );
+    assert!(matches!(error, Error::MalformedCertificate), "{error:?}");
+    let strict = nacre(&pdf, None, &ValidationPolicy::strict());
+    assert_eq!(verdict(&strict), PASSED, "{:?}", strict.defect);
+    assert_eq!(strict.best_signature_time, None);
+}
+
+/// n06 and n07: a sound bench CMS under `/SubFilter /adbe.x509.rsa_sha1`, then under a
+/// name no one defines.
+#[test]
+#[ignore = "conformance"]
+fn unsupported_sub_filters_policy() {
+    let signer = BenchSigner::load();
+    let crls = chain_crls(SystemTime::now() - hours(1));
+    for (name, sub_filter) in [
+        ("s43-subfilter-x509-rsa-sha1", &b"adbe.x509.rsa_sha1"[..]),
+        ("s43-subfilter-unknown", b"Nacre.unknown"),
+    ] {
+        let pdf = forge::with_dss(
+            &forge::custom_signed(&signer, sub_filter, Some(b"D:20261022080000Z")),
+            &[],
+            &crls,
+        );
+
+        confront_signatures(name, &pdf, None, &[PASSED], &ValidationPolicy::dss());
+        let strict = nacre(&pdf, None, &ValidationPolicy::strict());
+        assert_eq!(verdict(&strict), FORMAT, "{name}");
+    }
+}
+
+/// n08 and n08b: a bench B whose field's `/V` is patched to `7`, then to the page's content
+/// stream `4 0 R`.
+#[test]
+#[ignore = "conformance"]
+fn unreadable_signature_value_policy() {
+    let signed = forge::signed(&BenchSigner::load(), Level::B);
+    let value = Document::parse(&signed).unwrap().signature_fields()[0]
+        .value
+        .unwrap();
+    let reference = format!("/V {} {} R", value.number, value.generation);
+    for (name, to) in [
+        ("s43-v-direct", &b"/V 7"[..]),
+        ("s43-v-stream", b"/V 4 0 R"),
+    ] {
+        let pdf = forge::patch(&signed, reference.as_bytes(), to);
+
+        confront_signatures(name, &pdf, None, &[], &ValidationPolicy::dss());
+        let strict = judged(&pdf, None, &ValidationPolicy::strict()).unwrap();
+        assert_eq!(strict.len(), 1, "{name}");
+        assert_eq!(verdict(&strict[0]), FORMAT, "{name}");
+    }
+}

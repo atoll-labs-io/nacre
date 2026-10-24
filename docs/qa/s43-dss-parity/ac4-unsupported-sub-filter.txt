@@ -1,0 +1,484 @@
+# QA s43-dss-parity — scenario c4: refuse_unsupported_sub_filters (driver scenarios.md, surface endpoint, platform lib)
+# Tree under test: 5e176093d6595bc7eb9a392949f3d995fed12fa0 (copy of git ls-files in a mktemp -d directory; no .env* file to copy; Install 'cargo fetch' and Build 'cargo build --workspace --all-features' exit 0)
+# Program: scratch binary crate qa-scen at crates/qa-scen of the copy, calling the public API of nacre-validate and nacre-pdf;
+#   input PDFs and CRLs are built with the test bench's fictitious PKI (crates/nacre-validate/tests/support/forge.rs, included by #[path]) or read from crates/nacre-validate/tests/corpus/.
+# Working directory: <copy>/crates/qa-scen   stdin: none
+# Command: ../../target/debug/qa-scen c4
+# Run twice; the two outputs are identical.
+
+## stdout+stderr
+Switch values: strict=true dss=false default=true
+strict minus the switch differs from strict in that field only: true
+corpus attacks/subfilter-unsupported.pdf, no anchor (validate / validate_with_policy)
+  [validate (default)] signatures: 1
+    field=Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(UnsupportedSubFilter) digest=false sig=false chain=None bst=None
+  [strict] signatures: 1
+    field=Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(UnsupportedSubFilter) digest=false sig=false chain=None bst=None
+  [dss] signatures: 1
+    field=Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None digest=true sig=true chain=None bst=None
+  [strict minus switch] signatures: 1
+    field=Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None digest=true sig=true chain=None bst=None
+QA43 PKI signature, sound PAdES CMS, /SubFilter /adbe.x509.rsa_sha1 with /M, CRLs in /DSS, anchored
+  [strict] signatures: 1
+    field=Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(UnsupportedSubFilter) digest=false sig=false chain=None bst=None
+  [dss] signatures: 1
+    field=Signature1 indication=TotalPassed sub=None defect=None digest=true sig=true chain=Some(3) bst=None
+  [strict minus switch] signatures: 1
+    field=Signature1 indication=TotalPassed sub=None defect=None digest=true sig=true chain=Some(3) bst=None
+QA43 PKI signature, sound PAdES CMS, /SubFilter /adbe.pkcs7.sha1 with /M, CRLs in /DSS, anchored
+  [strict] signatures: 1
+    field=Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(UnsupportedSubFilter) digest=false sig=false chain=None bst=None
+  [dss] signatures: 1
+    field=Signature1 indication=TotalPassed sub=None defect=None digest=true sig=true chain=Some(3) bst=None
+  [strict minus switch] signatures: 1
+    field=Signature1 indication=TotalPassed sub=None defect=None digest=true sig=true chain=Some(3) bst=None
+QA43 PKI signature, sound PAdES CMS, /SubFilter /QA.Unknown.Name with /M, CRLs in /DSS, anchored
+  [strict] signatures: 1
+    field=Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(UnsupportedSubFilter) digest=false sig=false chain=None bst=None
+  [dss] signatures: 1
+    field=Signature1 indication=TotalPassed sub=None defect=None digest=true sig=true chain=Some(3) bst=None
+  [strict minus switch] signatures: 1
+    field=Signature1 indication=TotalPassed sub=None defect=None digest=true sig=true chain=Some(3) bst=None
+QA43 PKI signature, sound PAdES CMS, /SubFilter /ETSI.CAdES.detached with /M, CRLs in /DSS, anchored
+  [strict] signatures: 1
+    field=Signature1 indication=TotalPassed sub=None defect=None digest=true sig=true chain=Some(3) bst=None
+  [dss] signatures: 1
+    field=Signature1 indication=TotalPassed sub=None defect=None digest=true sig=true chain=Some(3) bst=None
+  [strict minus switch] signatures: 1
+    field=Signature1 indication=TotalPassed sub=None defect=None digest=true sig=true chain=Some(3) bst=None
+## exit code: 0 (second run: 0)
+
+## The program, quoted whole: crates/qa-scen/Cargo.toml
+[package]
+name = "qa-scen"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+nacre-validate = { path = "../nacre-validate" }
+nacre-core = { path = "../nacre-core", features = ["test-signer"] }
+nacre-pades = { path = "../nacre-pades" }
+nacre-pdf = { path = "../nacre-pdf" }
+nacre-cms = { path = "../nacre-cms" }
+sha2 = "0.11"
+spki = "0.8"
+der = { version = "0.8", features = ["alloc", "oid", "pem"] }
+x509-cert = { version = "0.3", features = ["builder"] }
+p256 = { version = "0.14", features = ["ecdsa", "pkcs8", "pem"] }
+
+## crates/qa-scen/src/main.rs
+// QA scratch program for s43: calls the public interface of nacre-validate and nacre-pdf.
+// `forge` is the test bench's fictitious PKI, used here only to build input files.
+#![allow(clippy::all, dead_code, unused_imports)]
+#[path = "../../nacre-validate/tests/support/forge.rs"]
+mod forge;
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::time::SystemTime;
+
+use der::{DateTime, Encode};
+use forge::*;
+use nacre_core::{RevocationData, RevocationSource};
+use nacre_pades::Level;
+use nacre_validate::*;
+use p256::ecdsa::SigningKey;
+use x509_cert::Certificate;
+use x509_cert::time::Time;
+
+const CORPUS: &str = "../nacre-validate/tests/corpus/";
+const CATALOG: &str = "../../docs/security/attacks/";
+
+type R = Result<Vec<SignatureValidation>, Error>;
+
+fn show(label: &str, r: &R) {
+    match r {
+        Err(e) => println!("  [{label}] Err({e:?}) kind={:?} display=\"{e}\"", e.kind()),
+        Ok(v) => {
+            println!("  [{label}] signatures: {}", v.len());
+            for s in v {
+                println!(
+                    "    field={} indication={:?} sub={:?} defect={:?} digest={} sig={} chain={:?} bst={:?}",
+                    s.field, s.report.indication(), s.report.sub_indication(), s.defect,
+                    s.digest_verified, s.signature_verified,
+                    s.chain.as_ref().map(|c| c.certificates.len()), s.best_signature_time
+                );
+            }
+        }
+    }
+}
+
+fn file(name: &str) -> Vec<u8> {
+    std::fs::read(format!("{CORPUS}{name}")).unwrap_or_else(|e| panic!("{name}: {e}"))
+}
+fn d(c: &Certificate) -> Vec<u8> { c.to_der().unwrap() }
+
+fn presets() -> [(&'static str, ValidationPolicy); 2] {
+    [("strict", ValidationPolicy::strict()), ("dss", ValidationPolicy::dss())]
+}
+
+struct Pki { root: Certificate, rk: SigningKey, int: Certificate, ik: SigningKey, signer: Certificate, sk: SigningKey, tsa: Certificate, tk: SigningKey }
+impl Pki {
+    fn new() -> Self {
+        let rk = key(&[0x61; 32]); let ik = key(&[0x62; 32]); let sk = key(&[0x63; 32]); let tk = key(&[0x64; 32]);
+        let root = issue(Role::Ca, "CN=QA43 root,O=QA,C=FR", 1, &rk, None, &rk);
+        let int = issue(Role::Ca, "CN=QA43 intermediate,O=QA,C=FR", 2, &ik, Some(&root), &rk);
+        let signer = issue(Role::Signer, "CN=QA43 signer,O=QA,C=FR", 3, &sk, Some(&int), &ik);
+        let tsa = issue(Role::Tsa, "CN=QA43 TSA,O=QA,C=FR", 4, &tk, Some(&int), &ik);
+        Pki { root, rk, int, ik, signer, sk, tsa, tk }
+    }
+    fn anchors(&self) -> TrustAnchors { let r = d(&self.root); TrustAnchors::from_certificates([r.as_slice()]).unwrap() }
+    fn leaf(&self, serial: u64, nb: Time, na: Time) -> Certificate {
+        issue_valid(Role::Signer, &format!("CN=QA43 signer {serial},O=QA,C=FR"), serial, &self.sk, Some(&self.int), &self.ik, nb, na)
+    }
+    fn chain(&self, leaf: &Certificate) -> ChainSigner { ChainSigner { key: self.sk.clone(), chain: vec![d(leaf), d(&self.int)] } }
+    fn tsa_auth(&self, cert: &Certificate) -> ForgedTsa {
+        ForgedTsa { key: self.tk.clone(), certificates: vec![d(cert)], gen_time: DateTime::new(2026, 10, 22, 8, 0, 0).unwrap(), imprint: None }
+    }
+    fn crl_int(&self, at: Time) -> Vec<u8> { crl(&self.int, &self.ik, at, time(2026, 12, 1, 0, 0, 0), &[]) }
+    fn crl_int_rev(&self, at: Time, c: &Certificate, when: Time) -> Vec<u8> { crl(&self.int, &self.ik, at, time(2026, 12, 1, 0, 0, 0), &[(c, when)]) }
+    fn crl_root(&self, at: Time) -> Vec<u8> { crl(&self.root, &self.rk, at, time(2026, 12, 1, 0, 0, 0), &[]) }
+    fn fresh(&self) -> Vec<Vec<u8>> { let t = time(2026, 10, 23, 12, 0, 0); vec![self.crl_int(t), self.crl_root(t)] }
+    fn judge(&self, label: &str, pdf: &[u8], p: &ValidationPolicy) -> R {
+        let r = validate_with_policy(pdf, &self.anchors(), control(), None, p);
+        show(label, &r); r
+    }
+    fn both(&self, pdf: &[u8]) { for (l, p) in presets() { self.judge(l, pdf, &p); } }
+}
+fn control() -> SystemTime { instant(2026, 10, 24, 0, 0, 0) }
+
+fn m_of(pdf: &[u8]) -> String {
+    let s = String::from_utf8_lossy(pdf);
+    match s.rfind("/M ") { Some(i) => s[i..(i + 24).min(s.len())].replace('\n', " "), None => "no /M in file".into() }
+}
+
+// ---------- c1: /M rules (AC1)
+fn c1() {
+    let pki = Pki::new();
+    let fresh = pki.fresh();
+    println!("Signer valid 2026-01-01..2036-01-01 unless said; CRLs of int and root 2026-10-23T12:00Z in /DSS; control date 2026-10-24T00:00Z; anchor QA43 root");
+    for (label, m) in [("control: /M D:20261022080000Z", Some(&b"D:20261022080000Z"[..])), ("no /M", None), ("/M (garbage)", Some(&b"garbage"[..]))] {
+        println!("{label}");
+        let pdf = with_dss(&custom_signed(&pki.chain(&pki.signer), b"ETSI.CAdES.detached", m), &[], &fresh);
+        println!("  in file: {}", m_of(&pdf));
+        pki.both(&pdf);
+    }
+    let short = pki.leaf(7, time(2026, 1, 1, 0, 0, 0), time(2027, 1, 1, 0, 0, 0));
+    println!("/M D:20270601000000Z, signer valid 2026-01-01..2027-01-01 (valid at the control date)");
+    let pdf = with_dss(&custom_signed(&pki.chain(&short), b"ETSI.CAdES.detached", Some(b"D:20270601000000Z")), &[], &fresh);
+    pki.both(&pdf);
+}
+fn c1e() {
+    let pki = Pki::new();
+    let fresh = pki.fresh();
+    let short = pki.leaf(7, time(2026, 1, 1, 0, 0, 0), time(2027, 1, 1, 0, 0, 0));
+    println!("Signer valid 2026-01-01..2027-01-01; fresh CRLs in /DSS; control date 2026-10-24T00:00Z");
+    for m in [&b""[..], b"D:", b"D:2026", b"D:20261301000000Z", b"D:20261022250000Z", b"20261022080000Z", b"D:20270101000000Z", b"D:20270101000001Z", b"D:20261231235959Z", b"D:20270101010000+02'00'"] {
+        println!("/M ({})", String::from_utf8_lossy(m));
+        let pdf = with_dss(&custom_signed(&pki.chain(&short), b"ETSI.CAdES.detached", Some(m)), &[], &fresh);
+        pki.both(&pdf);
+    }
+}
+
+// ---------- c2: late revocation data (AC2)
+fn c2() {
+    let pki = Pki::new();
+    let na = time(2026, 10, 23, 0, 0, 0);
+    let leaf = pki.leaf(5, time(2026, 1, 1, 0, 0, 0), na);
+    let late = pki.fresh(); // 2026-10-23T12:00Z, after notAfter
+    let before = vec![pki.crl_int(time(2026, 10, 22, 20, 0, 0)), pki.crl_root(time(2026, 10, 22, 20, 0, 0))];
+    println!("Signer valid 2026-01-01..2026-10-23T00:00Z (expired at the control date 2026-10-24T00:00Z); /M 2026-10-22T08:00Z");
+    let basic = signed(&pki.chain(&leaf), Level::B);
+    println!("(n01c) B, CRLs issued 2026-10-23T12:00Z (after notAfter), no other data");
+    pki.both(&with_dss(&basic, &[], &late));
+    println!("(n01d) B, CRLs issued 2026-10-22T20:00Z (before notAfter)");
+    pki.both(&with_dss(&basic, &[], &before));
+    let tsa = pki.tsa_auth(&pki.tsa);
+    let stamped = signed(&pki.chain(&leaf), Level::T { tsa: &tsa });
+    println!("(e1) B-T stamped 2026-10-22T08:00Z (signer valid at the stamp), CRLs issued 2026-10-23T12:00Z (after notAfter)");
+    pki.both(&with_dss(&stamped, &[], &late));
+    println!("(e1, data before) B-T stamped 2026-10-22T08:00Z, CRLs issued 2026-10-22T20:00Z (before notAfter)");
+    pki.both(&with_dss(&stamped, &[], &before));
+    println!("(control) B-T, signer valid 2026-01-01..2036-01-01, CRLs issued 2026-10-23T12:00Z");
+    pki.both(&with_dss(&signed(&pki.chain(&pki.signer), Level::T { tsa: &tsa }), &[], &late));
+}
+struct Src(Vec<u8>, Vec<u8>, Vec<u8>);
+impl RevocationSource for Src {
+    fn revocation(&self, _c: &[u8], issuer: &[u8]) -> Result<RevocationData, nacre_core::Error> {
+        Ok(RevocationData::Crl(if issuer == self.0 { self.1.clone() } else { self.2.clone() }))
+    }
+}
+fn c2e() {
+    let pki = Pki::new();
+    let na = time(2026, 10, 23, 0, 0, 0);
+    let leaf = pki.leaf(5, time(2026, 1, 1, 0, 0, 0), na);
+    let tsa = pki.tsa_auth(&pki.tsa);
+    let stamped = signed(&pki.chain(&leaf), Level::T { tsa: &tsa });
+    let basic = signed(&pki.chain(&leaf), Level::B);
+    println!("Signer valid 2026-01-01..2026-10-23T00:00Z; control date 2026-10-24T00:00Z");
+    println!("B-T, no /DSS; a RevocationSource answers CRLs issued 2026-10-23T12:00Z (after notAfter)");
+    let src = Src(d(&pki.int), pki.crl_int(time(2026, 10, 23, 12, 0, 0)), pki.crl_root(time(2026, 10, 23, 12, 0, 0)));
+    for (l, p) in presets() { let r = validate_with_policy(&stamped, &pki.anchors(), control(), Some(&src), &p); show(l, &r); }
+    println!("B-T, intermediate CRL issued exactly at notAfter 2026-10-23T00:00:00Z");
+    let at = vec![pki.crl_int(na), pki.crl_root(na)];
+    pki.both(&with_dss(&stamped, &[], &at));
+    println!("B-T, intermediate CRL issued 2026-10-23T00:00:01Z (one second after notAfter)");
+    let t1 = time(2026, 10, 23, 0, 0, 1);
+    pki.both(&with_dss(&stamped, &[], &[pki.crl_int(t1), pki.crl_root(t1)]));
+    println!("B-T, CRL issued after notAfter that REVOKES the signer at 2026-10-22T06:00Z (before the stamp)");
+    let rev = pki.crl_int_rev(time(2026, 10, 23, 12, 0, 0), &leaf, time(2026, 10, 22, 6, 0, 0));
+    pki.both(&with_dss(&stamped, &[], &[rev, pki.crl_root(time(2026, 10, 23, 12, 0, 0))]));
+    println!("B, CRLs before notAfter plus late CRLs (both kinds in /DSS)");
+    let mut mixed = vec![pki.crl_int(time(2026, 10, 22, 20, 0, 0)), pki.crl_root(time(2026, 10, 22, 20, 0, 0))];
+    mixed.extend(pki.fresh());
+    pki.both(&with_dss(&basic, &[], &mixed));
+    println!("B, /DSS CRL stream holding garbage bytes");
+    pki.both(&with_dss(&basic, &[], &[b"not a CRL".to_vec()]));
+}
+
+// ---------- c3: TSA certificate repeating an extension (AC3)
+fn c3() {
+    let pki = Pki::new();
+    let bad = issue_with(Role::Tsa, "CN=QA43 malformed TSA,O=QA,C=FR", 6, &pki.tk, Some(&pki.int), &pki.ik,
+        (time(2026, 1, 1, 0, 0, 0), time(2036, 1, 1, 0, 0, 0)), Extensions::RepeatedKeyUsage);
+    let fresh = pki.fresh();
+    println!("B-T stamped 2026-10-22T08:00Z by a TSA whose certificate repeats keyUsage; signer CRLs in /DSS; control date 2026-10-24T00:00Z");
+    let pdf = with_dss(&signed(&pki.chain(&pki.signer), Level::T { tsa: &pki.tsa_auth(&bad) }), &[], &fresh);
+    pki.both(&pdf);
+    let mut p = ValidationPolicy::strict(); p.judge_malformed_extensions = false;
+    pki.judge("strict minus judge_malformed_extensions", &pdf, &p);
+    println!("(control) the same B-T stamped by a well-formed TSA");
+    pki.both(&with_dss(&signed(&pki.chain(&pki.signer), Level::T { tsa: &pki.tsa_auth(&pki.tsa) }), &[], &fresh));
+}
+fn c3e() {
+    let pki = Pki::new();
+    let bad = issue_with(Role::Tsa, "CN=QA43 malformed TSA,O=QA,C=FR", 6, &pki.tk, Some(&pki.int), &pki.ik,
+        (time(2026, 1, 1, 0, 0, 0), time(2036, 1, 1, 0, 0, 0)), Extensions::RepeatedKeyUsage);
+    let fresh = pki.fresh();
+    println!("B (no timestamp), the malformed TSA certificate only placed in /DSS /Certs");
+    let pdf = with_dss(&signed(&pki.chain(&pki.signer), Level::B), &[d(&bad)], &fresh);
+    pki.both(&pdf);
+    println!("B-T whose token carries a well-formed TSA certificate followed by a certificate repeating keyUsage (unrelated CA cert)");
+    let bad_ca = issue_with(Role::Ca, "CN=QA43 bad extra,O=QA,C=FR", 8, &pki.ik, Some(&pki.root), &pki.rk,
+        (time(2026, 1, 1, 0, 0, 0), time(2036, 1, 1, 0, 0, 0)), Extensions::RepeatedKeyUsage);
+    let mut auth = pki.tsa_auth(&pki.tsa); auth.certificates.push(d(&bad_ca));
+    let pdf = with_dss(&signed(&pki.chain(&pki.signer), Level::T { tsa: &auth }), &[], &fresh);
+    pki.both(&pdf);
+    println!("B-T with the malformed TSA, no anchor (validate_with_policy, empty TrustAnchors)");
+    let pdf = with_dss(&signed(&pki.chain(&pki.signer), Level::T { tsa: &pki.tsa_auth(&bad) }), &[], &fresh);
+    for (l, p) in presets() { show(l, &validate_with_policy(&pdf, &TrustAnchors::default(), control(), None, &p)); }
+}
+
+// ---------- c4: refuse_unsupported_sub_filters (AC4)
+fn c4() {
+    println!("Switch values: strict={} dss={} default={}", ValidationPolicy::strict().refuse_unsupported_sub_filters,
+        ValidationPolicy::dss().refuse_unsupported_sub_filters, ValidationPolicy::default().refuse_unsupported_sub_filters);
+    let mut off = ValidationPolicy::strict(); off.refuse_unsupported_sub_filters = false;
+    println!("strict minus the switch differs from strict in that field only: {}", { let mut s = off; s.refuse_unsupported_sub_filters = true; s == ValidationPolicy::strict() });
+    println!("corpus attacks/subfilter-unsupported.pdf, no anchor (validate / validate_with_policy)");
+    let f = file("attacks/subfilter-unsupported.pdf");
+    show("validate (default)", &validate(&f));
+    for (l, p) in presets() { show(l, &validate_with_policy(&f, &TrustAnchors::default(), SystemTime::UNIX_EPOCH, None, &p)); }
+    show("strict minus switch", &validate_with_policy(&f, &TrustAnchors::default(), SystemTime::UNIX_EPOCH, None, &off));
+    let pki = Pki::new();
+    let fresh = pki.fresh();
+    for sf in [&b"adbe.x509.rsa_sha1"[..], b"adbe.pkcs7.sha1", b"QA.Unknown.Name", b"ETSI.CAdES.detached"] {
+        println!("QA43 PKI signature, sound PAdES CMS, /SubFilter /{} with /M, CRLs in /DSS, anchored", String::from_utf8_lossy(sf));
+        let pdf = with_dss(&custom_signed(&pki.chain(&pki.signer), sf, Some(b"D:20261022080000Z")), &[], &fresh);
+        pki.both(&pdf);
+        pki.judge("strict minus switch", &pdf, &off);
+    }
+}
+fn c4e() {
+    let pki = Pki::new();
+    let fresh = pki.fresh();
+    let base = custom_signed(&pki.chain(&pki.signer), b"adbe.x509.rsa_sha1", Some(b"D:20261022080000Z"));
+    println!("/SubFilter removed (patched to spaces after signing)");
+    pki.both(&with_dss(&patch(&base, b"/SubFilter /adbe.x509.rsa_sha1", b""), &[], &fresh));
+    println!("/SubFilter 7 (an integer, not a name)");
+    pki.both(&with_dss(&patch(&base, b"/SubFilter /adbe.x509.rsa_sha1", b"/SubFilter 7"), &[], &fresh));
+    println!("/SubFilter (adbe.x509) (a string, not a name)");
+    pki.both(&with_dss(&patch(&base, b"/SubFilter /adbe.x509.rsa_sha1", b"/SubFilter (adbe.x509)"), &[], &fresh));
+    println!("unsupported /SubFilter, CMS bytes broken (signed bytes patched after signing: /M changed)");
+    let hx = |t: &[u8]| t.iter().map(|b| format!("{b:02X}")).collect::<String>(); let (a, b) = (hx(b"D:20261022080000Z"), hx(b"D:20261022090000Z")); let src = if base.windows(a.len()).any(|w| w == a.as_bytes()) { (a, b) } else { (a.to_lowercase(), b.to_lowercase()) }; pki.both(&with_dss(&patch(&base, src.0.as_bytes(), src.1.as_bytes()), &[], &fresh));
+    println!("/SubFilter /ETSI.RFC3161 over a signature CMS (document timestamp sub-filter)");
+    pki.both(&with_dss(&custom_signed(&pki.chain(&pki.signer), b"ETSI.RFC3161", Some(b"D:20261022080000Z")), &[], &fresh));
+}
+
+// ---------- c5: unreadable /V (AC5)
+fn fields(label: &str, pdf: &[u8]) {
+    match nacre_pdf::Document::parse(pdf) {
+        Err(e) => println!("  [nacre_pdf::Document::parse {label}] Err({e:?}) display=\"{e}\""),
+        Ok(doc) => {
+            println!("  [nacre_pdf::Document::parse {label}] Ok, {} signature field(s)", doc.signature_fields().len());
+            for f in doc.signature_fields() { println!("    name={} id={:?} value={:?} value_unreadable={}", f.name, f.id, f.value, f.value_unreadable); }
+        }
+    }
+}
+fn v_ref(pdf: &[u8]) -> String {
+    let doc = nacre_pdf::Document::parse(pdf).unwrap();
+    let id = doc.signature_fields()[0].value.unwrap();
+    let s = format!("{id:?}");
+    let nums: Vec<String> = s.chars().map(|c| if c.is_ascii_digit() { c } else { ' ' }).collect::<String>().split_whitespace().map(String::from).collect();
+    format!("/V {} {} R", nums[0], nums[1])
+}
+fn c5() {
+    let anchors = { let r = file("chain/root.der"); TrustAnchors::from_certificates([r.as_slice()]).unwrap() };
+    for name in ["usf-v-direct.pdf", "usf-v-stream.pdf"] {
+        println!("corpus attacks/{name}");
+        let f = file(&format!("attacks/{name}"));
+        fields(name, &f);
+        show("validate (default)", &validate(&f));
+        for (l, p) in presets() { show(l, &validate_with_policy(&f, &anchors, instant(2026, 10, 22, 0, 0, 0), None, &p)); }
+        let mut off = ValidationPolicy::strict(); off.list_unusable_signatures = false;
+        show("strict minus list_unusable_signatures", &validate_with_policy(&f, &anchors, instant(2026, 10, 22, 0, 0, 0), None, &off));
+    }
+    let pki = Pki::new();
+    let fresh = pki.fresh();
+    let base = with_dss(&custom_signed(&pki.chain(&pki.signer), b"ETSI.CAdES.detached", Some(b"D:20261022080000Z")), &[], &fresh);
+    let r = v_ref(&base);
+    println!("QA43 signature, unpatched (field /V is `{r}`)");
+    fields("unpatched", &base);
+    pki.both(&base);
+    println!("QA43 signature, /V patched to `<<>>` (a direct dictionary)");
+    let p = patch(&base, r.as_bytes(), b"/V <<>>");
+    fields("/V <<>>", &p); pki.both(&p);
+}
+fn c5e() {
+    let pki = Pki::new();
+    let fresh = pki.fresh();
+    let base = with_dss(&custom_signed(&pki.chain(&pki.signer), b"ETSI.CAdES.detached", Some(b"D:20261022080000Z")), &[], &fresh);
+    let r = v_ref(&base);
+    for (label, to) in [("/V null", &b"null"[..]), ("/V (x) (a string)", b"(x)"), ("/V [6] (an array)", b"[6]"), ("/V /Sig (a name)", b"/Sig"), ("/V 9 9 R (a reference to a missing object)", b"9 9 R")] {
+        println!("QA43 signature, {label}");
+        let mut new = b"/V ".to_vec(); new.extend_from_slice(to); let p = patch(&base, r.as_bytes(), &new);
+        fields(label, &p); pki.both(&p);
+    }
+    println!("corpus usf-v-direct.pdf truncated to half its length");
+    let f = file("attacks/usf-v-direct.pdf");
+    let h = &f[..f.len() / 2];
+    fields("truncated", h);
+    for (l, p) in presets() { show(l, &validate_with_policy(h, &TrustAnchors::default(), SystemTime::UNIX_EPOCH, None, &p)); }
+}
+
+// ---------- c6 / c7: isolation and opened attacks over the corpus (AC6, AC7)
+const SWITCHES: [&str; 9] = ["refuse_later_revisions", "refuse_sneaky_signatures", "refuse_trailing_data", "list_unusable_signatures",
+    "judge_signer_key_usage", "judge_validity_before_revocation", "judge_malformed_extensions", "require_fresh_revocation", "refuse_unsupported_sub_filters"];
+fn without(name: &str) -> ValidationPolicy {
+    let mut p = ValidationPolicy::strict();
+    match name {
+        "refuse_later_revisions" => p.refuse_later_revisions = false,
+        "refuse_sneaky_signatures" => p.refuse_sneaky_signatures = false,
+        "refuse_trailing_data" => p.refuse_trailing_data = false,
+        "list_unusable_signatures" => p.list_unusable_signatures = false,
+        "judge_signer_key_usage" => p.judge_signer_key_usage = false,
+        "judge_validity_before_revocation" => p.judge_validity_before_revocation = false,
+        "judge_malformed_extensions" => p.judge_malformed_extensions = false,
+        "require_fresh_revocation" => p.require_fresh_revocation = false,
+        "refuse_unsupported_sub_filters" => p.refuse_unsupported_sub_filters = false,
+        _ => unreachable!(),
+    }
+    p
+}
+struct Stub { int: Vec<u8>, int_crl: Vec<u8>, root_crl: Vec<u8> }
+impl RevocationSource for Stub {
+    fn revocation(&self, _c: &[u8], issuer: &[u8]) -> Result<RevocationData, nacre_core::Error> {
+        Ok(RevocationData::Crl(if issuer == self.int { self.int_crl.clone() } else { self.root_crl.clone() }))
+    }
+}
+fn verdict(r: &R) -> String {
+    match r {
+        Err(e) => { let s = format!("{e:?}"); format!("Err({})", s.split(|c: char| !c.is_alphanumeric()).next().unwrap()) }
+        Ok(v) => format!("{:?}", v.iter().map(|s| (s.field.clone(), s.report.indication(), s.report.sub_indication())).collect::<Vec<_>>()),
+    }
+}
+fn detail(r: &R) -> String {
+    match r { Err(e) => format!("Err({e:?})"), Ok(v) => format!("{:?}", v.iter().map(|s| (&s.field, &s.defect)).collect::<Vec<_>>()) }
+}
+fn catalog() -> BTreeMap<String, Vec<String>> {
+    let names: BTreeSet<String> = std::fs::read_dir(format!("{CORPUS}attacks")).unwrap().map(|e| e.unwrap().file_name().into_string().unwrap()).filter(|n| n.ends_with(".pdf")).collect();
+    let mut cells: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for doc in ["pades.md", "cms.md", "revocation.md", "tsp.md"] {
+        let text = std::fs::read_to_string(format!("{CATALOG}{doc}")).unwrap();
+        for line in text.lines().filter(|l| l.starts_with('|')) {
+            let parts: Vec<&str> = line.trim().trim_matches('|').split('|').map(str::trim).collect();
+            let Some(case) = parts.iter().find(|c| { let t = c.trim_matches('`'); names.contains(t) }) else { continue };
+            let case = case.trim_matches('`').to_string();
+            let last = parts.last().unwrap().to_string();
+            cells.entry(case).or_default().push(format!("{doc}: {last}"));
+        }
+    }
+    cells
+}
+fn ticks(cell: &str) -> Vec<String> { cell.split('`').skip(1).step_by(2).map(String::from).collect() }
+
+fn c6(error: bool) {
+    let chain_int = file("chain/intermediate.der");
+    let chain_root = file("chain/root.der");
+    let anchors = TrustAnchors::from_certificates([chain_root.as_slice()]).unwrap();
+    use der::Decode;
+    let int_c = Certificate::from_der(&chain_int).unwrap();
+    let root_c = Certificate::from_der(&chain_root).unwrap();
+    let t = time(2026, 10, 21, 12, 0, 0);
+    let stub = Stub { int: chain_int.clone(), int_crl: crl(&int_c, &key(&[0x32; 32]), t, time(2026, 12, 1, 0, 0, 0), &[]), root_crl: crl(&root_c, &key(&[0x31; 32]), t, time(2026, 12, 1, 0, 0, 0), &[]) };
+    let at = instant(2026, 10, 22, 0, 0, 0);
+    let run = |pdf: &[u8], p: &ValidationPolicy| validate_with_policy(pdf, &anchors, at, Some(&stub), p);
+    println!("Anchor chain/root.der, control date 2026-10-22T00:00Z, RevocationSource answering \"not revoked\" CRLs of chain intermediate and root issued 2026-10-21T12:00Z (forged by this program with keys [0x32;32] and [0x31;32])");
+    if error {
+        println!("Inputs that are not attacks: each must give the same verdict under strict, dss and strict minus each switch");
+        let ok = file("chain/chain-dss.pdf");
+        let mut inputs: Vec<(String, Vec<u8>)> = vec![("chain/chain-dss.pdf".into(), ok.clone()), ("unsigned.pdf".into(), file("unsigned.pdf")), ("empty input".into(), vec![]), ("not a PDF".into(), b"hello".to_vec())];
+        let a = file("attacks/usf-v-direct.pdf"); inputs.push(("attacks/usf-v-direct.pdf truncated to 100 bytes".into(), a[..100].to_vec()));
+        for (n, pdf) in inputs {
+            let s = run(&pdf, &ValidationPolicy::strict());
+            println!("{n}: strict {}  detail {}", verdict(&s), detail(&s));
+            let dv = run(&pdf, &ValidationPolicy::dss());
+            println!("  dss {}", verdict(&dv));
+            let changed: Vec<&str> = SWITCHES.iter().copied().filter(|sw| verdict(&run(&pdf, &without(sw))) != verdict(&s)).collect();
+            println!("  switches whose removal alone changes the verdict: {changed:?}");
+        }
+        return;
+    }
+    let cat = catalog();
+    let mut files: Vec<String> = std::fs::read_dir(format!("{CORPUS}attacks")).unwrap().map(|e| e.unwrap().file_name().into_string().unwrap()).filter(|n| n.ends_with(".pdf")).collect();
+    files.sort();
+    let (mut mism6, mut mism7, mut not_rejected, mut defect_only) = (0, 0, 0, 0);
+    for f in &files {
+        let pdf = file(&format!("attacks/{f}"));
+        let s = run(&pdf, &ValidationPolicy::strict());
+        let dv = run(&pdf, &ValidationPolicy::dss());
+        let rejected = match &s { Err(_) => true, Ok(v) => v.iter().all(|x| x.defect.is_some() || x.report.indication() != nacre_core::Indication::TotalPassed) && v.iter().any(|x| x.defect.is_some() || x.report.indication() != nacre_core::Indication::TotalPassed) || v.is_empty() };
+        let strict_clean = matches!(&s, Ok(v) if v.iter().any(|x| x.defect.is_none()));
+        let changed: Vec<String> = SWITCHES.iter().filter(|sw| verdict(&run(&pdf, &without(sw))) != verdict(&s)).map(|s| s.to_string()).collect();
+        let dchanged: Vec<String> = SWITCHES.iter().filter(|sw| { let w = run(&pdf, &without(sw)); verdict(&w) == verdict(&s) && detail(&w) != detail(&s) }).map(|s| s.to_string()).collect();
+        let opened = verdict(&dv) != verdict(&s) && matches!(&dv, Ok(v) if v.iter().any(|x| x.defect.is_none()));
+        let cells = cat.get(f).cloned().unwrap_or_default();
+        println!("{f}");
+        println!("  strict: {}  defects {}", verdict(&s), detail(&s));
+        println!("  dss:    {}  defects {}", verdict(&dv), detail(&dv));
+        println!("  strict rejects (no signature listed without defect): {}", !strict_clean);
+        println!("  switches whose removal alone changes the verdict: {changed:?}");
+        if !dchanged.is_empty() { defect_only += 1; println!("  switches changing only the defect (same verdict): {dchanged:?}"); }
+        println!("  opened under dss: {opened}");
+        println!("  catalog rows: {}", cells.len());
+        for c in &cells { println!("    {c}"); }
+        let named: BTreeSet<String> = cells.iter().flat_map(|c| ticks(c.split_once(": ").unwrap().1)).filter(|n| n != "dss()").collect();
+        let starts = cells.iter().any(|c| c.split_once(": ").unwrap().1.starts_with("`dss()`"));
+        let got: BTreeSet<String> = changed.iter().cloned().collect();
+        if cells.len() != 1 || named != got { mism6 += 1; println!("  MISMATCH AC6: catalog names {named:?}, observed {got:?}, rows {}", cells.len()); }
+        if starts != opened { mism7 += 1; println!("  MISMATCH AC7: catalog opened={starts}, observed opened={opened}"); }
+        if strict_clean { not_rejected += 1; println!("  NOT REJECTED UNDER strict"); }
+        let _ = rejected;
+    }
+    let orphan: Vec<&String> = cat.keys().filter(|k| !files.contains(k)).collect();
+    println!("SUMMARY files={} AC6 mismatches={mism6} AC7 mismatches={mism7} not rejected under strict={not_rejected} files with defect-only changes={defect_only} catalog cases with no file={orphan:?}", files.len());
+}
+
+fn main() {
+    match std::env::args().nth(1).as_deref() {
+        Some("c1") => c1(), Some("c1e") => c1e(), Some("c2") => c2(), Some("c2e") => c2e(),
+        Some("c3") => c3(), Some("c3e") => c3e(), Some("c4") => c4(), Some("c4e") => c4e(),
+        Some("c5") => c5(), Some("c5e") => c5e(), Some("c6") => c6(false), Some("c6e") => c6(true),
+        _ => eprintln!("usage: qa-scen c1|c1e|...|c6e"),
+    }
+}

@@ -34,10 +34,12 @@ const MAX_TIMESTAMPS: usize = 16;
 /// revision appended after it, trusting no certificate.
 ///
 /// An empty signature field and a document timestamp (`/SubFilter /ETSI.RFC3161`) are left
-/// out. A signature whose bytes and CMS verify, and whose later revisions are all allowed,
-/// ends `INDETERMINATE` / `NO_CERTIFICATE_CHAIN_FOUND`, since no path can reach an anchor;
-/// any defect ends `TOTAL_FAILED` or `INDETERMINATE` with its sub-indication, named in
-/// [`SignatureValidation::defect`]. [`validate_with_anchors`] judges the chain.
+/// out; a field whose `/V` is neither a reference nor names a dictionary is listed with
+/// [`Defect::NotASignatureDictionary`]. A signature whose bytes and CMS verify, and whose
+/// later revisions are all allowed, ends `INDETERMINATE` / `NO_CERTIFICATE_CHAIN_FOUND`,
+/// since no path can reach an anchor; any defect ends `TOTAL_FAILED` or `INDETERMINATE`
+/// with its sub-indication, named in [`SignatureValidation::defect`].
+/// [`validate_with_anchors`] judges the chain.
 ///
 /// An unreadable PDF, one holding more than 64 signatures, or more than 64 revisions after
 /// its oldest signed one, is an [`Error`]. Every rule of [`ValidationPolicy::strict`]
@@ -73,20 +75,25 @@ pub fn validate_with_anchors(
 /// certificates of the CMS and of the document's `/DSS` (`/Certs`, unfiltered streams
 /// only). Then each certificate of it below the anchor is judged against the CRLs of the
 /// CMS and of the timestamp tokens, the `/DSS` `/CRLs` and `/OCSPs`, and the one answer of
-/// `source` when given: of the data that verifies and was issued after the certificate's
-/// `notBefore`, the latest decides. With a best-signature-time from a timestamp,
-/// freshness is not judged, as DSS 6.5.1 does. Without one, a "not revoked" counts only
-/// when issued within 24 hours before `at` (the CRL's `thisUpdate`, the response's
-/// `producedAt`), so an old "not revoked" in the `/DSS` cannot pass a key revoked since: a
-/// deliberate departure from DSS, which ignores freshness there too. An older proof of
-/// revocation dated at or before the best-signature-time still counts, unless its reason
-/// is `certificateHold`. A revocation at or before the best-signature-time gives [`Defect::Revocation`], `INDETERMINATE` / `REVOKED_NO_POE`
-/// (`REVOKED_CA_NO_POE` for a CA), and a certificate with no usable data gives
-/// `INDETERMINATE` / `CERTIFICATE_CHAIN_GENERAL_FAILURE`; both keep the path in
+/// `source` when given: of the data that verifies and was issued within the certificate's
+/// validity, from its `notBefore` to its `notAfter`, the latest decides. Data issued after
+/// the `notAfter` is dropped under every policy, as DSS 6.5.1 does: a signer expired since,
+/// even one valid at the time a timestamp proves, then has no usable data. With a
+/// best-signature-time from a timestamp, freshness is not judged, as DSS 6.5.1 does.
+/// Without one, a "not revoked" counts only when issued within 24 hours before `at` (the
+/// CRL's `thisUpdate`, the response's `producedAt`), so an old "not revoked" in the `/DSS`
+/// cannot pass a key revoked since: a deliberate departure from DSS, which ignores
+/// freshness there too. An older proof of revocation dated at or before the
+/// best-signature-time still counts, unless its reason is `certificateHold`. A revocation
+/// at or before the best-signature-time gives [`Defect::Revocation`], `INDETERMINATE` /
+/// `REVOKED_NO_POE` (`REVOKED_CA_NO_POE` for a CA), and a certificate with no usable data
+/// gives `INDETERMINATE` / `CERTIFICATE_CHAIN_GENERAL_FAILURE`; both keep the path in
 /// [`SignatureValidation::chain`]. A path whose revocation passes gives `TOTAL_PASSED`,
-/// with no level, unless the signing time the signature dictionary claims (`/M`) is
-/// before the signer's `notBefore`: [`Defect::ClaimedTimeBeforeCertificate`],
-/// `INDETERMINATE` / `SIG_CONSTRAINTS_FAILURE`, the path kept.
+/// with no level, unless the signing time the signature dictionary claims (`/M`) is missing
+/// or unreadable ([`Defect::ClaimedTimeMissing`]), before the signer's `notBefore`
+/// ([`Defect::ClaimedTimeBeforeCertificate`]) or after its `notAfter`
+/// ([`Defect::ClaimedTimeAfterCertificate`]): `INDETERMINATE` / `SIG_CONSTRAINTS_FAILURE`,
+/// the path kept, under every policy, as DSS does.
 ///
 /// No path gives `INDETERMINATE` / `NO_CERTIFICATE_CHAIN_FOUND` with no defect; a path with
 /// a defect gives [`Defect::Chain`] and its report.
@@ -111,8 +118,13 @@ pub fn validate_with_revocation(
 ///
 /// With [`ValidationPolicy::refuse_trailing_data`] off, a file with data after its last
 /// `startxref … %%EOF` is judged as it stands before that data. With
+/// [`ValidationPolicy::list_unusable_signatures`] off, a field whose `/V`, `/Contents` or
+/// `/ByteRange` cannot be used is left out of the result. With
+/// [`ValidationPolicy::refuse_unsupported_sub_filters`] off, a signature under any other
+/// `/SubFilter` name is verified as a detached CMS. With
 /// [`ValidationPolicy::judge_malformed_extensions`] off, a certificate of a verified
-/// signature's CMS that repeats an extension is an [`Error::MalformedCertificate`].
+/// signature's CMS or of one of its signature timestamp tokens that repeats an extension
+/// is an [`Error::MalformedCertificate`]; the `/DSS` certificates are not scanned.
 pub fn validate_with_policy(
     pdf: &[u8],
     anchors: &TrustAnchors,
@@ -142,6 +154,10 @@ fn validate_with(
     };
     let mut signatures = Vec::new();
     for field in doc.signature_fields() {
+        if field.value_unreadable {
+            signatures.push((field.name.clone(), None, None));
+            continue;
+        }
         let Some(value) = field.value else {
             continue;
         };
@@ -152,7 +168,7 @@ fn validate_with(
         if dict.as_ref().is_some_and(is_document_timestamp) {
             continue;
         }
-        signatures.push((field.name.clone(), value, dict));
+        signatures.push((field.name.clone(), Some(value), dict));
     }
     if signatures.len() > max_signatures {
         return Err(Error::TooManySignatures {
@@ -165,7 +181,7 @@ fn validate_with(
     let checked: Vec<_> = signatures
         .into_iter()
         .map(|(field, value, dict)| {
-            let (end, result) = check(&doc, pdf, dict, policy.refuse_later_revisions);
+            let (end, result) = check(&doc, pdf, dict, policy);
             (field, value, end.and_then(revision_of), result)
         })
         .filter(|(_, _, _, result)| policy.list_unusable_signatures || !unusable(result))
@@ -173,10 +189,17 @@ fn validate_with(
     if !policy.judge_malformed_extensions
         && checked.iter().any(|(_, _, _, result)| {
             result.as_ref().is_ok_and(|signed| {
+                let stamped: Vec<Vec<u8>> = signed
+                    .timestamps
+                    .iter()
+                    .filter_map(|token| SignedData::from_der(token).ok())
+                    .flat_map(|data| data.certificates)
+                    .collect();
                 signed
                     .certificates
                     .iter()
                     .chain([&signed.signer])
+                    .chain(&stamped)
                     .filter_map(|der| Certificate::from_der(der).ok())
                     .any(|certificate| repeats_extension(&certificate))
             })
@@ -213,10 +236,12 @@ fn validate_with(
             // otherwise read as sound, nothing being appended after it. One added beside a
             // change refused for another reason is judged on its own signed bytes.
             let added_by = own
-                .filter(|q| {
-                    (policy.refuse_later_revisions && q.refused_signatures.contains(&value))
-                        || (policy.refuse_sneaky_signatures && q.sneaky_signatures.contains(&value))
+                .zip(value)
+                .filter(|(q, value)| {
+                    (policy.refuse_later_revisions && q.refused_signatures.contains(value))
+                        || (policy.refuse_sneaky_signatures && q.sneaky_signatures.contains(value))
                 })
+                .map(|(q, _)| q)
                 .map(|q| q.revision.end);
             let refused = mine
                 .iter()
@@ -357,7 +382,7 @@ impl Context<'_> {
 
     /// What is judged once `path`'s revocation passed at `time`: the validity of each
     /// certificate below the anchor when the walk left it out, then the claimed signing
-    /// time against the signer's `notBefore`.
+    /// time, which must be readable and within the signer's validity.
     fn after_revocation(
         &self,
         path: &CertificatePath,
@@ -377,17 +402,20 @@ impl Context<'_> {
                 in_validity(certificate, time, depth).map_err(Defect::OutOfRangeNotRevoked)?;
             }
         }
-        if let (Some(claimed), Some(signer)) = (signed.claimed_time, certificates.first())
-            && claimed
-                < signer
-                    .tbs_certificate()
-                    .validity()
-                    .not_before
-                    .to_system_time()
-        {
-            return Err(Defect::ClaimedTimeBeforeCertificate);
+        let Some(signer) = certificates.first() else {
+            return Ok(());
+        };
+        let validity = signer.tbs_certificate().validity();
+        match signed.claimed_time {
+            None => Err(Defect::ClaimedTimeMissing),
+            Some(claimed) if claimed < validity.not_before.to_system_time() => {
+                Err(Defect::ClaimedTimeBeforeCertificate)
+            }
+            Some(claimed) if claimed > validity.not_after.to_system_time() => {
+                Err(Defect::ClaimedTimeAfterCertificate)
+            }
+            Some(_) => Ok(()),
         }
-        Ok(())
     }
 
     /// The `genTime` `token` proves for `signed`, when it verifies over the signature value,
@@ -427,22 +455,24 @@ fn is_document_timestamp(dict: &Dictionary) -> bool {
     matches!(dict.get(b"SubFilter"), Some(Object::Name(n)) if n == b"ETSI.RFC3161")
 }
 
-/// The defects of a field whose `/Contents` or `/ByteRange` cannot be used at all.
+/// The defects of a field whose `/V`, `/Contents` or `/ByteRange` cannot be used at all.
 fn unusable(result: &Result<Signed, Defect>) -> bool {
     matches!(
         result,
-        Err(Defect::ContentsMissing | Defect::ContentsNotDer | Defect::ByteRangeMalformed)
+        Err(Defect::NotASignatureDictionary
+            | Defect::ContentsMissing
+            | Defect::ContentsNotDer
+            | Defect::ByteRangeMalformed)
     )
 }
 
 /// Runs the checks on one signature: where its signed bytes end, once known, and the first
-/// defect. The revisions after it are judged by the caller, last; `whole_file` refuses
-/// signed bytes that end at no revision.
+/// defect. The revisions after it are judged by the caller, last.
 fn check(
     doc: &Document<'_>,
     pdf: &[u8],
     dict: Option<Dictionary>,
-    whole_file: bool,
+    policy: &ValidationPolicy,
 ) -> (Option<usize>, Result<Signed, Defect>) {
     let claimed_time = dict
         .as_ref()
@@ -450,7 +480,7 @@ fn check(
             Some(Object::String(bytes)) => pdf_date(&bytes),
             _ => None,
         });
-    match signed_bytes(doc, pdf, dict, whole_file) {
+    match signed_bytes(doc, pdf, dict, policy) {
         Ok((end, contents, [b, c])) => (
             Some(end),
             verify(pdf, &contents, [b, c, end]).map(|signed| Signed {
@@ -468,12 +498,13 @@ fn signed_bytes(
     doc: &Document<'_>,
     pdf: &[u8],
     dict: Option<Dictionary>,
-    whole_file: bool,
+    policy: &ValidationPolicy,
 ) -> Result<(usize, Vec<u8>, [usize; 2]), Defect> {
     let dict = dict.ok_or(Defect::NotASignatureDictionary)?;
 
     match dict.get(b"SubFilter") {
-        Some(Object::Name(n)) if SUB_FILTERS.contains(&n.as_slice()) => {}
+        Some(Object::Name(n))
+            if !policy.refuse_unsupported_sub_filters || SUB_FILTERS.contains(&n.as_slice()) => {}
         _ => return Err(Defect::UnsupportedSubFilter),
     }
 
@@ -496,7 +527,7 @@ fn signed_bytes(
     if !gap_is_contents(pdf.get(b..c).unwrap_or_default(), &contents) {
         return Err(Defect::GapNotContents);
     }
-    if whole_file && !doc.revisions().iter().any(|r| r.end == end) {
+    if policy.refuse_later_revisions && !doc.revisions().iter().any(|r| r.end == end) {
         return Err(Defect::ByteRangeNotWholeFile);
     }
     Ok((end, contents, [b, c]))

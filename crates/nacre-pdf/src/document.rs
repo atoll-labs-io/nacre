@@ -103,7 +103,10 @@ impl<'a> Document<'a> {
         &self.catalog
     }
 
-    /// The AcroForm signature fields, in tree order.
+    /// The AcroForm signature fields, in tree order. A field whose `/V` is neither absent,
+    /// `null` nor a reference is listed with
+    /// [`value_unreadable`](SignatureField::value_unreadable) set rather than refusing the
+    /// file.
     pub fn signature_fields(&self) -> &[SignatureField] {
         &self.fields
     }

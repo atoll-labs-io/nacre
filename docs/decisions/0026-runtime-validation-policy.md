@@ -5,7 +5,7 @@ status: accepted
 date: 2026-10-23
 scope: story s41-validation-policy
 supersedes: []
-superseded-by: []
+superseded-by: [0027]
 ---
 
 # ADR-0026 — Validation rules that only Nacre applies are switches of a runtime `ValidationPolicy`, strict by default

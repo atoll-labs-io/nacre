@@ -53,6 +53,14 @@ sound, so only the revision rule can refuse it.
 | `ssa-unreadable-rect.pdf` | given the text field `Name`, certified at `/P 2`: one revision adds a visible merged signature `Sneaky` whose `/Rect` cannot be read, its last item a reference to an object the file never defines | `a35ed3a82d11ef42329d990451f1b87cc49889bd4379030c744e2c3909a2b69f` |
 | `ssa-toggle-noview-shown.pdf` | the same certified file: one revision adds a visible merged signature `Sneaky` flagged Print, NoView and ToggleNoView (`/F 292`), so it shows on hover | `1cd548c5d8d32c83a03b2d2a0526951083973ada7bf0f8d08505d627d173b904` |
 
+The signature dictionary cases added by s43 are `unsigned.pdf` given one signature field:
+
+| File | Content | SHA-256 |
+| --- | --- | --- |
+| `usf-v-direct.pdf` | the field `Signature1`, its `/V` the direct integer `7` | `eac6e01191bc5df312ecd122dc81767d6cb26dc488dfd7fe1725ebc6db8c1a15` |
+| `usf-v-stream.pdf` | the field `Signature1`, its `/V` naming the page's content stream `4 0 R` | `19f1c68c654206d982e84368d8cac6fb908a1f646292546f4b541a9dffb8f7e4` |
+| `subfilter-unsupported.pdf` | signed by the test key, its CMS correct, under `/SubFilter /adbe.x509.rsa_sha1` | `b41b83e330810930884b7607fab905da7a24ce50c8cfdd8721e89041393400c5` |
+
 The files are the output of a cargo example, deterministic (RFC 6979 ECDSA, a fixed signing
 time), which also writes the seven forged files of the table above into `tests/corpus/`.
 Regenerate them from the repository root with:

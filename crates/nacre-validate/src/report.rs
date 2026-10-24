@@ -24,8 +24,9 @@ pub struct SignatureValidation {
     /// The certification path from the signer to a trust anchor that RFC 5280 judges
     /// valid at the best-signature-time, `None` when no path was found or the signature
     /// failed before its chain was built. `Some` with a [`Defect::Revocation`],
-    /// [`Defect::OutOfRangeNotRevoked`] or [`Defect::ClaimedTimeBeforeCertificate`] means
-    /// the path is valid but a check judged after it failed.
+    /// [`Defect::OutOfRangeNotRevoked`], [`Defect::ClaimedTimeBeforeCertificate`],
+    /// [`Defect::ClaimedTimeMissing`] or [`Defect::ClaimedTimeAfterCertificate`] means the
+    /// path is valid but a check judged after it failed.
     pub chain: Option<CertificatePath>,
     /// The `genTime` of the earliest signature timestamp whose token verifies and whose
     /// authority's path and revocation pass at the control date; `None` when no timestamp
@@ -74,7 +75,7 @@ pub enum AllowedChange {
 /// The first rule a signature broke. Every structural defect gives `TOTAL_FAILED` /
 /// `FORMAT_FAILURE`; a [`Defect::Cms`] gives the outcome of its CMS error, a
 /// [`Defect::Chain`] that of its chain defect, a [`Defect::Revocation`] that of its
-/// revocation defect; the two defects judged after revocation are `INDETERMINATE`. A
+/// revocation defect; the defects judged after revocation are `INDETERMINATE`. A
 /// defect a [`ValidationPolicy`](crate::ValidationPolicy) switch guards is not given with
 /// that switch off: the revision defects, [`Defect::ByteRangeNotWholeFile`], the
 /// sneaky-signature case of [`Defect::AddedByRevisionNotAllowed`], the signer's key usage
@@ -82,9 +83,12 @@ pub enum AllowedChange {
 #[non_exhaustive]
 #[derive(Debug)]
 pub enum Defect {
-    /// `/V` does not name a dictionary.
+    /// `/V` is neither absent, `null` nor a reference, or the object it names is no
+    /// dictionary.
     NotASignatureDictionary,
-    /// `/SubFilter` is neither `/ETSI.CAdES.detached` nor `/adbe.pkcs7.detached`.
+    /// `/SubFilter` is missing, not a name, or, under
+    /// [`ValidationPolicy::refuse_unsupported_sub_filters`](crate::ValidationPolicy::refuse_unsupported_sub_filters),
+    /// neither `/ETSI.CAdES.detached` nor `/adbe.pkcs7.detached`.
     UnsupportedSubFilter,
     /// `/Contents` is absent, `null`, empty or not a string.
     ContentsMissing,
@@ -127,6 +131,15 @@ pub enum Defect {
     /// certificate's `notBefore`: `INDETERMINATE` / `SIG_CONSTRAINTS_FAILURE`, the path
     /// kept. Judged under every policy, once the chain and its revocation passed.
     ClaimedTimeBeforeCertificate,
+    /// The signature dictionary has no `/M`, or one that is not a readable PDF date:
+    /// `INDETERMINATE` / `SIG_CONSTRAINTS_FAILURE`, the path kept, as DSS does. Judged
+    /// under every policy, once the chain and its revocation passed.
+    ClaimedTimeMissing,
+    /// The signing time the signature dictionary claims (`/M`) is after the signer
+    /// certificate's `notAfter`: `INDETERMINATE` / `SIG_CONSTRAINTS_FAILURE`, the path
+    /// kept, as DSS does. Judged under every policy, once the chain and its revocation
+    /// passed.
+    ClaimedTimeAfterCertificate,
 }
 
 impl SignatureValidation {
@@ -193,7 +206,9 @@ impl SignatureValidation {
                 true,
                 true,
             ),
-            Defect::ClaimedTimeBeforeCertificate => (
+            Defect::ClaimedTimeBeforeCertificate
+            | Defect::ClaimedTimeMissing
+            | Defect::ClaimedTimeAfterCertificate => (
                 ValidationReport::indeterminate(SubIndication::SigConstraintsFailure, None),
                 true,
                 true,

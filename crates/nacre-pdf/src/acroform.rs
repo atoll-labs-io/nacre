@@ -5,6 +5,7 @@ use crate::limits::Limits;
 use crate::{Dictionary, Error, Object, ObjectId};
 
 /// A terminal AcroForm field of type `/Sig`.
+#[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SignatureField {
     /// The dotted full name. A UTF-16BE `/T` (with its byte order mark) is decoded; any
@@ -13,6 +14,8 @@ pub struct SignatureField {
     pub id: ObjectId,
     /// The signature dictionary `/V` names, `None` for an empty field.
     pub value: Option<ObjectId>,
+    /// `/V` is present but neither `null` nor a reference; `value` is then `None`.
+    pub value_unreadable: bool,
 }
 
 pub(crate) fn signature_fields(
@@ -152,20 +155,16 @@ impl Walk<'_, '_, '_> {
         }
         if field_kids.is_empty() {
             if field_type == Some(b"Sig".as_slice()) {
-                let value = match dict.get(b"V") {
-                    None | Some(Object::Null) => None,
-                    Some(Object::Reference(v)) => Some(*v),
-                    Some(_) => {
-                        return Err(Error::WrongType {
-                            object: id,
-                            expected: "signature value reference",
-                        });
-                    }
+                let (value, value_unreadable) = match dict.get(b"V") {
+                    None | Some(Object::Null) => (None, false),
+                    Some(Object::Reference(v)) => (Some(*v), false),
+                    Some(_) => (None, true),
                 };
                 self.out.push(SignatureField {
                     name: self.names.join("."),
                     id,
                     value,
+                    value_unreadable,
                 });
             }
         } else {

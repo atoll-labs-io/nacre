@@ -5,7 +5,7 @@ pub mod forge;
 
 use std::path::Path;
 
-use nacre_core::{SignatureAlgorithm, Signer};
+use nacre_core::{RevocationData, RevocationSource, SignatureAlgorithm, Signer};
 use p256::ecdsa::signature::hazmat::PrehashSigner;
 use p256::ecdsa::{DerSignature, SigningKey};
 use p256::pkcs8::DecodePrivateKey;
@@ -81,5 +81,30 @@ impl Signer for BenchSigner {
             .sign_prehash(digest)
             .map_err(|error| nacre_core::Error::Signer(Box::new(error)))?;
         Ok(signature.as_bytes().to_vec())
+    }
+}
+
+/// Answers each certificate with the CRL of its issuer, or fails.
+pub struct Stub {
+    pub intermediate: Vec<u8>,
+    pub intermediate_crl: Vec<u8>,
+    pub root_crl: Vec<u8>,
+    pub failing: bool,
+}
+
+impl RevocationSource for Stub {
+    fn revocation(
+        &self,
+        _certificate: &[u8],
+        issuer: &[u8],
+    ) -> Result<RevocationData, nacre_core::Error> {
+        if self.failing {
+            return Err(nacre_core::Error::revocation("unreachable"));
+        }
+        Ok(RevocationData::Crl(if issuer == self.intermediate {
+            self.intermediate_crl.clone()
+        } else {
+            self.root_crl.clone()
+        }))
     }
 }
