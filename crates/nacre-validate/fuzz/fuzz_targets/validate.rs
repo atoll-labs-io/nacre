@@ -4,7 +4,7 @@ use std::sync::OnceLock;
 use std::time::{Duration, SystemTime};
 
 use libfuzzer_sys::fuzz_target;
-use nacre_validate::TrustAnchors;
+use nacre_validate::{TrustAnchors, ValidationPolicy};
 
 const ROOT: &[u8] = include_bytes!("../../tests/corpus/chain/root.der");
 /// 2026-10-22T00:00:00Z, a date the corpus chain is valid at.
@@ -19,4 +19,6 @@ fuzz_target!(|data: &[u8]| {
     let _ = nacre_validate::validate(data);
     let at = SystemTime::UNIX_EPOCH + Duration::from_secs(AT_SECONDS);
     let _ = nacre_validate::validate_with_anchors(data, anchors(), at);
+    let _ =
+        nacre_validate::validate_with_policy(data, anchors(), at, None, &ValidationPolicy::dss());
 });
