@@ -18,6 +18,11 @@ pub enum Error {
     /// A certificate given as a trust anchor is PEM text, where DER is expected.
     #[error("a trust anchor looks like PEM; give it as DER")]
     TrustAnchorPem,
+    /// A certificate of a verified signature's CMS repeats an extension, under a
+    /// [`ValidationPolicy`](crate::ValidationPolicy) that does not judge malformed
+    /// extensions.
+    #[error("a certificate of a signature repeats an extension")]
+    MalformedCertificate,
 }
 
 impl Error {
@@ -28,7 +33,8 @@ impl Error {
             Self::TooManySignatures { .. }
             | Self::TooManyRevisions { .. }
             | Self::TrustAnchor(_)
-            | Self::TrustAnchorPem => nacre_core::ErrorKind::InvalidInput,
+            | Self::TrustAnchorPem
+            | Self::MalformedCertificate => nacre_core::ErrorKind::InvalidInput,
         }
     }
 }
@@ -53,6 +59,7 @@ mod tests {
                 InvalidInput,
             ),
             (Error::TrustAnchorPem, InvalidInput),
+            (Error::MalformedCertificate, InvalidInput),
         ];
         for (error, kind) in rows {
             assert_eq!(error.kind(), kind, "{error}");

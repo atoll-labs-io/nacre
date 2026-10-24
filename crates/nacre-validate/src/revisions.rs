@@ -34,18 +34,22 @@ type Objects = HashMap<ObjectId, Object>;
 /// One revision's verdict, with the signatures it adds that a signature rule refuses.
 pub(crate) struct Qualified {
     pub(crate) revision: LaterRevision,
-    /// The signature dictionaries of a signature added under DocMDP 1, and of one whose
-    /// field shows on the page a widget that was not placed at the same rectangle in the
-    /// certified state. A signature this revision adds and refuses for another reason is not
-    /// here: it is judged on its own signed bytes.
+    /// The signature dictionaries of a signature added under DocMDP 1. A signature this
+    /// revision adds and refuses for another reason is not here: it is judged on its own
+    /// signed bytes.
     pub(crate) refused_signatures: Vec<ObjectId>,
+    /// The signature dictionaries of a sneaky signature: one whose field shows on the page
+    /// a widget that was not placed at the same rectangle in the certified state.
+    pub(crate) sneaky_signatures: Vec<ObjectId>,
 }
 
-/// The verdict on every revision after `first`, the index of the oldest signed revision.
+/// The verdict on every revision after `first`, the index of the oldest signed revision,
+/// sneaky signatures judged when `sneaky` is set.
 pub(crate) fn qualify(
     pdf: &[u8],
     doc: &Document<'_>,
     first: usize,
+    sneaky: bool,
 ) -> Result<Vec<Qualified>, Error> {
     let ends: Vec<usize> = doc.revisions().iter().skip(first).map(|r| r.end).collect();
     let count = ends.len().saturating_sub(1);
@@ -73,7 +77,9 @@ pub(crate) fn qualify(
         }
         // Without both states nothing can be compared, so the revision is unreadable.
         out.push(match (&previous, &current) {
-            (Some(before), Some(after)) => diff(pdf, before, after, certified.as_ref()),
+            (Some(before), Some(after)) => {
+                diff(pdf, before, after, certified.as_ref().filter(|_| sneaky))
+            }
             _ => Qualified {
                 revision: LaterRevision {
                     end,
@@ -81,6 +87,7 @@ pub(crate) fn qualify(
                     verdict: RevisionVerdict::Unreadable,
                 },
                 refused_signatures: Vec::new(),
+                sneaky_signatures: Vec::new(),
             },
         });
         previous = current;
@@ -268,33 +275,36 @@ fn diff(
     let root = after.doc.catalog_id();
     // The revision that makes the permission unreadable is; the ones after it are judged
     // under the strictest permission.
-    let (verdict, refused_signatures) = if before.doc_mdp_readable && !after.doc_mdp_readable {
-        (RevisionVerdict::Unreadable, Vec::new())
-    } else if root != before.doc.catalog_id() {
-        (
-            RevisionVerdict::NotAllowed {
-                refused: vec![root],
-            },
-            Vec::new(),
-        )
-    } else {
-        let dss = changed.iter().any(|id| after.dss.contains(id))
-            || before.doc.catalog().get(b"DSS") != after.doc.catalog().get(b"DSS");
-        Judge {
-            before,
-            after,
-            changed: &changed_live,
-            new: &new_live,
-            certified,
-            accepted: HashSet::new(),
-            forced: HashSet::new(),
-            new_signature_fields: HashSet::new(),
-            roots: Vec::new(),
-            kinds: Vec::new(),
-            refused_signatures: Vec::new(),
-        }
-        .verdict(dss)
-    };
+    let (verdict, refused_signatures, sneaky_signatures) =
+        if before.doc_mdp_readable && !after.doc_mdp_readable {
+            (RevisionVerdict::Unreadable, Vec::new(), Vec::new())
+        } else if root != before.doc.catalog_id() {
+            (
+                RevisionVerdict::NotAllowed {
+                    refused: vec![root],
+                },
+                Vec::new(),
+                Vec::new(),
+            )
+        } else {
+            let dss = changed.iter().any(|id| after.dss.contains(id))
+                || before.doc.catalog().get(b"DSS") != after.doc.catalog().get(b"DSS");
+            Judge {
+                before,
+                after,
+                changed: &changed_live,
+                new: &new_live,
+                certified,
+                accepted: HashSet::new(),
+                forced: HashSet::new(),
+                new_signature_fields: HashSet::new(),
+                roots: Vec::new(),
+                kinds: Vec::new(),
+                refused_signatures: Vec::new(),
+                sneaky_signatures: Vec::new(),
+            }
+            .verdict(dss)
+        };
     Qualified {
         revision: LaterRevision {
             end: after.end,
@@ -302,6 +312,7 @@ fn diff(
             verdict,
         },
         refused_signatures,
+        sneaky_signatures,
     }
 }
 
@@ -320,10 +331,11 @@ struct Judge<'s, 'a> {
     roots: Vec<ObjectId>,
     kinds: Vec<AllowedChange>,
     refused_signatures: Vec<ObjectId>,
+    sneaky_signatures: Vec<ObjectId>,
 }
 
 impl Judge<'_, '_> {
-    fn verdict(mut self, dss: bool) -> (RevisionVerdict, Vec<ObjectId>) {
+    fn verdict(mut self, dss: bool) -> (RevisionVerdict, Vec<ObjectId>, Vec<ObjectId>) {
         if dss {
             self.kinds.push(AllowedChange::Dss);
         }
@@ -350,7 +362,7 @@ impl Judge<'_, '_> {
             refused.sort_unstable();
             RevisionVerdict::NotAllowed { refused }
         };
-        (verdict, self.refused_signatures)
+        (verdict, self.refused_signatures, self.sneaky_signatures)
     }
 
     fn kind(&mut self, kind: AllowedChange) {
@@ -409,7 +421,9 @@ impl Judge<'_, '_> {
                 }
             });
             if sneaky {
-                self.refuse_signature(field);
+                if !self.sneaky_signatures.contains(&value) {
+                    self.sneaky_signatures.push(value);
+                }
                 self.forced.insert(id);
                 self.forced.insert(value);
                 self.forced.extend(widgets);

@@ -23,8 +23,9 @@ pub struct SignatureValidation {
     pub later_revisions: Vec<LaterRevision>,
     /// The certification path from the signer to a trust anchor that RFC 5280 judges
     /// valid at the best-signature-time, `None` when no path was found or the signature
-    /// failed before its chain was built. `Some` with a [`Defect::Revocation`] means the
-    /// path is valid but its revocation check failed.
+    /// failed before its chain was built. `Some` with a [`Defect::Revocation`],
+    /// [`Defect::OutOfRangeNotRevoked`] or [`Defect::ClaimedTimeBeforeCertificate`] means
+    /// the path is valid but a check judged after it failed.
     pub chain: Option<CertificatePath>,
     /// The `genTime` of the earliest signature timestamp whose token verifies and whose
     /// authority's path and revocation pass at the control date; `None` when no timestamp
@@ -73,7 +74,11 @@ pub enum AllowedChange {
 /// The first rule a signature broke. Every structural defect gives `TOTAL_FAILED` /
 /// `FORMAT_FAILURE`; a [`Defect::Cms`] gives the outcome of its CMS error, a
 /// [`Defect::Chain`] that of its chain defect, a [`Defect::Revocation`] that of its
-/// revocation defect.
+/// revocation defect; the two defects judged after revocation are `INDETERMINATE`. A
+/// defect a [`ValidationPolicy`](crate::ValidationPolicy) switch guards is not given with
+/// that switch off: the revision defects, [`Defect::ByteRangeNotWholeFile`], the
+/// sneaky-signature case of [`Defect::AddedByRevisionNotAllowed`], the signer's key usage
+/// and validity among the [`Defect::Chain`] ones.
 #[non_exhaustive]
 #[derive(Debug)]
 pub enum Defect {
@@ -112,6 +117,16 @@ pub enum Defect {
     /// best-signature-time, or has no usable revocation data; judged after the chain. Its
     /// report is [`RevocationDefect::report`].
     Revocation(RevocationDefect),
+    /// Under a [`ValidationPolicy`](crate::ValidationPolicy) that judges revocation before
+    /// validity, a certificate of the path, the one the [`ChainDefect::Expired`] or
+    /// [`ChainDefect::NotYetValid`] it holds names, is out of its validity at the
+    /// best-signature-time while its revocation data says it is not revoked:
+    /// `INDETERMINATE` / `OUT_OF_BOUNDS_NOT_REVOKED`, the path kept.
+    OutOfRangeNotRevoked(ChainDefect),
+    /// The signing time the signature dictionary claims (`/M`) is before the signer
+    /// certificate's `notBefore`: `INDETERMINATE` / `SIG_CONSTRAINTS_FAILURE`, the path
+    /// kept. Judged under every policy, once the chain and its revocation passed.
+    ClaimedTimeBeforeCertificate,
 }
 
 impl SignatureValidation {
@@ -140,10 +155,11 @@ impl SignatureValidation {
         }
     }
 
-    /// A signature whose valid `chain` failed its revocation check.
-    pub(crate) fn revoked(
+    /// A signature whose valid `chain` failed a check judged after it: revocation, validity
+    /// after revocation, or the claimed signing time.
+    pub(crate) fn after_chain(
         field: String,
-        defect: RevocationDefect,
+        defect: Defect,
         later_revisions: Vec<LaterRevision>,
         chain: CertificatePath,
         best_signature_time: Option<SystemTime>,
@@ -151,7 +167,7 @@ impl SignatureValidation {
         Self {
             chain: Some(chain),
             best_signature_time,
-            ..Self::defective(field, Defect::Revocation(defect), later_revisions)
+            ..Self::defective(field, defect, later_revisions)
         }
     }
 
@@ -172,6 +188,16 @@ impl SignatureValidation {
             }
             Defect::Chain(chain) => (chain.report(), true, true),
             Defect::Revocation(revocation) => (revocation.report(), true, true),
+            Defect::OutOfRangeNotRevoked(_) => (
+                ValidationReport::indeterminate(SubIndication::OutOfBoundsNotRevoked, None),
+                true,
+                true,
+            ),
+            Defect::ClaimedTimeBeforeCertificate => (
+                ValidationReport::indeterminate(SubIndication::SigConstraintsFailure, None),
+                true,
+                true,
+            ),
             _ => (failed(), false, false),
         };
         Self {

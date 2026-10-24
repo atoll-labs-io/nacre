@@ -24,7 +24,9 @@ use x509_cert::builder::profile::BuilderProfile;
 use x509_cert::builder::{Builder, CertificateBuilder, CrlBuilder};
 use x509_cert::certificate::TbsCertificate;
 use x509_cert::crl::RevokedCert;
-use x509_cert::ext::pkix::{BasicConstraints, CrlNumber, ExtendedKeyUsage, KeyUsage, KeyUsages};
+use x509_cert::ext::pkix::{
+    BasicConstraints, CrlNumber, CrlReason, ExtendedKeyUsage, KeyUsage, KeyUsages,
+};
 use x509_cert::ext::{Extension, ToExtension};
 use x509_cert::name::Name;
 use x509_cert::serial_number::SerialNumber;
@@ -65,10 +67,21 @@ pub enum Role {
     Tsa,
 }
 
+/// The extensions of a forged certificate: its role's usual ones, or a leaf's set apart.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Extensions {
+    Usual,
+    /// The role's extensions, its `keyUsage` replaced by this one.
+    KeyUsage(FlagSet<KeyUsages>),
+    /// The role's extensions, its `keyUsage` given twice.
+    RepeatedKeyUsage,
+}
+
 struct Profile {
     subject: Name,
     issuer: Name,
     role: Role,
+    extensions: Extensions,
 }
 
 impl BuilderProfile for Profile {
@@ -92,14 +105,18 @@ impl BuilderProfile for Profile {
             path_len_constraint: None,
         }
         .to_extension(tbs.subject(), &[])?;
-        let usage: FlagSet<KeyUsages> = match self.role {
-            Role::Ca => KeyUsages::KeyCertSign | KeyUsages::CRLSign,
-            Role::Signer => KeyUsages::DigitalSignature | KeyUsages::NonRepudiation,
-            Role::Tsa => KeyUsages::DigitalSignature.into(),
+        let usage: FlagSet<KeyUsages> = match (self.extensions, self.role) {
+            (Extensions::KeyUsage(usage), _) => usage,
+            (_, Role::Ca) => KeyUsages::KeyCertSign | KeyUsages::CRLSign,
+            (_, Role::Signer) => KeyUsages::DigitalSignature | KeyUsages::NonRepudiation,
+            (_, Role::Tsa) => KeyUsages::DigitalSignature.into(),
         };
         let key_usage = KeyUsage(usage)
             .to_extension(tbs.subject(), std::slice::from_ref(&basic_constraints))?;
-        let mut extensions = vec![basic_constraints, key_usage];
+        let mut extensions = vec![basic_constraints, key_usage.clone()];
+        if self.extensions == Extensions::RepeatedKeyUsage {
+            extensions.push(key_usage);
+        }
         if self.role == Role::Tsa {
             extensions.push(Extension {
                 extn_id: EXTENDED_KEY_USAGE,
@@ -121,6 +138,54 @@ pub fn issue(
     issuer: Option<&Certificate>,
     issuer_key: &SigningKey,
 ) -> Certificate {
+    issue_valid(
+        role,
+        subject,
+        serial,
+        key,
+        issuer,
+        issuer_key,
+        time(2026, 1, 1, 0, 0, 0),
+        time(2036, 1, 1, 0, 0, 0),
+    )
+}
+
+/// [`issue`], valid from `not_before` to `not_after`.
+#[allow(clippy::too_many_arguments)]
+pub fn issue_valid(
+    role: Role,
+    subject: &str,
+    serial: u64,
+    key: &SigningKey,
+    issuer: Option<&Certificate>,
+    issuer_key: &SigningKey,
+    not_before: Time,
+    not_after: Time,
+) -> Certificate {
+    issue_with(
+        role,
+        subject,
+        serial,
+        key,
+        issuer,
+        issuer_key,
+        (not_before, not_after),
+        Extensions::Usual,
+    )
+}
+
+/// [`issue_valid`] with `extensions`, valid from the first time to the second.
+#[allow(clippy::too_many_arguments)]
+pub fn issue_with(
+    role: Role,
+    subject: &str,
+    serial: u64,
+    key: &SigningKey,
+    issuer: Option<&Certificate>,
+    issuer_key: &SigningKey,
+    (not_before, not_after): (Time, Time),
+    extensions: Extensions,
+) -> Certificate {
     let subject = Name::from_str(subject).unwrap();
     let profile = Profile {
         issuer: issuer.map_or(subject.clone(), |issuer| {
@@ -128,8 +193,9 @@ pub fn issue(
         }),
         subject,
         role,
+        extensions,
     };
-    let validity = Validity::new(time(2026, 1, 1, 0, 0, 0), time(2036, 1, 1, 0, 0, 0));
+    let validity = Validity::new(not_before, not_after);
     let spki = SubjectPublicKeyInfoOwned::from_key(key.verifying_key()).unwrap();
     CertificateBuilder::new(profile, SerialNumber::from(serial), validity, spki)
         .unwrap()
@@ -146,12 +212,33 @@ pub fn crl(
     next_update: Time,
     revoked: &[(&Certificate, Time)],
 ) -> Vec<u8> {
+    let entries: Vec<_> = revoked
+        .iter()
+        .map(|(certificate, date)| (*certificate, *date, None))
+        .collect();
+    crl_with_reasons(issuer, key, this_update, next_update, &entries)
+}
+
+/// [`crl`], each entry carrying its `reasonCode` when given.
+pub fn crl_with_reasons(
+    issuer: &Certificate,
+    key: &SigningKey,
+    this_update: Time,
+    next_update: Time,
+    revoked: &[(&Certificate, Time, Option<CrlReason>)],
+) -> Vec<u8> {
     let entries: Vec<RevokedCert> = revoked
         .iter()
-        .map(|(certificate, date)| RevokedCert {
+        .map(|(certificate, date, reason)| RevokedCert {
             serial_number: certificate.tbs_certificate().serial_number().clone(),
             revocation_date: *date,
-            crl_entry_extensions: None,
+            crl_entry_extensions: reason.map(|reason| {
+                vec![
+                    reason
+                        .to_extension(issuer.tbs_certificate().subject(), &[])
+                        .unwrap(),
+                ]
+            }),
         })
         .collect();
     CrlBuilder::new_with_this_update(issuer, CrlNumber::try_from(1u32).unwrap(), this_update)

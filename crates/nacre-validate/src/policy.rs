@@ -1,0 +1,103 @@
+/// The rules only Nacre applies, one switch each (ADR-0026). Each switch on keeps a
+/// protection DSS 6.5.1 lacks; each switch off gives DSS's verdict on that case.
+///
+/// [`ValidationPolicy::strict`], the [`Default`], turns them all on and is what
+/// [`validate`](crate::validate), [`validate_with_anchors`](crate::validate_with_anchors) and
+/// [`validate_with_revocation`](crate::validate_with_revocation) apply.
+/// [`ValidationPolicy::dss`] turns them all off. A rule DSS applies and Nacre would otherwise
+/// lack, such as a signing time (`/M`) before the signer's `notBefore`, is no switch: both
+/// presets apply it, so no preset is laxer than DSS. Turning one switch off from `strict()`
+/// reopens that switch's attack only.
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ValidationPolicy {
+    /// Refuse a later revision no rule allows ([`Defect::RevisionNotAllowed`]), a signature
+    /// added under DocMDP 1 ([`Defect::AddedByRevisionNotAllowed`]) and signed bytes that
+    /// end at no revision ([`Defect::ByteRangeNotWholeFile`]). Off, the signature is judged
+    /// as if nothing were appended: shadow attacks and incremental saving attacks pass.
+    /// [`SignatureValidation::later_revisions`] lists the revisions either way.
+    ///
+    /// [`Defect::RevisionNotAllowed`]: crate::Defect::RevisionNotAllowed
+    /// [`Defect::AddedByRevisionNotAllowed`]: crate::Defect::AddedByRevisionNotAllowed
+    /// [`Defect::ByteRangeNotWholeFile`]: crate::Defect::ByteRangeNotWholeFile
+    /// [`SignatureValidation::later_revisions`]: crate::SignatureValidation::later_revisions
+    pub refuse_later_revisions: bool,
+    /// Refuse a signature added on a certified document whose field shows a widget the
+    /// certified state did not place at the same rectangle (the sneaky signature attack).
+    pub refuse_sneaky_signatures: bool,
+    /// Refuse a file with data after its last `startxref … %%EOF`. Off, the file is judged
+    /// as it stands before that data, which is ignored.
+    pub refuse_trailing_data: bool,
+    /// List a field whose `/Contents` is missing or not DER, or whose `/ByteRange` is
+    /// malformed, as `TOTAL_FAILED`. Off, such a field is left out of the result, as DSS
+    /// does.
+    pub list_unusable_signatures: bool,
+    /// Judge the signer's `keyUsage` and `extendedKeyUsage` ([`ChainDefect::KeyUsage`],
+    /// [`ChainDefect::ExtendedKeyUsage`]). A timestamp authority's are judged either way.
+    ///
+    /// [`ChainDefect::KeyUsage`]: crate::ChainDefect::KeyUsage
+    /// [`ChainDefect::ExtendedKeyUsage`]: crate::ChainDefect::ExtendedKeyUsage
+    pub judge_signer_key_usage: bool,
+    /// Refuse a signer's path holding a certificate out of its validity at the
+    /// best-signature-time before its revocation is judged (`OUT_OF_BOUNDS_NO_POE`). Off,
+    /// revocation is judged first: no data gives `CERTIFICATE_CHAIN_GENERAL_FAILURE`, a
+    /// revocation `REVOKED_NO_POE`, and "not revoked" [`Defect::OutOfRangeNotRevoked`].
+    ///
+    /// [`Defect::OutOfRangeNotRevoked`]: crate::Defect::OutOfRangeNotRevoked
+    pub judge_validity_before_revocation: bool,
+    /// Give a verdict ([`ChainDefect::MalformedExtension`]) on a certificate that repeats
+    /// an extension. Off, a certificate of a verified signature's CMS that repeats one
+    /// makes the validation fail with [`Error::MalformedCertificate`], as DSS does.
+    ///
+    /// [`ChainDefect::MalformedExtension`]: crate::ChainDefect::MalformedExtension
+    /// [`Error::MalformedCertificate`]: crate::Error::MalformedCertificate
+    pub judge_malformed_extensions: bool,
+    /// With no proof of existence, count only revocation data issued within 24 hours
+    /// before the control date that says "not revoked"; an older revocation dated at or
+    /// before the judged time still counts, unless it is a `certificateHold`. Off, freshness is ignored: an old "not revoked"
+    /// in the `/DSS` passes a key revoked since.
+    pub require_fresh_revocation: bool,
+}
+
+impl ValidationPolicy {
+    /// Every switch on: every protection Nacre has. The default.
+    pub const fn strict() -> Self {
+        Self {
+            refuse_later_revisions: true,
+            refuse_sneaky_signatures: true,
+            refuse_trailing_data: true,
+            list_unusable_signatures: true,
+            judge_signer_key_usage: true,
+            judge_validity_before_revocation: true,
+            judge_malformed_extensions: true,
+            require_fresh_revocation: true,
+        }
+    }
+
+    /// **Unsafe for deciding whether to trust a document**: this preset accepts attacks that
+    /// [`strict`](Self::strict) refuses — shadow attacks and incremental saving attacks
+    /// (any later revision), sneaky signatures, data appended after the last `%%EOF`, a
+    /// signer certificate whose key usage forbids signing, and, for a signature with no
+    /// timestamp, a stale "not revoked" CRL or OCSP response appended to the `/DSS`.
+    ///
+    /// Every switch off: the verdict DSS 6.5.1 gives, for comparing Nacre with it. Only the
+    /// rules DSS also applies remain.
+    pub const fn dss() -> Self {
+        Self {
+            refuse_later_revisions: false,
+            refuse_sneaky_signatures: false,
+            refuse_trailing_data: false,
+            list_unusable_signatures: false,
+            judge_signer_key_usage: false,
+            judge_validity_before_revocation: false,
+            judge_malformed_extensions: false,
+            require_fresh_revocation: false,
+        }
+    }
+}
+
+impl Default for ValidationPolicy {
+    fn default() -> Self {
+        Self::strict()
+    }
+}
