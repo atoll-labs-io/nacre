@@ -1,0 +1,142 @@
+# AC2 — the level is structural, as DSS 6.5.1 computes it (ADR-0025)
+## 1. Campaign rows (DSS | Nacre), dss() then strict(), this QA's run
+### campaign-dss.md
+| `bench-l05-b-signing-time` | `Signature1` | TOTAL_PASSED / PAdES ExtendedBes | TOTAL_PASSED / PAdES ExtendedBes | = |  |
+| `bench-l05-b-signing-time` | (count) | 1 | 1 | = |  |
+| `bench-l16-b-no-m` | `Signature1` | INDETERMINATE / SIG_CONSTRAINTS_FAILURE / PAdES ExtendedBes | INDETERMINATE / SIG_CONSTRAINTS_FAILURE / PAdES ExtendedBes | = |  |
+| `bench-l16-b-no-m` | (count) | 1 | 1 | = |  |
+| `bench-p05-pades-signing-time-no-m` | `Signature1` | INDETERMINATE / SIG_CONSTRAINTS_FAILURE / PAdES ExtendedBes | INDETERMINATE / SIG_CONSTRAINTS_FAILURE / PAdES ExtendedBes | = |  |
+| `bench-p05-pades-signing-time-no-m` | (count) | 1 | 1 | = |  |
+| `bench-p05b-pkcs7-signing-time-no-m` | `Signature1` | INDETERMINATE / SIG_CONSTRAINTS_FAILURE / Pkcs7 BaselineB | INDETERMINATE / SIG_CONSTRAINTS_FAILURE / Pkcs7 BaselineB | = |  |
+| `bench-p05b-pkcs7-signing-time-no-m` | (count) | 1 | 1 | = |  |
+| `bench-l36-b-no-ess` | `Signature1` | TOTAL_PASSED / no level | TOTAL_PASSED / no level | = |  |
+| `bench-l36-b-no-ess` | (count) | 1 | 1 | = |  |
+| `bench-n09-ess-v1` | `Signature1` | TOTAL_PASSED / PAdES BaselineB | TOTAL_PASSED / PAdES BaselineB | = |  |
+| `bench-n09-ess-v1` | (count) | 1 | 1 | = |  |
+| `bench-n10-epes` | `Signature1` | TOTAL_PASSED / PAdES BaselineB | TOTAL_PASSED / PAdES BaselineB | = |  |
+| `bench-n10-epes` | (count) | 1 | 1 | = |  |
+| `bench-n06-subfilter-x509` | `Signature1` | TOTAL_PASSED / no level | TOTAL_PASSED / no level | = |  |
+| `bench-n06-subfilter-x509` | (count) | 1 | 1 | = |  |
+| `bench-n07-subfilter-unknown` | `Signature1` | TOTAL_PASSED / no level | TOTAL_PASSED / no level | = |  |
+| `bench-n07-subfilter-unknown` | (count) | 1 | 1 | = |  |
+| `bench-p03-subfilter-missing` | `Signature1` | TOTAL_PASSED / no level | TOTAL_PASSED / no level | = |  |
+| `bench-p03-subfilter-missing` | (count) | 1 | 1 | = |  |
+| `bench-l06-b-cms-crl` | `Signature1` | TOTAL_PASSED / PAdES BaselineB | TOTAL_PASSED / PAdES BaselineB | = |  |
+| `bench-l06-b-cms-crl` | (count) | 1 | 1 | = |  |
+| `bench-l35-t-cms-crls` | `Signature1` | TOTAL_PASSED / PAdES BaselineT | TOTAL_PASSED / PAdES BaselineT | = |  |
+| `bench-l35-t-cms-crls` | (count) | 1 | 1 | = |  |
+| `bench-l14-pkcs7-b` | `Signature1` | TOTAL_PASSED / Pkcs7 BaselineB | TOTAL_PASSED / Pkcs7 BaselineB | = |  |
+| `bench-l14-pkcs7-b` | (count) | 1 | 1 | = |  |
+| `bench-t1-pkcs7-t-dss` | `Signature1` | TOTAL_PASSED / Pkcs7 BaselineLt | TOTAL_PASSED / Pkcs7 BaselineLt | = |  |
+| `bench-t1-pkcs7-t-dss` | (count) | 1 | 1 | = |  |
+| `bench-t2-pkcs7-t-dss-docts` | `Signature1` | TOTAL_PASSED / Pkcs7 BaselineLta | TOTAL_PASSED / Pkcs7 BaselineLta | = |  |
+| `bench-t2-pkcs7-t-dss-docts` | (count) | 1 | 1 | = |  |
+| `bench-l24-b-docts` | `Signature1` | TOTAL_PASSED / PAdES BaselineT | TOTAL_PASSED / PAdES BaselineT | = |  |
+| `bench-l24-b-docts` | (count) | 1 | 1 | = |  |
+| `bench-l20-t-dss-chain-both-crls` | `Signature1` | TOTAL_PASSED / PAdES BaselineLt | TOTAL_PASSED / PAdES BaselineLt | = |  |
+| `bench-l20-t-dss-chain-both-crls` | (count) | 1 | 1 | = |  |
+| `bench-l22-t-dss-crls-only` | `Signature1` | TOTAL_PASSED / PAdES BaselineLt | TOTAL_PASSED / PAdES BaselineLt | = |  |
+| `bench-l22-t-dss-crls-only` | (count) | 1 | 1 | = |  |
+| `bench-l23-b-dss-full` | `Signature1` | TOTAL_PASSED / PAdES BaselineB | TOTAL_PASSED / PAdES BaselineB | = |  |
+| `bench-l23-b-dss-full` | (count) | 1 | 1 | = |  |
+| `bench-l30-lta-plus-dss` | `Signature1` | TOTAL_PASSED / PAdES BaselineLta | TOTAL_PASSED / PAdES BaselineLta | = |  |
+| `bench-l30-lta-plus-dss` | (count) | 1 | 1 | = |  |
+| `bench-r1-b-dss-signer-only-docts` | `Signature1` | TOTAL_PASSED / PAdES BaselineT | TOTAL_PASSED / PAdES BaselineT | = |  |
+| `bench-r1-b-dss-signer-only-docts` | (count) | 1 | 1 | = |  |
+| `bench-r2-b-dss-signer-and-tsa-docts` | `Signature1` | TOTAL_PASSED / PAdES BaselineLta | TOTAL_PASSED / PAdES BaselineLta | = |  |
+| `bench-r2-b-dss-signer-and-tsa-docts` | (count) | 1 | 1 | = |  |
+| `bench-r3-t-dss-signer-only` | `Signature1` | TOTAL_PASSED / PAdES BaselineT | TOTAL_PASSED / PAdES BaselineT | = |  |
+| `bench-r3-t-dss-signer-only` | (count) | 1 | 1 | = |  |
+| `bench-r4-b-docts-then-dss-signer-and-tsa` | `Signature1` | TOTAL_PASSED / PAdES BaselineLt | TOTAL_PASSED / PAdES BaselineLt | = |  |
+| `bench-r4-b-docts-then-dss-signer-and-tsa` | (count) | 1 | 1 | = |  |
+| `bench-r5-b-docts-dss-docts` | `Signature1` | TOTAL_PASSED / PAdES BaselineLta | TOTAL_PASSED / PAdES BaselineLta | = |  |
+| `bench-r5-b-docts-dss-docts` | (count) | 1 | 1 | = |  |
+| `bench-r6-b-docts-dss-signer-only-docts` | `Signature1` | TOTAL_PASSED / PAdES BaselineT | TOTAL_PASSED / PAdES BaselineT | = |  |
+| `bench-r6-b-docts-dss-signer-only-docts` | (count) | 1 | 1 | = |  |
+| `bench-r7-t-rogue-docts-dss-docts` | `Signature1` | TOTAL_PASSED / PAdES BaselineT | TOTAL_PASSED / PAdES BaselineT | = |  |
+| `bench-r7-t-rogue-docts-dss-docts` | (count) | 1 | 1 | = |  |
+| `bench-r8-t-dss-docts-rogue` | `Signature1` | TOTAL_PASSED / PAdES BaselineLta | TOTAL_PASSED / PAdES BaselineLta | = |  |
+| `bench-r8-t-dss-docts-rogue` | (count) | 1 | 1 | = |  |
+### campaign-strict.md
+| `bench-l05-b-signing-time` | `Signature1` | TOTAL_PASSED / PAdES ExtendedBes | TOTAL_PASSED / PAdES ExtendedBes | = |  |
+| `bench-l05-b-signing-time` | (count) | 1 | 1 | = |  |
+| `bench-l16-b-no-m` | `Signature1` | INDETERMINATE / SIG_CONSTRAINTS_FAILURE / PAdES ExtendedBes | INDETERMINATE / SIG_CONSTRAINTS_FAILURE / PAdES ExtendedBes | = |  |
+| `bench-l16-b-no-m` | (count) | 1 | 1 | = |  |
+| `bench-p05-pades-signing-time-no-m` | `Signature1` | INDETERMINATE / SIG_CONSTRAINTS_FAILURE / PAdES ExtendedBes | INDETERMINATE / SIG_CONSTRAINTS_FAILURE / PAdES ExtendedBes | = |  |
+| `bench-p05-pades-signing-time-no-m` | (count) | 1 | 1 | = |  |
+| `bench-p05b-pkcs7-signing-time-no-m` | `Signature1` | INDETERMINATE / SIG_CONSTRAINTS_FAILURE / Pkcs7 BaselineB | INDETERMINATE / SIG_CONSTRAINTS_FAILURE / Pkcs7 BaselineB | = |  |
+| `bench-p05b-pkcs7-signing-time-no-m` | (count) | 1 | 1 | = |  |
+| `bench-l36-b-no-ess` | `Signature1` | TOTAL_PASSED / no level | TOTAL_PASSED / no level | = |  |
+| `bench-l36-b-no-ess` | (count) | 1 | 1 | = |  |
+| `bench-n09-ess-v1` | `Signature1` | TOTAL_PASSED / PAdES BaselineB | TOTAL_PASSED / PAdES BaselineB | = |  |
+| `bench-n09-ess-v1` | (count) | 1 | 1 | = |  |
+| `bench-n10-epes` | `Signature1` | TOTAL_PASSED / PAdES BaselineB | TOTAL_PASSED / PAdES BaselineB | = |  |
+| `bench-n10-epes` | (count) | 1 | 1 | = |  |
+| `bench-n06-subfilter-x509` | `Signature1` | TOTAL_PASSED / no level | TOTAL_FAILED / FORMAT_FAILURE / no level | ≠ | `refuse_unsupported_sub_filters` |
+| `bench-n06-subfilter-x509` | (count) | 1 | 1 | = |  |
+| `bench-n07-subfilter-unknown` | `Signature1` | TOTAL_PASSED / no level | TOTAL_FAILED / FORMAT_FAILURE / no level | ≠ | `refuse_unsupported_sub_filters` |
+| `bench-n07-subfilter-unknown` | (count) | 1 | 1 | = |  |
+| `bench-p03-subfilter-missing` | `Signature1` | TOTAL_PASSED / no level | TOTAL_FAILED / FORMAT_FAILURE / no level | ≠ | `refuse_unsupported_sub_filters` |
+| `bench-p03-subfilter-missing` | (count) | 1 | 1 | = |  |
+| `bench-l06-b-cms-crl` | `Signature1` | TOTAL_PASSED / PAdES BaselineB | TOTAL_PASSED / PAdES BaselineB | = |  |
+| `bench-l06-b-cms-crl` | (count) | 1 | 1 | = |  |
+| `bench-l35-t-cms-crls` | `Signature1` | TOTAL_PASSED / PAdES BaselineT | TOTAL_PASSED / PAdES BaselineT | = |  |
+| `bench-l35-t-cms-crls` | (count) | 1 | 1 | = |  |
+| `bench-l14-pkcs7-b` | `Signature1` | TOTAL_PASSED / Pkcs7 BaselineB | TOTAL_PASSED / Pkcs7 BaselineB | = |  |
+| `bench-l14-pkcs7-b` | (count) | 1 | 1 | = |  |
+| `bench-t1-pkcs7-t-dss` | `Signature1` | TOTAL_PASSED / Pkcs7 BaselineLt | TOTAL_PASSED / Pkcs7 BaselineLt | = |  |
+| `bench-t1-pkcs7-t-dss` | (count) | 1 | 1 | = |  |
+| `bench-t2-pkcs7-t-dss-docts` | `Signature1` | TOTAL_PASSED / Pkcs7 BaselineLta | TOTAL_PASSED / Pkcs7 BaselineLta | = |  |
+| `bench-t2-pkcs7-t-dss-docts` | (count) | 1 | 1 | = |  |
+| `bench-l24-b-docts` | `Signature1` | TOTAL_PASSED / PAdES BaselineT | TOTAL_PASSED / PAdES BaselineT | = |  |
+| `bench-l24-b-docts` | (count) | 1 | 1 | = |  |
+| `bench-l20-t-dss-chain-both-crls` | `Signature1` | TOTAL_PASSED / PAdES BaselineLt | TOTAL_PASSED / PAdES BaselineLt | = |  |
+| `bench-l20-t-dss-chain-both-crls` | (count) | 1 | 1 | = |  |
+| `bench-l22-t-dss-crls-only` | `Signature1` | TOTAL_PASSED / PAdES BaselineLt | TOTAL_PASSED / PAdES BaselineLt | = |  |
+| `bench-l22-t-dss-crls-only` | (count) | 1 | 1 | = |  |
+| `bench-l23-b-dss-full` | `Signature1` | TOTAL_PASSED / PAdES BaselineB | TOTAL_PASSED / PAdES BaselineB | = |  |
+| `bench-l23-b-dss-full` | (count) | 1 | 1 | = |  |
+| `bench-l30-lta-plus-dss` | `Signature1` | TOTAL_PASSED / PAdES BaselineLta | TOTAL_PASSED / PAdES BaselineLta | = |  |
+| `bench-l30-lta-plus-dss` | (count) | 1 | 1 | = |  |
+| `bench-r1-b-dss-signer-only-docts` | `Signature1` | TOTAL_PASSED / PAdES BaselineT | TOTAL_PASSED / PAdES BaselineT | = |  |
+| `bench-r1-b-dss-signer-only-docts` | (count) | 1 | 1 | = |  |
+| `bench-r2-b-dss-signer-and-tsa-docts` | `Signature1` | TOTAL_PASSED / PAdES BaselineLta | TOTAL_PASSED / PAdES BaselineLta | = |  |
+| `bench-r2-b-dss-signer-and-tsa-docts` | (count) | 1 | 1 | = |  |
+| `bench-r3-t-dss-signer-only` | `Signature1` | TOTAL_PASSED / PAdES BaselineT | TOTAL_PASSED / PAdES BaselineT | = |  |
+| `bench-r3-t-dss-signer-only` | (count) | 1 | 1 | = |  |
+| `bench-r4-b-docts-then-dss-signer-and-tsa` | `Signature1` | TOTAL_PASSED / PAdES BaselineLt | TOTAL_PASSED / PAdES BaselineLt | = |  |
+| `bench-r4-b-docts-then-dss-signer-and-tsa` | (count) | 1 | 1 | = |  |
+| `bench-r5-b-docts-dss-docts` | `Signature1` | TOTAL_PASSED / PAdES BaselineLta | TOTAL_PASSED / PAdES BaselineLta | = |  |
+| `bench-r5-b-docts-dss-docts` | (count) | 1 | 1 | = |  |
+| `bench-r6-b-docts-dss-signer-only-docts` | `Signature1` | TOTAL_PASSED / PAdES BaselineT | TOTAL_PASSED / PAdES BaselineT | = |  |
+| `bench-r6-b-docts-dss-signer-only-docts` | (count) | 1 | 1 | = |  |
+| `bench-r7-t-rogue-docts-dss-docts` | `Signature1` | TOTAL_PASSED / PAdES BaselineT | TOTAL_PASSED / PAdES BaselineT | = |  |
+| `bench-r7-t-rogue-docts-dss-docts` | (count) | 1 | 1 | = |  |
+| `bench-r8-t-dss-docts-rogue` | `Signature1` | TOTAL_PASSED / PAdES BaselineLta | TOTAL_PASSED / PAdES BaselineLta | = |  |
+| `bench-r8-t-dss-docts-rogue` | (count) | 1 | 1 | = |  |
+
+## 2. Public interface on committed files, bench root as anchor, no revocation source
+Script: the one quoted whole in ac1-baseline-levels.txt. Working directory: <tmp>/scenario. stdin: none.
+$ cd <tmp>/scenario && <tmp>/target-scn/debug/qa-s18 root.der <copy>/crates/nacre-validate/tests/corpus/signed-lta-pyhanko.pdf <copy>/crates/nacre-validate/tests/corpus/signed-twice-pyhanko.pdf <copy>/crates/nacre-validate/tests/corpus/attacks/subfilter-unsupported.pdf
+<copy>/crates/nacre-validate/tests/corpus/signed-lta-pyhanko.pdf under dss(): 1 signature(s)
+  Sig1: Indeterminate / Some(NoCertificateChainFound) / level Some(SignatureLevel { form: PAdES, profile: BaselineLta }) / best_signature_time None
+<copy>/crates/nacre-validate/tests/corpus/signed-lta-pyhanko.pdf under strict(): 1 signature(s)
+  Sig1: Indeterminate / Some(NoCertificateChainFound) / level Some(SignatureLevel { form: PAdES, profile: BaselineLta }) / best_signature_time None
+<copy>/crates/nacre-validate/tests/corpus/signed-twice-pyhanko.pdf under dss(): 2 signature(s)
+  Sig1: Indeterminate / Some(NoCertificateChainFound) / level Some(SignatureLevel { form: Pkcs7, profile: BaselineT }) / best_signature_time None
+  Sig2: Indeterminate / Some(NoCertificateChainFound) / level Some(SignatureLevel { form: Pkcs7, profile: BaselineT }) / best_signature_time None
+<copy>/crates/nacre-validate/tests/corpus/signed-twice-pyhanko.pdf under strict(): 2 signature(s)
+  Sig1: Indeterminate / Some(NoCertificateChainFound) / level Some(SignatureLevel { form: Pkcs7, profile: BaselineT }) / best_signature_time None
+  Sig2: Indeterminate / Some(NoCertificateChainFound) / level Some(SignatureLevel { form: Pkcs7, profile: BaselineT }) / best_signature_time None
+<copy>/crates/nacre-validate/tests/corpus/attacks/subfilter-unsupported.pdf under dss(): 1 signature(s)
+  Signature1: Indeterminate / Some(NoCertificateChainFound) / level None / best_signature_time None
+<copy>/crates/nacre-validate/tests/corpus/attacks/subfilter-unsupported.pdf under strict(): 1 signature(s)
+  Signature1: TotalFailed / Some(FormatFailure) / level None / best_signature_time None
+empty input under dss(): Err(the PDF cannot be read: the input does not start with %PDF-) kind InvalidInput
+empty input under strict(): Err(the PDF cannot be read: the input does not start with %PDF-) kind InvalidInput
+not a PDF under dss(): Err(the PDF cannot be read: the input does not start with %PDF-) kind InvalidInput
+not a PDF under strict(): Err(the PDF cannot be read: the input does not start with %PDF-) kind InvalidInput
+truncated PDF (validate): Err(the PDF cannot be read: no startxref statement in the last 1024 bytes) kind InvalidInput
+PEM anchor: Err(a trust anchor looks like PEM; give it as DER) kind InvalidInput
+garbage anchor: Err(a trust anchor cannot be read: unexpected ASN.1 DER tag: expected SEQUENCE, got APPLICATION [7] (constructed)) kind InvalidInput
+exit code: 0

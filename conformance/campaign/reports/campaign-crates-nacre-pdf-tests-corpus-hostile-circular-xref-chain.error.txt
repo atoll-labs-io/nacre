@@ -1,0 +1,3 @@
+HTTP 500
+
+The document with name [campaign-crates-nacre-pdf-tests-corpus-hostile-circular-xref-chain] is either not accessible or not PDF compatible. Reason : [Missing root object specification in trailer.]

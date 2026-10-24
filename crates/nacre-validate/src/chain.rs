@@ -19,10 +19,10 @@ use x509_cert::ext::pkix::{
 use crate::Error;
 
 /// Certificates below the anchor one path may hold.
-const MAX_PATH_LEN: usize = 8;
+pub(crate) const MAX_PATH_LEN: usize = 8;
 /// Distinct readable certificates of a pool one [`build_chain`] call reads; later ones
 /// are ignored.
-const MAX_POOL_LEN: usize = 256;
+pub(crate) const MAX_POOL_LEN: usize = 256;
 
 const ECDSA_WITH_SHA256: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.840.10045.4.3.2");
 const SHA256_WITH_RSA_ENCRYPTION: ObjectIdentifier =
@@ -114,6 +114,10 @@ impl TrustAnchors {
 
     pub(crate) fn is_empty(&self) -> bool {
         self.anchors.is_empty()
+    }
+
+    pub(crate) fn nodes(&self) -> &[Node] {
+        &self.anchors
     }
 }
 
@@ -266,9 +270,9 @@ pub(crate) fn build_path(
 
 /// A certificate read once, with what the search compares.
 #[derive(Debug, Clone)]
-struct Node {
-    der: Vec<u8>,
-    certificate: Certificate,
+pub(crate) struct Node {
+    pub(crate) der: Vec<u8>,
+    pub(crate) certificate: Certificate,
     tbs: Option<Vec<u8>>,
     subject: Vec<u8>,
     issuer: Vec<u8>,
@@ -277,7 +281,7 @@ struct Node {
 }
 
 impl Node {
-    fn read(der: &[u8]) -> Result<Self, der::Error> {
+    pub(crate) fn read(der: &[u8]) -> Result<Self, der::Error> {
         let certificate = Certificate::from_der(der)?;
         let tbs = certificate.tbs_certificate();
         // Key identifiers only narrow the search: the signature check is the proof, so an
@@ -304,8 +308,13 @@ impl Node {
         })
     }
 
+    /// Whether `self` names itself as issuer and its own key verifies its signature.
+    pub(crate) fn is_self_signed(&self) -> bool {
+        self.subject == self.issuer && signed_by(self, self)
+    }
+
     /// Whether `self` may have issued `child`, before any signature is checked.
-    fn names(&self, child: &Node) -> bool {
+    pub(crate) fn names(&self, child: &Node) -> bool {
         self.subject == child.issuer
             && match (&self.subject_key_id, &child.authority_key_id) {
                 (Some(ski), Some(aki)) => ski == aki,
@@ -538,7 +547,7 @@ pub(crate) fn repeats_extension(certificate: &Certificate) -> bool {
 }
 
 /// Whether `issuer`'s key verifies `child`'s signature over its TBS bytes as received.
-fn signed_by(child: &Node, issuer: &Node) -> bool {
+pub(crate) fn signed_by(child: &Node, issuer: &Node) -> bool {
     let certificate = &child.certificate;
     // RFC 5280 §4.1.1.2: the unsigned outer algorithm must repeat the signed one.
     if certificate.signature_algorithm() != certificate.tbs_certificate().signature() {

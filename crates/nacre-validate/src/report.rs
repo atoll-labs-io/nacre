@@ -1,6 +1,6 @@
 use std::time::SystemTime;
 
-use nacre_core::{SubIndication, ValidationReport};
+use nacre_core::{Indication, SignatureLevel, SubIndication, ValidationReport};
 use nacre_pdf::ObjectId;
 
 use crate::{CertificatePath, ChainDefect, RevocationDefect};
@@ -11,6 +11,9 @@ use crate::{CertificatePath, ChainDefect, RevocationDefect};
 pub struct SignatureValidation {
     /// The field's dotted full name.
     pub field: String,
+    /// The indication and sub-indication, and the level the signature's structure reaches,
+    /// as DSS 6.5.1 reads it (ADR-0025): set for every listed signature, whatever its
+    /// verdict.
     pub report: ValidationReport,
     /// The digest of the signed bytes matches the CMS `messageDigest`.
     pub digest_verified: bool,
@@ -28,9 +31,11 @@ pub struct SignatureValidation {
     /// [`Defect::ClaimedTimeMissing`] or [`Defect::ClaimedTimeAfterCertificate`] means the
     /// path is valid but a check judged after it failed.
     pub chain: Option<CertificatePath>,
-    /// The `genTime` of the earliest signature timestamp whose token verifies and whose
-    /// authority's path and revocation pass at the control date; `None` when no timestamp
-    /// gives that proof, the control date then standing for it.
+    /// The `genTime` of the earliest timestamp, a signature timestamp or a document
+    /// timestamp after the signature, whose token verifies and whose authority's path and
+    /// revocation pass at the control date; `None` when no timestamp gives that proof, the
+    /// control date then standing for it. The level of [`SignatureValidation::report`] does
+    /// not depend on it (ADR-0025).
     pub best_signature_time: Option<SystemTime>,
 }
 
@@ -150,8 +155,8 @@ pub enum Defect {
 
 impl SignatureValidation {
     /// A signature every check passed: `chain` is its valid path, whose revocation passed
-    /// too, and the signature `TOTAL_PASSED` with no level; `None` when no path reaches an
-    /// anchor.
+    /// too, and the signature `TOTAL_PASSED`; `None` when no path reaches an anchor. The
+    /// level is set afterwards ([`SignatureValidation::with_level`]).
     pub(crate) fn sound(
         field: String,
         later_revisions: Vec<LaterRevision>,
@@ -188,6 +193,18 @@ impl SignatureValidation {
             best_signature_time,
             ..Self::defective(field, defect, later_revisions)
         }
+    }
+
+    /// `self` with `level` as the level of its report, its indication and sub-indication
+    /// unchanged.
+    pub(crate) fn with_level(self, level: Option<SignatureLevel>) -> Self {
+        let report = match (self.report.indication(), self.report.sub_indication()) {
+            (Indication::TotalPassed, _) => ValidationReport::passed(level),
+            (Indication::TotalFailed, Some(sub)) => ValidationReport::failed(sub, level),
+            (Indication::Indeterminate, Some(sub)) => ValidationReport::indeterminate(sub, level),
+            _ => self.report.clone(),
+        };
+        Self { report, ..self }
     }
 
     pub(crate) fn defective(

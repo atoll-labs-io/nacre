@@ -139,12 +139,36 @@ impl OcspResponse {
     ///
     /// A `thisUpdate` after `at` is accepted, as for a CRL: a response issued later still
     /// tells about the past. Neither the nonce nor the freshness of `thisUpdate` is judged
-    /// here: see [`OcspResponse::check_nonce`] and [`OcspResponse::check_this_update`].
+    /// here: see [`OcspResponse::check_nonce`] and [`OcspResponse::check_this_update`]. A
+    /// critical extension is refused with [`Error::UnsupportedCriticalExtension`]; see
+    /// [`OcspResponse::status_ignoring_critical_extensions`].
     pub fn status(
         &self,
         certificate: &[u8],
         issuer: &[u8],
         at: SystemTime,
+    ) -> Result<OcspStatus, Error> {
+        self.judge(certificate, issuer, at, true)
+    }
+
+    /// [`OcspResponse::status`] without its refusal of a critical extension, in the
+    /// response extensions or in the single response about `certificate`, as DSS 6.5.1
+    /// reads such a response. Every other refusal of `status` stays.
+    pub fn status_ignoring_critical_extensions(
+        &self,
+        certificate: &[u8],
+        issuer: &[u8],
+        at: SystemTime,
+    ) -> Result<OcspStatus, Error> {
+        self.judge(certificate, issuer, at, false)
+    }
+
+    fn judge(
+        &self,
+        certificate: &[u8],
+        issuer: &[u8],
+        at: SystemTime,
+        refuse_critical: bool,
     ) -> Result<OcspStatus, Error> {
         // The order is part of the contract: each attack of the corpus must reach the rule
         // that names it (docs/security/attacks/revocation.md).
@@ -153,8 +177,10 @@ impl OcspResponse {
 
         let single = self.single(&certificate, &issuer)?;
 
-        critical(self.basic.tbs_response_data.response_extensions.as_ref())?;
-        critical(single.single_extensions.as_ref())?;
+        if refuse_critical {
+            critical(self.basic.tbs_response_data.response_extensions.as_ref())?;
+            critical(single.single_extensions.as_ref())?;
+        }
 
         let key = self.responder_key(&issuer)?;
 

@@ -1,0 +1,13 @@
+# AC1 — invalid inputs a library user could give to validate_with_policy / TrustAnchors
+Script: the one quoted whole in ac1-baseline-levels.txt (same binary). Working directory: <tmp>/scenario. stdin: none.
+
+$ cd <tmp>/scenario && QA_SOURCE=1 <tmp>/target-scn/debug/qa-s18 root.der <copy>/conformance/reference/out/pades-baseline-b.pdf <copy>/conformance/reference/out/pades-baseline-b-revoked.pdf
+(invalid-input lines only)
+empty input under dss(): Err(the PDF cannot be read: the input does not start with %PDF-) kind InvalidInput
+empty input under strict(): Err(the PDF cannot be read: the input does not start with %PDF-) kind InvalidInput
+not a PDF under dss(): Err(the PDF cannot be read: the input does not start with %PDF-) kind InvalidInput
+not a PDF under strict(): Err(the PDF cannot be read: the input does not start with %PDF-) kind InvalidInput
+truncated PDF (validate): Err(the PDF cannot be read: no startxref statement in the last 1024 bytes) kind InvalidInput
+PEM anchor: Err(a trust anchor looks like PEM; give it as DER) kind InvalidInput
+garbage anchor: Err(a trust anchor cannot be read: unexpected ASN.1 DER tag: expected SEQUENCE, got APPLICATION [7] (constructed)) kind InvalidInput
+exit code: 0

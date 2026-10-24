@@ -1,4 +1,5 @@
-/// The rules only Nacre applies, one switch each (ADR-0026, ADR-0029, ADR-0030). Each switch on
+/// The rules only Nacre applies, one switch each (ADR-0026, ADR-0029, ADR-0030, ADR-0031).
+/// Each switch on
 /// keeps a protection DSS 6.5.1 lacks; each switch off gives DSS's verdict on that case.
 ///
 /// [`ValidationPolicy::strict`], the [`Default`], turns them all on and is what
@@ -7,8 +8,9 @@
 /// [`ValidationPolicy::dss`] turns them all off. A rule DSS applies and Nacre would
 /// otherwise lack, such as a signing time (`/M`) missing or out of the signer's validity,
 /// revocation data issued after a certificate's `notAfter` with no `expiredCertsOnCRL`
-/// not counting, revocation data from a CA out of its validity at the control date, or a
-/// CA without `subjectKeyIdentifier`, is no switch:
+/// not counting, revocation data from a CA out of its validity at the control date, a
+/// CA without `subjectKeyIdentifier`, or a `certificateHold` before the best-signature-time
+/// giving `TRY_LATER`, is no switch:
 /// both presets apply it, so no preset is laxer than DSS. Turning one switch off from
 /// `strict()` reopens that switch's attack only.
 #[non_exhaustive]
@@ -88,6 +90,16 @@ pub struct ValidationPolicy {
     /// refuses the path first). Off, such a certificate is skipped by that rule, as DSS does
     /// (ADR-0030); data saying "not revoked" is judged either way.
     pub judge_issuer_of_revoked_data: bool,
+    /// Require a delegated OCSP responder of the trust anchor that signed the deciding data
+    /// of a CA just below it to be within its validity at the control date, as the rule
+    /// DSS applies to the delegates of the other CAs. Off, the anchor's delegate is exempt,
+    /// as DSS does (ADR-0031).
+    pub judge_anchor_delegated_responder: bool,
+    /// Refuse an OCSP response that carries a critical extension, in its response
+    /// extensions or in its single response, as `nacre_revocation::OcspResponse::status`
+    /// does. Off, such a response is read whatever its critical extensions, as DSS does
+    /// (ADR-0031); a CRL with an unknown critical extension is refused either way.
+    pub refuse_critical_ocsp_extensions: bool,
 }
 
 impl ValidationPolicy {
@@ -106,6 +118,8 @@ impl ValidationPolicy {
             refuse_misplaced_xref: true,
             ignore_expired_certs_on_crl: true,
             judge_issuer_of_revoked_data: true,
+            judge_anchor_delegated_responder: true,
+            refuse_critical_ocsp_extensions: true,
         }
     }
 
@@ -115,9 +129,11 @@ impl ValidationPolicy {
     /// `%%EOF`, a signer certificate whose key usage forbids signing, a signature under a
     /// `/SubFilter` Nacre does not support, a cross-reference section found only by
     /// skipping whitespace, a CRL issued after a certificate expired, trusted on its
-    /// `expiredCertsOnCRL`, or an OCSP response trusted on its `archiveCutoff`, revocation data saying revoked, trusted from a CA or responder
-    /// out of its validity, and, for a signature with no timestamp, a stale "not revoked"
-    /// CRL or OCSP response appended to the `/DSS`.
+    /// `expiredCertsOnCRL`, or an OCSP response trusted on its `archiveCutoff`, revocation
+    /// data saying revoked, trusted from a CA or responder out of its validity, a CA's
+    /// "good" trusted from a delegated responder of the anchor out of its validity, an OCSP
+    /// response read past a critical extension, and, for a signature with no timestamp, a
+    /// stale "not revoked" CRL or OCSP response appended to the `/DSS`.
     ///
     /// Every switch off: the verdict DSS 6.5.1 gives, for comparing Nacre with it. Only the
     /// rules DSS also applies remain.
@@ -135,6 +151,8 @@ impl ValidationPolicy {
             refuse_misplaced_xref: false,
             ignore_expired_certs_on_crl: false,
             judge_issuer_of_revoked_data: false,
+            judge_anchor_delegated_responder: false,
+            refuse_critical_ocsp_extensions: false,
         }
     }
 }

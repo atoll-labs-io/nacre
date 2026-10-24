@@ -65,3 +65,26 @@ fn delegate_and_archive_cutoff_are_exposed() {
     assert_eq!(good.delegated_responder(CA).unwrap(), None);
     assert_eq!(good.archive_cutoff(LEAF, CA).unwrap(), None);
 }
+
+/// s18 C: the response of `ocsp-attacks/` holding a critical `id-pkix-ocsp-crl`, which this
+/// crate does not know, in its single response: `status` refuses it, the reading without
+/// that refusal gives its status.
+#[test]
+fn critical_extension_is_read_only_when_ignored() {
+    let ca = include_bytes!("corpus/ocsp-attacks/ca.der");
+    let leaf = include_bytes!("corpus/ocsp-attacks/leaf.der");
+    let response = OcspResponse::from_der(include_bytes!(
+        "corpus/ocsp-attacks/critical-single-extension.der"
+    ))
+    .unwrap();
+    let at = DateTime::new(2027, 1, 1, 0, 0, 0).unwrap().to_system_time();
+
+    assert!(matches!(
+        response.status(leaf, ca, at),
+        Err(nacre_revocation::Error::UnsupportedCriticalExtension(_))
+    ));
+    assert!(matches!(
+        response.status_ignoring_critical_extensions(leaf, ca, at),
+        Ok(OcspStatus::Revoked { .. })
+    ));
+}

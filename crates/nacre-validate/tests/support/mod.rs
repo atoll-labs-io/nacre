@@ -6,6 +6,7 @@ pub mod forge;
 use std::path::Path;
 
 use nacre_core::{RevocationData, RevocationSource, SignatureAlgorithm, Signer};
+use nacre_validate::ValidationPolicy;
 use p256::ecdsa::signature::hazmat::PrehashSigner;
 use p256::ecdsa::{DerSignature, SigningKey};
 use p256::pkcs8::DecodePrivateKey;
@@ -108,3 +109,47 @@ impl RevocationSource for Stub {
         }))
     }
 }
+
+/// A switch of `ValidationPolicy`: its name and what turns it off.
+pub type Switch = (&'static str, fn(&mut ValidationPolicy));
+
+pub const SWITCHES: [Switch; 14] = [
+    ("refuse_later_revisions", |p| {
+        p.refuse_later_revisions = false
+    }),
+    ("refuse_sneaky_signatures", |p| {
+        p.refuse_sneaky_signatures = false
+    }),
+    ("refuse_trailing_data", |p| p.refuse_trailing_data = false),
+    ("list_unusable_signatures", |p| {
+        p.list_unusable_signatures = false
+    }),
+    ("judge_signer_key_usage", |p| {
+        p.judge_signer_key_usage = false
+    }),
+    ("judge_validity_before_revocation", |p| {
+        p.judge_validity_before_revocation = false
+    }),
+    ("judge_malformed_extensions", |p| {
+        p.judge_malformed_extensions = false
+    }),
+    ("require_fresh_revocation", |p| {
+        p.require_fresh_revocation = false
+    }),
+    ("refuse_unsupported_sub_filters", |p| {
+        p.refuse_unsupported_sub_filters = false
+    }),
+    ("refuse_misplaced_xref", |p| p.refuse_misplaced_xref = false),
+    ("ignore_expired_certs_on_crl", |p| {
+        p.ignore_expired_certs_on_crl = false
+    }),
+    ("judge_issuer_of_revoked_data", |p| {
+        p.judge_issuer_of_revoked_data = false
+    }),
+    ("judge_anchor_delegated_responder", |p| {
+        p.judge_anchor_delegated_responder = false
+    }),
+    ("refuse_critical_ocsp_extensions", |p| {
+        p.refuse_critical_ocsp_extensions = false
+    }),
+];

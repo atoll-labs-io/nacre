@@ -9,7 +9,9 @@ use std::time::SystemTime;
 
 use der::{Decode, Header, Reader, SliceReader};
 use nacre_cms::Error as CmsError;
-use nacre_core::{Indication, SubIndication, TestSigner};
+use nacre_core::{
+    Indication, SignatureForm, SignatureLevel, SignatureProfile, SubIndication, TestSigner,
+};
 use nacre_pades::{DateTime, sign};
 use nacre_pdf::{Document, Object};
 use nacre_validate::{
@@ -121,7 +123,13 @@ fn s06_signature_is_verified_but_indeterminate() {
         result.report.sub_indication(),
         Some(SubIndication::NoCertificateChainFound)
     );
-    assert_eq!(result.report.level(), None);
+    assert_eq!(
+        result.report.level(),
+        Some(SignatureLevel {
+            form: SignatureForm::PAdES,
+            profile: SignatureProfile::BaselineB
+        })
+    );
 }
 
 #[test]
@@ -382,7 +390,13 @@ fn chain_valid(result: &SignatureValidation) {
         result.report.sub_indication(),
         Some(SubIndication::CertificateChainGeneralFailure)
     );
-    assert_eq!(result.report.level(), None);
+    assert_eq!(
+        result.report.level(),
+        Some(SignatureLevel {
+            form: SignatureForm::PAdES,
+            profile: SignatureProfile::BaselineB
+        })
+    );
 }
 
 #[test]

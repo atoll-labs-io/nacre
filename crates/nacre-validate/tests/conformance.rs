@@ -79,8 +79,7 @@ fn verdict(result: &SignatureValidation) -> Verdict {
 }
 
 /// Asserts that Nacre and DSS both give `indication` / `sub` on `pdf`, Nacre judging with
-/// `source` under `policy`, and that DSS reports the PAdES level `profile`; Nacre gives no
-/// level before s18.
+/// `source` under `policy`, and that both report the PAdES level `profile`.
 fn confront(
     name: &str,
     pdf: &[u8],
@@ -107,8 +106,12 @@ fn confront(
         "DSS on {name}"
     );
     assert_eq!(
-        (ours.report.indication(), ours.report.sub_indication()),
-        (indication, sub),
+        (
+            ours.report.indication(),
+            ours.report.sub_indication(),
+            ours.report.level()
+        ),
+        (indication, sub, theirs.level()),
         "Nacre on {name}: {:?}",
         ours.defect
     );
@@ -1528,7 +1531,7 @@ fn delegated_responder_policy() {
             Some(&delegate),
             x509(now - hours(3 * 24)),
             None,
-            None,
+            &[],
         );
         forge::with_dss_ocsps(&basic, &[], &[root_crl()], &[response])
     };
@@ -1580,7 +1583,11 @@ fn archive_cutoff_policy() {
             None,
             x509(now - hours(1)),
             None,
-            Some(x509(now - hours(60 * 24))),
+            &[forge::OcspExtension::archive_cutoff(
+                x509(now - hours(60 * 24)),
+                false,
+                forge::OcspPlace::Single,
+            )],
         )
     };
 
@@ -1627,5 +1634,125 @@ fn archive_cutoff_policy() {
     );
     assert!(ours[0].best_signature_time.is_some());
     let strict = nacre(&e5, None, &ValidationPolicy::strict());
+    assert_eq!(verdict(&strict), GENERAL_FAILURE, "{:?}", strict.defect);
+}
+
+/// a7: a B-T stamped five days ago under a CA of the bench root, whose only data is a
+/// "good" response by a delegate of the root, embedded, produced after the bench root's CRL
+/// and expired since. DSS exempts the anchor's delegate; `strict()` does not.
+#[test]
+#[ignore = "conformance"]
+fn anchor_delegated_responder_policy() {
+    let root = Certificate::from_der(&bench_certificate("root.cert.pem")).unwrap();
+    let root_crl_date = nacre_revocation::Crl::from_der(&root_crl())
+        .unwrap()
+        .this_update();
+    let produced = SystemTime::now().max(root_crl_date) + Duration::from_secs(1);
+    let delegate_key = forge::key(&[0x9e; 32]);
+    let delegate = forge::issue_with(
+        Role::OcspResponder,
+        "CN=Nacre s18 a7 root OCSP delegate,O=Nacre tests,C=FR",
+        fresh_serial(84),
+        &delegate_key,
+        Some(&root),
+        &bench_key("root"),
+        (
+            x509(produced - hours(30 * 24)),
+            x509(produced + Duration::from_secs(5)),
+        ),
+        Extensions::Usual,
+    );
+    let (ca, ca_key, signer) = forged_ca(
+        "CN=Nacre s18 a7 CA,O=Nacre tests,C=FR",
+        0x9f,
+        85,
+        forge::instant(2036, 1, 1, 0, 0, 0),
+        Extensions::Usual,
+    );
+    let response = forge::ocsp(
+        &ca,
+        &root,
+        &delegate_key,
+        &delegate,
+        Some(&delegate),
+        x509(produced),
+        None,
+        &[],
+    );
+    let now = SystemTime::now();
+    let tsa = bench_tsa_at(now - hours(5 * 24));
+    let a7 = forge::with_dss_ocsps(
+        &forge::signed(&signer, Level::T { tsa: &tsa }),
+        &[],
+        &[crl_at(&ca, &ca_key, now - hours(1))],
+        &[response],
+    );
+    while SystemTime::now() <= produced + Duration::from_secs(6) {
+        std::thread::sleep(Duration::from_secs(1));
+    }
+
+    let source = bench_revocation();
+    confront_signatures(
+        "s18-a7-root-delegate-expired",
+        &a7,
+        Some(&source),
+        &[PASSED],
+        &ValidationPolicy::dss(),
+    );
+    let strict = nacre(&a7, Some(&source), &ValidationPolicy::strict());
+    assert_eq!(
+        verdict(&strict),
+        REVOCATION_OUT_OF_BOUNDS,
+        "{:?}",
+        strict.defect
+    );
+}
+
+/// u1: a B by a signer of the bench intermediate whose only data is a "good" response of
+/// the intermediate, an hour old, holding a critical extension of an unknown OID in its
+/// single response. DSS reads it; `strict()` refuses it.
+#[test]
+#[ignore = "conformance"]
+fn critical_ocsp_extensions_policy() {
+    let now = SystemTime::now();
+    let intermediate = Certificate::from_der(&bench_certificate("intermediate.cert.pem")).unwrap();
+    let signer = forged_signer(
+        "CN=Nacre s18 u1 signer,O=Nacre tests,C=FR",
+        0xa1,
+        86,
+        usual_validity(),
+        Extensions::Usual,
+    );
+    let unknown = forge::OcspExtension {
+        oid: der::oid::ObjectIdentifier::new_unwrap("1.3.6.1.4.1.32473.18"),
+        value: der::asn1::Null.to_der().unwrap(),
+        critical: true,
+        place: forge::OcspPlace::Single,
+    };
+    let response = forge::ocsp(
+        &Certificate::from_der(&signer.chain[0]).unwrap(),
+        &intermediate,
+        &bench_key("intermediate"),
+        &intermediate,
+        None,
+        x509(now - hours(1)),
+        None,
+        &[unknown],
+    );
+    let u1 = forge::with_dss_ocsps(
+        &forge::signed(&signer, Level::B),
+        &[],
+        &[root_crl()],
+        &[response],
+    );
+
+    confront_signatures(
+        "s18-u1-critical-unknown-single",
+        &u1,
+        None,
+        &[PASSED],
+        &ValidationPolicy::dss(),
+    );
+    let strict = nacre(&u1, None, &ValidationPolicy::strict());
     assert_eq!(verdict(&strict), GENERAL_FAILURE, "{:?}", strict.defect);
 }

@@ -1,0 +1,37 @@
+# AC6 — DSS's XML reports of each campaign are kept
+
+$ ls conformance/campaign/reports | wc -l   (this run, in the copy)
+259
+$ ls conformance/campaign/reports/*.xml | wc -l
+252
+$ ls conformance/campaign/reports/*.error.txt | wc -l
+5
+committed on story/s18-validate-level: 259 files, 252 XML, 5 error.txt; same file names as this run: yes
+cases in campaign-dss.md: 257; with an XML or an error.txt: 257
+
+## The five cases DSS answered with an HTTP error, kept as campaign-<case>.error.txt (this run)
+--- campaign-bench-n04-tsa-repeated-ext.error.txt
+HTTP 500
+
+repeated extension found: 2.5.29.15
+| `bench-n04-tsa-repeated-ext` | (file) | error | error | = |  |
+--- campaign-crates-nacre-pdf-tests-corpus-hostile-aes256.error.txt
+HTTP 500
+
+Encrypted document : Cannot decrypt PDF, the password is incorrect
+| `crates-nacre-pdf-tests-corpus-hostile-aes256` | (file) | error | error | = |  |
+--- campaign-crates-nacre-pdf-tests-corpus-hostile-circular-xref-chain.error.txt
+HTTP 500
+
+The document with name [campaign-crates-nacre-pdf-tests-corpus-hostile-circular-xref-chain] is either not accessible or not PDF compatible. Reason : [Missing root object specification in trailer.]
+| `crates-nacre-pdf-tests-corpus-hostile-circular-xref-chain` | (file) | error | error | = |  |
+--- campaign-crates-nacre-pdf-tests-corpus-hostile-xref-malformed-prev.error.txt
+HTTP 500
+
+The document with name [campaign-crates-nacre-pdf-tests-corpus-hostile-xref-malformed-prev] is either not accessible or not PDF compatible. Reason : [Missing root object specification in trailer.]
+| `crates-nacre-pdf-tests-corpus-hostile-xref-malformed-prev` | (file) | error | error | = |  |
+--- campaign-crates-nacre-validate-tests-corpus-attacks-chain-malformed-extension.error.txt
+HTTP 500
+
+repeated extension found: 2.5.29.15
+| `crates-nacre-validate-tests-corpus-attacks-chain-malformed-extension` | (file) | error | error | = |  |

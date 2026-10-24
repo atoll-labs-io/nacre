@@ -314,10 +314,44 @@ pub fn crl_with_expired_certs_on_crl(
     list.to_der().unwrap()
 }
 
+/// Where an extension of a forged OCSP response sits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OcspPlace {
+    /// The `singleExtensions` of its single response.
+    Single,
+    /// The `responseExtensions` of its `ResponseData`.
+    Response,
+}
+
+/// An extension of a forged OCSP response: its OID, the DER of its value, whether it is
+/// critical and where it sits.
+#[derive(Debug, Clone)]
+pub struct OcspExtension {
+    pub oid: ObjectIdentifier,
+    pub value: Vec<u8>,
+    pub critical: bool,
+    pub place: OcspPlace,
+}
+
+impl OcspExtension {
+    /// An `archiveCutoff` (RFC 6960, 4.4.4) of `from`.
+    pub fn archive_cutoff(from: Time, critical: bool, place: OcspPlace) -> Self {
+        Self {
+            oid: ARCHIVE_CUTOFF,
+            value: GeneralizedTime::from_system_time(from.to_system_time())
+                .unwrap()
+                .to_der()
+                .unwrap(),
+            critical,
+            place,
+        }
+    }
+}
+
 /// A basic OCSP response on `certificate` (issued by `issuer`), signed with `key` and naming
 /// `responder` by name, `embed` in its `certs` when given. `thisUpdate` is `produced`,
-/// `nextUpdate` 7 days later; the status is "revoked" at `revoked` when given, else
-/// "good", and `archive_cutoff` becomes a non-critical single extension.
+/// `nextUpdate` 7 days later; the status is "revoked" at the date of `revoked`, with its
+/// reason when given, else "good". Each of `extensions` goes where it says.
 #[allow(clippy::too_many_arguments)]
 pub fn ocsp(
     certificate: &Certificate,
@@ -326,8 +360,8 @@ pub fn ocsp(
     responder: &Certificate,
     embed: Option<&Certificate>,
     produced: Time,
-    revoked: Option<Time>,
-    archive_cutoff: Option<Time>,
+    revoked: Option<(Time, Option<CrlReason>)>,
+    extensions: &[OcspExtension],
 ) -> Vec<u8> {
     use asn1::{
         BasicOcspResponse, CertStatus, ID_PKIX_OCSP_BASIC, OcspRequest, OcspResponse,
@@ -344,19 +378,23 @@ pub fn ocsp(
     let cert_id = request.tbs_request.request_list[0].req_cert.clone();
     let cert_status = match revoked {
         None => CertStatus::Good(Null),
-        Some(date) => CertStatus::Revoked(RevokedInfo {
+        Some((date, reason)) => CertStatus::Revoked(RevokedInfo {
             revocation_time: generalized(date.to_system_time()),
-            revocation_reason: None,
+            revocation_reason: reason,
         }),
     };
-    let single_extensions = archive_cutoff.map(|from| {
-        vec![Extension {
-            extn_id: ARCHIVE_CUTOFF,
-            critical: false,
-            extn_value: OctetString::new(generalized(from.to_system_time()).to_der().unwrap())
-                .unwrap(),
-        }]
-    });
+    let placed = |place: OcspPlace| {
+        let list: Vec<Extension> = extensions
+            .iter()
+            .filter(|extension| extension.place == place)
+            .map(|extension| Extension {
+                extn_id: extension.oid,
+                critical: extension.critical,
+                extn_value: OctetString::new(extension.value.clone()).unwrap(),
+            })
+            .collect();
+        (!list.is_empty()).then_some(list)
+    };
     let produced = produced.to_system_time();
     let data = ResponseData {
         version: x509_cert::certificate::Version::V1,
@@ -367,9 +405,9 @@ pub fn ocsp(
             cert_status,
             this_update: generalized(produced),
             next_update: Some(generalized(produced + Duration::from_secs(7 * 86_400))),
-            single_extensions,
+            single_extensions: placed(OcspPlace::Single),
         }],
-        response_extensions: None,
+        response_extensions: placed(OcspPlace::Response),
     };
     let signature: DerSignature = key
         .sign_prehash(&Sha256::digest(data.to_der().unwrap()))
@@ -643,4 +681,233 @@ pub fn with_dss_ocsps(
     let dss = update.add(Object::Dictionary(dss)).unwrap();
     update.set_catalog(b"DSS", Object::Reference(dss));
     update.finish().unwrap()
+}
+
+/// `id-aa-signingCertificate` (RFC 2634, ESS v1).
+const SIGNING_CERTIFICATE: ObjectIdentifier =
+    ObjectIdentifier::new_unwrap("1.2.840.113549.1.9.16.2.12");
+const SIGNATURE_TIME_STAMP_TOKEN: ObjectIdentifier =
+    ObjectIdentifier::new_unwrap("1.2.840.113549.1.9.16.2.14");
+
+/// The ESS attribute naming the signer certificate in a forged CMS.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Ess {
+    /// `signingCertificateV2`, SHA-256.
+    V2,
+    /// `signingCertificate`, SHA-1.
+    V1,
+    None,
+}
+
+/// How [`signed_with`] signs: the `/SubFilter`, the `/M` (absent when `None`), a
+/// `signingTime` attribute, the ESS attribute, other signed attributes, the CRLs of the CMS
+/// and a signature timestamp from `tsa`.
+pub struct Signature<'a> {
+    pub sub_filter: &'a [u8],
+    pub claimed: Option<&'a [u8]>,
+    pub signing_time: Option<Time>,
+    pub ess: Ess,
+    pub attributes: Vec<Attribute>,
+    pub crls: Vec<Vec<u8>>,
+    pub tsa: Option<&'a dyn TimestampAuthority>,
+}
+
+impl Default for Signature<'_> {
+    /// A PAdES signature with ESS v2, its `/M` 2026-10-22T08:00Z, nothing else.
+    fn default() -> Self {
+        Self {
+            sub_filter: b"ETSI.CAdES.detached",
+            claimed: Some(b"D:20261022080000Z"),
+            signing_time: None,
+            ess: Ess::V2,
+            attributes: Vec::new(),
+            crls: Vec::new(),
+            tsa: None,
+        }
+    }
+}
+
+/// `pdf` signed once more by `signer` (P-256) in a new field, as `options` says, the
+/// `SignerInfo` built from its own signed attributes.
+pub fn signed_with(pdf: &[u8], signer: &dyn Signer, options: &Signature<'_>) -> Vec<u8> {
+    let doc = Document::parse(pdf).unwrap();
+    let mut entries = Dictionary::new();
+    if let Some(claimed) = options.claimed {
+        entries.insert(b"M", Object::String(claimed.to_vec()));
+    }
+    let prepared = doc
+        .update()
+        .sign(SignatureSpec {
+            field: free_field(&doc, "Signature"),
+            sub_filter: options.sub_filter.to_vec(),
+            contents_len: 40000,
+            entries,
+        })
+        .unwrap();
+    let mut hasher = Sha256::new();
+    for part in prepared.signed_parts() {
+        hasher.update(part);
+    }
+    let chain = signer.certificate_chain();
+    let leaf = &chain[0];
+    let mut attributes = vec![
+        Attribute::new(nacre_cms::oid::CONTENT_TYPE, &nacre_cms::oid::DATA).unwrap(),
+        Attribute::new(
+            nacre_cms::oid::MESSAGE_DIGEST,
+            &OctetString::new(hasher.finalize().as_slice()).unwrap(),
+        )
+        .unwrap(),
+    ];
+    let hash = match options.ess {
+        Ess::V2 => Some((SIGNING_CERTIFICATE_V2, Sha256::digest(leaf).to_vec())),
+        Ess::V1 => Some((SIGNING_CERTIFICATE, sha1(leaf).to_vec())),
+        Ess::None => None,
+    };
+    if let Some((oid, hash)) = hash {
+        let cert_id = tlv(
+            Tag::Sequence,
+            &OctetString::new(hash).unwrap().to_der().unwrap(),
+        );
+        let ess = Any::from_der(&tlv(Tag::Sequence, &tlv(Tag::Sequence, &cert_id))).unwrap();
+        attributes.push(Attribute::new(oid, &ess).unwrap());
+    }
+    if let Some(time) = options.signing_time {
+        attributes.push(Attribute::new(nacre_cms::oid::SIGNING_TIME, &time).unwrap());
+    }
+    attributes.extend(options.attributes.iter().cloned());
+    let signed_attrs = SignedAttributes::from_attributes(attributes).unwrap();
+    let signature = signer
+        .sign_digest(&Sha256::digest(signed_attrs.to_be_signed().unwrap()))
+        .unwrap();
+    let parsed = Certificate::from_der(leaf).unwrap();
+    let tbs = parsed.tbs_certificate();
+    let mut info = SignerInfo {
+        version: 1,
+        sid: SignerIdentifier::IssuerAndSerialNumber {
+            issuer: tbs.issuer().to_der().unwrap(),
+            serial_number: tbs.serial_number().clone(),
+        },
+        digest_algorithm: sha256(),
+        signed_attrs: Some(signed_attrs),
+        signature_algorithm: AlgorithmIdentifierOwned {
+            oid: ECDSA_WITH_SHA256,
+            parameters: None,
+        },
+        signature,
+        unsigned_attrs: Vec::new(),
+    };
+    if let Some(tsa) = options.tsa {
+        let token = tsa
+            .timestamp(DigestAlgorithm::Sha256, &Sha256::digest(&info.signature))
+            .unwrap();
+        info.push_unsigned_attribute(Attribute {
+            oid: SIGNATURE_TIME_STAMP_TOKEN,
+            values: vec![Any::from_der(&token).unwrap()],
+        });
+    }
+    let cms = SignedData {
+        version: 1,
+        digest_algorithms: vec![sha256()],
+        encap_content_info: EncapsulatedContentInfo {
+            econtent_type: nacre_cms::oid::DATA,
+            econtent: None,
+        },
+        certificates: chain.to_vec(),
+        crls: options.crls.clone(),
+        signer_infos: vec![info],
+    };
+    prepared.embed(&cms.to_der().unwrap()).unwrap()
+}
+
+/// `pdf` given one revision holding a document timestamp: a `/Type /DocTimeStamp`
+/// dictionary under `/SubFilter /ETSI.RFC3161` whose `/Contents` is the token `tsa`
+/// returns for the SHA-256 of its `/ByteRange`, as `nacre-pades` writes it.
+pub fn document_timestamp(pdf: &[u8], tsa: &dyn TimestampAuthority) -> Vec<u8> {
+    let doc = Document::parse(pdf).unwrap();
+    let mut entries = Dictionary::new();
+    entries.insert(b"Type", Object::Name(b"DocTimeStamp".to_vec()));
+    let prepared = doc
+        .update()
+        .sign(SignatureSpec {
+            field: free_field(&doc, "DocumentTimestamp"),
+            sub_filter: b"ETSI.RFC3161".to_vec(),
+            contents_len: 20000,
+            entries,
+        })
+        .unwrap();
+    let mut hasher = Sha256::new();
+    for part in prepared.signed_parts() {
+        hasher.update(part);
+    }
+    let token = tsa
+        .timestamp(DigestAlgorithm::Sha256, &hasher.finalize())
+        .unwrap();
+    prepared.embed(&token).unwrap()
+}
+
+/// `<prefix><n>` for the smallest `n` from 1 no signature field of `doc` is named.
+fn free_field(doc: &Document<'_>, prefix: &str) -> String {
+    let taken: Vec<String> = doc
+        .signature_fields()
+        .iter()
+        .map(|field| field.name.clone())
+        .collect();
+    (1..)
+        .map(|n| format!("{prefix}{n}"))
+        .find(|name| !taken.contains(name))
+        .unwrap()
+}
+
+/// SHA-1 (FIPS 180-4), for the ESS v1 attribute alone: no dependency of this crate has it.
+fn sha1(data: &[u8]) -> [u8; 20] {
+    let mut h: [u32; 5] = [
+        0x6745_2301,
+        0xefcd_ab89,
+        0x98ba_dcfe,
+        0x1032_5476,
+        0xc3d2_e1f0,
+    ];
+    let mut message = data.to_vec();
+    message.push(0x80);
+    while message.len() % 64 != 56 {
+        message.push(0);
+    }
+    message.extend_from_slice(&(data.len() as u64 * 8).to_be_bytes());
+    for block in message.chunks_exact(64) {
+        let mut w = [0u32; 80];
+        for (i, word) in block.chunks_exact(4).enumerate() {
+            w[i] = u32::from_be_bytes(word.try_into().unwrap());
+        }
+        for i in 16..80 {
+            w[i] = (w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16]).rotate_left(1);
+        }
+        let [mut a, mut b, mut c, mut d, mut e] = h;
+        for (i, word) in w.iter().enumerate() {
+            let (f, k) = match i {
+                0..20 => ((b & c) | (!b & d), 0x5a82_7999),
+                20..40 => (b ^ c ^ d, 0x6ed9_eba1),
+                40..60 => ((b & c) | (b & d) | (c & d), 0x8f1b_bcdc),
+                _ => (b ^ c ^ d, 0xca62_c1d6),
+            };
+            let next = a
+                .rotate_left(5)
+                .wrapping_add(f)
+                .wrapping_add(e)
+                .wrapping_add(k)
+                .wrapping_add(*word);
+            e = d;
+            d = c;
+            c = b.rotate_left(30);
+            b = a;
+            a = next;
+        }
+        for (state, value) in h.iter_mut().zip([a, b, c, d, e]) {
+            *state = state.wrapping_add(value);
+        }
+    }
+    let mut out = [0u8; 20];
+    for (chunk, word) in out.chunks_exact_mut(4).zip(h) {
+        chunk.copy_from_slice(&word.to_be_bytes());
+    }
+    out
 }
