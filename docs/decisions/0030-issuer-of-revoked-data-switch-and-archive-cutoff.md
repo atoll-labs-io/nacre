@@ -5,7 +5,7 @@ status: accepted
 date: 2026-10-24
 scope: story s46-dss-parity-3
 supersedes: [0029]
-superseded-by: []
+superseded-by: [0031]
 ---
 
 # ADR-0030 — A twelfth switch, `judge_issuer_of_revoked_data`, and `ignore_expired_certs_on_crl` widened to OCSP `archiveCutoff`

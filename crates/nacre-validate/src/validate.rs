@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::time::SystemTime;
 
 use der::asn1::ObjectIdentifier;
@@ -12,6 +13,7 @@ use x509_cert::ext::pkix::SubjectKeyIdentifier;
 
 use crate::chain::{Purpose, Rules, build_path, in_validity, repeats_extension};
 use crate::date::pdf_date;
+use crate::level::{DocumentTimestamp, Structure};
 use crate::revisions::{Qualified, qualify};
 use crate::revocation::{FRESHNESS_TOLERANCE, RevocationPool, judge_path};
 use crate::{
@@ -25,11 +27,11 @@ const MAX_SIGNATURES: usize = 64;
 const SUB_FILTERS: [&[u8]; 2] = [b"ETSI.CAdES.detached", b"adbe.pkcs7.detached"];
 
 /// `id-aa-signatureTimeStampToken` (RFC 3161 Appendix A).
-const SIGNATURE_TIME_STAMP_TOKEN: ObjectIdentifier =
+pub(crate) const SIGNATURE_TIME_STAMP_TOKEN: ObjectIdentifier =
     ObjectIdentifier::new_unwrap("1.2.840.113549.1.9.16.2.14");
 
 /// Signature timestamps of one signature that are judged; later ones are ignored.
-const MAX_TIMESTAMPS: usize = 16;
+pub(crate) const MAX_TIMESTAMPS: usize = 16;
 
 /// Validates the integrity of every signature of `pdf`, in field order, and qualifies each
 /// revision appended after it, trusting no certificate.
@@ -39,8 +41,9 @@ const MAX_TIMESTAMPS: usize = 16;
 /// [`Defect::NotASignatureDictionary`]. A signature whose bytes and CMS verify, and whose
 /// later revisions are all allowed, ends `INDETERMINATE` / `NO_CERTIFICATE_CHAIN_FOUND`,
 /// since no path can reach an anchor; any defect ends `TOTAL_FAILED` or `INDETERMINATE`
-/// with its sub-indication, named in [`SignatureValidation::defect`].
-/// [`validate_with_anchors`] judges the chain.
+/// with its sub-indication, named in [`SignatureValidation::defect`]. Every report carries
+/// the level the signature's structure reaches, whatever its verdict (ADR-0025, see the
+/// crate documentation). [`validate_with_anchors`] judges the chain.
 ///
 /// An unreadable PDF, one holding more than 64 signatures, or more than 64 revisions after
 /// its oldest signed one, is an [`Error`]. Every rule of [`ValidationPolicy::strict`]
@@ -64,13 +67,14 @@ pub fn validate_with_anchors(
 /// judges its certificate chain and its revocation up to `anchors`, the control date being
 /// `at`.
 ///
-/// The best-signature-time is the `genTime` of the earliest signature timestamp whose token
-/// verifies over the signature value, whose authority's path (leaf `id-kp-timeStamping`)
-/// reaches `anchors` valid at `at`, and whose revocation passes at `at`; with no such
-/// timestamp, or one dated after `at`, it is `at`. It is returned in
-/// [`SignatureValidation::best_signature_time`]. At most 16 timestamps are judged, each
-/// against a SHA-256 imprint of the signature value only: a token whose imprint uses
-/// another algorithm gives no proof of time.
+/// The best-signature-time is the `genTime` of the earliest timestamp whose token verifies,
+/// whose authority's path (leaf `id-kp-timeStamping`) reaches `anchors` valid at `at`, and
+/// whose revocation passes at `at`; with no such timestamp, or one dated after `at`, it is
+/// `at`. It is returned in [`SignatureValidation::best_signature_time`]. A signature
+/// timestamp counts over the signature value; a document timestamp in a revision after the
+/// signature counts over its own signed bytes, which must pass the checks a signature's
+/// do. At most 16 of each are judged, each against a SHA-256 imprint only: a token whose
+/// imprint uses another algorithm gives no proof of time.
 ///
 /// The signer's path is built and judged (RFC 5280) at the best-signature-time from the
 /// certificates of the CMS and of the document's `/DSS` (`/Certs`, unfiltered streams
@@ -87,10 +91,11 @@ pub fn validate_with_anchors(
 /// freshness there too. An older proof of revocation dated at or before the
 /// best-signature-time still counts, unless its reason is `certificateHold`. A revocation
 /// at or before the best-signature-time gives [`Defect::Revocation`], `INDETERMINATE` /
-/// `REVOKED_NO_POE` (`REVOKED_CA_NO_POE` for a CA), and a certificate with no usable data
-/// gives `INDETERMINATE` / `CERTIFICATE_CHAIN_GENERAL_FAILURE`; both keep the path in
+/// `REVOKED_NO_POE` (`REVOKED_CA_NO_POE` for a CA), or `TRY_LATER` when it is a
+/// `certificateHold`, as DSS does, and a certificate with no usable data gives
+/// `INDETERMINATE` / `CERTIFICATE_CHAIN_GENERAL_FAILURE`; all keep the path in
 /// [`SignatureValidation::chain`]. A path whose revocation passes gives `TOTAL_PASSED`,
-/// with no level, unless the signing time the signature dictionary claims (`/M`) is missing
+/// unless the signing time the signature dictionary claims (`/M`) is missing
 /// or unreadable ([`Defect::ClaimedTimeMissing`]), before the signer's `notBefore`
 /// ([`Defect::ClaimedTimeBeforeCertificate`]) or after its `notAfter`
 /// ([`Defect::ClaimedTimeAfterCertificate`]): `INDETERMINATE` / `SIG_CONSTRAINTS_FAILURE`,
@@ -130,13 +135,18 @@ pub fn validate_with_revocation(
 /// `archiveCutoff` is at or before that `notAfter`. With
 /// [`ValidationPolicy::judge_issuer_of_revoked_data`] off, a certificate whose deciding
 /// revocation data says "revoked" escapes the issuer rule below (ADR-0030). With
+/// [`ValidationPolicy::judge_anchor_delegated_responder`] off, a delegated OCSP responder of
+/// the anchor escapes it too, and with
+/// [`ValidationPolicy::refuse_critical_ocsp_extensions`] off, an OCSP response is read
+/// whatever its critical extensions (ADR-0031). With
 /// [`ValidationPolicy::judge_malformed_extensions`] off, a certificate of a verified
 /// signature's CMS or of one of its signature timestamp tokens that repeats an extension
 /// is an [`Error::MalformedCertificate`]; the `/DSS` certificates are not scanned.
 ///
 /// Under every policy, revocation data whose issuing CA, below the anchor, or whose
 /// delegated OCSP responder is out of its validity at `at` gives
-/// [`RevocationDefect::IssuerOutOfBounds`], and a CA below the anchor without
+/// [`RevocationDefect::IssuerOutOfBounds`], the anchor's delegate aside when
+/// [`ValidationPolicy::judge_anchor_delegated_responder`] is off, and a CA below the anchor without
 /// `subjectKeyIdentifier` gives [`Defect::CaKeyIdentifierMissing`] on the signer's path and
 /// takes any proof of time from a timestamp token on its authority's path (ADR-0030).
 ///
@@ -199,8 +209,8 @@ fn validate_with(
     let checked: Vec<_> = signatures
         .into_iter()
         .map(|(field, value, dict)| {
-            let (end, result) = check(&doc, pdf, dict, policy);
-            (field, value, end.and_then(revision_of), result)
+            let (end, result) = check(&doc, pdf, dict.clone(), policy);
+            ((field, dict, end), value, end.and_then(revision_of), result)
         })
         .filter(|(_, _, _, result)| policy.list_unusable_signatures || !unusable(result))
         .collect();
@@ -230,15 +240,13 @@ fn validate_with(
         Some(first) => qualify(pdf, &doc, first, policy.refuse_sneaky_signatures, &options)?,
         None => Vec::new(),
     };
-    let dss = if anchors.is_empty() {
-        Dss::default()
-    } else {
-        Dss::read(&doc, pdf)
-    };
+    let dss = Dss::read(&doc, pdf);
+    let structure = Structure::read(&doc, pdf, &options, anchors);
 
     Ok(checked
         .into_iter()
-        .map(|(field, value, revision, result)| {
+        .map(|((field, dict, end), value, revision, result)| {
+            let level = structure.level(&doc, dict.as_ref());
             let (own, mine): (Option<&Qualified>, Vec<LaterRevision>) = match (revision, first) {
                 (Some(at), Some(first)) => (
                     (at - first).checked_sub(1).and_then(|i| later.get(i)),
@@ -266,7 +274,7 @@ fn validate_with(
                 .filter(|_| policy.refuse_later_revisions)
                 .find(|r| !matches!(r.verdict, RevisionVerdict::Allowed(_)))
                 .map(|r| r.end);
-            match (result, added_by, refused) {
+            let validation = match (result, added_by, refused) {
                 (Err(defect), _, _) => SignatureValidation::defective(field, defect, mine),
                 (Ok(_), Some(end), _) => SignatureValidation::defective(
                     field,
@@ -277,16 +285,24 @@ fn validate_with(
                     SignatureValidation::defective(field, Defect::RevisionNotAllowed { end }, mine)
                 }
                 (Ok(signed), None, None) => {
+                    let later: Vec<&DocumentTimestamp> = structure
+                        .timestamps
+                        .iter()
+                        .filter(|timestamp| end.is_some_and(|end| timestamp.end > end))
+                        .collect();
                     let context = Context {
                         anchors,
                         at,
                         source,
                         dss: &dss,
                         policy,
+                        doc: &doc,
+                        pdf,
                     };
-                    context.judge(field, mine, &signed)
+                    context.judge(field, mine, &signed, &later)
                 }
-            }
+            };
+            validation.with_level(level)
         })
         .collect())
 }
@@ -305,14 +321,18 @@ struct Context<'a> {
     source: Option<&'a dyn RevocationSource>,
     dss: &'a Dss,
     policy: &'a ValidationPolicy,
+    doc: &'a Document<'a>,
+    pdf: &'a [u8],
 }
 
 impl Context<'_> {
+    /// Judges `signed`, whose document timestamps after it are `later`.
     fn judge(
         &self,
         field: String,
         mine: Vec<LaterRevision>,
         signed: &Signed,
+        later: &[&DocumentTimestamp],
     ) -> SignatureValidation {
         if self.anchors.is_empty() {
             return SignatureValidation::sound(field, mine, None, None);
@@ -342,12 +362,23 @@ impl Context<'_> {
             .map(RevocationData::Crl)
             .chain(self.dss.ocsps.iter().cloned().map(RevocationData::Ocsp))
             .collect();
-        let pool = RevocationPool::from_der(&revocation);
+        let pool =
+            RevocationPool::from_der(&revocation, self.policy.refuse_critical_ocsp_extensions);
 
-        let best_signature_time = tokens
+        let stamped = tokens.iter().filter_map(|token| {
+            let certificates: Vec<&[u8]> = token
+                .certificates
+                .iter()
+                .chain(&signed.certificates)
+                .chain(&self.dss.certificates)
+                .map(Vec::as_slice)
+                .collect();
+            self.proven_time(token.der, &certificates, &signed.imprint, &pool)
+        });
+        let archived = later
             .iter()
-            .filter_map(|token| self.proven_time(token, signed, &pool))
-            .min();
+            .filter_map(|timestamp| self.document_time(timestamp, signed, &pool));
+        let best_signature_time = stamped.chain(archived).min();
         let time = best_signature_time.unwrap_or(self.at);
         // With no proof of existence, data issued long before the control date could
         // predate a revocation the signer's key already suffered.
@@ -448,28 +479,57 @@ impl Context<'_> {
         }
     }
 
-    /// The `genTime` `token` proves for `signed`, when it verifies over the signature value,
-    /// its authority's path reaches an anchor at the control date, holds no CA below the
-    /// anchor without `subjectKeyIdentifier`, as DSS 6.5.1 requires (ADR-0030), and passes
-    /// revocation there, and it is not after the control date.
-    fn proven_time(
+    /// The `genTime` the document timestamp `timestamp` proves for `signed`: its signed
+    /// bytes pass the checks of a signature's, `/SubFilter /ETSI.RFC3161` allowed, and its
+    /// token proves a time over their SHA-256 ([`Context::proven_time`]), its authority's
+    /// path built from the certificates of the token, of `signed` and of the `/DSS`.
+    fn document_time(
         &self,
-        token: &Token<'_>,
+        timestamp: &DocumentTimestamp,
         signed: &Signed,
         pool: &RevocationPool,
     ) -> Option<SystemTime> {
-        let verified =
-            nacre_tsp::verify_token(token.der, DigestAlgorithm::Sha256, &signed.imprint).ok()?;
-        let certificates: Vec<&[u8]> = token
-            .certificates
+        let (end, contents, [b, c]) = signed_bytes(
+            self.doc,
+            self.pdf,
+            Some(timestamp.dict.clone()),
+            self.policy,
+            &[b"ETSI.RFC3161"],
+        )
+        .ok()?;
+        let token = der_prefix(&contents)?;
+        let mut hasher = Sha256::new();
+        hasher.update(self.pdf.get(..b)?);
+        hasher.update(self.pdf.get(c..end)?);
+        let imprint = hasher.finalize();
+        let own = SignedData::from_der(token)
+            .map(|data| data.certificates)
+            .unwrap_or_default();
+        let certificates: Vec<&[u8]> = own
             .iter()
             .chain(&signed.certificates)
             .chain(&self.dss.certificates)
             .map(Vec::as_slice)
             .collect();
+        self.proven_time(token, &certificates, &imprint, pool)
+    }
+
+    /// The `genTime` the timestamp token `token` proves over `imprint`, when it verifies,
+    /// its authority's path, built from `certificates`, reaches an anchor at the control
+    /// date, holds no CA below the anchor without `subjectKeyIdentifier`, as DSS 6.5.1
+    /// requires (ADR-0030), and passes revocation there, and it is not after the control
+    /// date.
+    fn proven_time(
+        &self,
+        token: &[u8],
+        certificates: &[&[u8]],
+        imprint: &[u8],
+        pool: &RevocationPool,
+    ) -> Option<SystemTime> {
+        let verified = nacre_tsp::verify_token(token, DigestAlgorithm::Sha256, imprint).ok()?;
         let path = build_path(
             verified.tsa_certificate(),
-            &certificates,
+            certificates,
             self.anchors,
             self.at,
             Purpose::Timestamping,
@@ -506,7 +566,7 @@ fn ca_without_key_identifier(path: &CertificatePath) -> Option<usize> {
         .map(|(depth, _)| depth)
 }
 
-fn is_document_timestamp(dict: &Dictionary) -> bool {
+pub(crate) fn is_document_timestamp(dict: &Dictionary) -> bool {
     matches!(dict.get(b"SubFilter"), Some(Object::Name(n)) if n == b"ETSI.RFC3161")
 }
 
@@ -535,7 +595,7 @@ fn check(
             Some(Object::String(bytes)) => pdf_date(&bytes),
             _ => None,
         });
-    match signed_bytes(doc, pdf, dict, policy) {
+    match signed_bytes(doc, pdf, dict, policy, &SUB_FILTERS) {
         Ok((end, contents, [b, c])) => (
             Some(end),
             verify(pdf, &contents, [b, c, end]).map(|signed| Signed {
@@ -548,17 +608,18 @@ fn check(
 }
 
 // The order of the checks is part of the contract: each case of the attack corpus must
-// reach the rule that names it.
+// reach the rule that names it. `sub_filters` are those the caller supports.
 fn signed_bytes(
     doc: &Document<'_>,
     pdf: &[u8],
     dict: Option<Dictionary>,
     policy: &ValidationPolicy,
+    sub_filters: &[&[u8]],
 ) -> Result<(usize, Vec<u8>, [usize; 2]), Defect> {
     let dict = dict.ok_or(Defect::NotASignatureDictionary)?;
 
     if policy.refuse_unsupported_sub_filters
-        && !matches!(dict.get(b"SubFilter"), Some(Object::Name(n)) if SUB_FILTERS.contains(&n.as_slice()))
+        && !matches!(dict.get(b"SubFilter"), Some(Object::Name(n)) if sub_filters.contains(&n.as_slice()))
     {
         return Err(Defect::UnsupportedSubFilter);
     }
@@ -634,15 +695,15 @@ fn verify(pdf: &[u8], contents: &[u8], [b, c, end]: [usize; 3]) -> Result<Signed
 }
 
 /// The raw data of the unfiltered streams the document's `/DSS` lists.
-#[derive(Debug, Default)]
-struct Dss {
-    certificates: Vec<Vec<u8>>,
-    crls: Vec<Vec<u8>>,
-    ocsps: Vec<Vec<u8>>,
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct Dss {
+    pub(crate) certificates: Vec<Vec<u8>>,
+    pub(crate) crls: Vec<Vec<u8>>,
+    pub(crate) ocsps: Vec<Vec<u8>>,
 }
 
 impl Dss {
-    fn read(doc: &Document<'_>, pdf: &[u8]) -> Self {
+    pub(crate) fn read(doc: &Document<'_>, pdf: &[u8]) -> Self {
         let Some(Object::Dictionary(dss)) = follow_once(doc, doc.catalog().get(b"DSS")) else {
             return Self::default();
         };
@@ -650,6 +711,23 @@ impl Dss {
             certificates: dss_streams(doc, pdf, &dss, b"Certs"),
             crls: dss_streams(doc, pdf, &dss, b"CRLs"),
             ocsps: dss_streams(doc, pdf, &dss, b"OCSPs"),
+        }
+    }
+
+    /// Adds what `other` holds and `self` does not.
+    pub(crate) fn extend(&mut self, other: &Dss) {
+        for (mine, theirs) in [
+            (&mut self.certificates, &other.certificates),
+            (&mut self.crls, &other.crls),
+            (&mut self.ocsps, &other.ocsps),
+        ] {
+            let known: HashSet<&Vec<u8>> = mine.iter().collect();
+            let added: Vec<Vec<u8>> = theirs
+                .iter()
+                .filter(|item| !known.contains(item))
+                .cloned()
+                .collect();
+            mine.extend(added);
         }
     }
 }
@@ -672,7 +750,7 @@ fn dss_streams(doc: &Document<'_>, pdf: &[u8], dss: &Dictionary, key: &[u8]) -> 
 }
 
 /// The value of an entry, one reference followed.
-fn follow_once(doc: &Document<'_>, value: Option<&Object>) -> Option<Object> {
+pub(crate) fn follow_once(doc: &Document<'_>, value: Option<&Object>) -> Option<Object> {
     match value? {
         Object::Reference(id) => doc.object(*id).ok(),
         direct => Some(direct.clone()),
@@ -715,7 +793,7 @@ fn gap_is_contents(gap: &[u8], contents: &[u8]) -> bool {
 }
 
 /// The leading DER `SEQUENCE` of `contents`, when every byte after it is zero.
-fn der_prefix(contents: &[u8]) -> Option<&[u8]> {
+pub(crate) fn der_prefix(contents: &[u8]) -> Option<&[u8]> {
     let mut reader = SliceReader::new(contents).ok()?;
     let header = Header::decode(&mut reader).ok()?;
     if header.tag() != Tag::Sequence {

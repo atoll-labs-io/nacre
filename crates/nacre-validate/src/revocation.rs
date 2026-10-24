@@ -39,21 +39,30 @@ pub enum RevocationDefect {
     /// The latest usable revocation data on the certificate at `depth` says it was revoked
     /// on `date`, at or before the best-signature-time.
     Revoked { depth: usize, date: SystemTime },
+    /// The latest usable revocation data on the certificate at `depth` says it was put on
+    /// hold (`certificateHold`) on `date`, at or before the best-signature-time: the hold may
+    /// be lifted later, so DSS 6.5.1 gives `TRY_LATER` under every policy.
+    OnHold { depth: usize, date: SystemTime },
     /// No usable CRL or OCSP response covers the certificate at `depth`.
     Missing { depth: usize },
     /// The CA that issued the revocation data of the certificate at `depth`, below the
-    /// anchor, is out of its validity at the control date, as DSS 6.5.1 judges it under
-    /// every policy.
+    /// anchor, or the delegated OCSP responder that signed it, is out of its validity at
+    /// the control date, as DSS 6.5.1 judges it under every policy; the anchor's delegate
+    /// only under [`ValidationPolicy::judge_anchor_delegated_responder`].
+    ///
+    /// [`ValidationPolicy::judge_anchor_delegated_responder`]: crate::ValidationPolicy::judge_anchor_delegated_responder
     IssuerOutOfBounds { depth: usize },
 }
 
 impl RevocationDefect {
     /// The EN 319 102-1 outcome of this defect, as DSS 6.5.1 gives it: always
-    /// `INDETERMINATE` and with no level.
+    /// `INDETERMINATE` and with no level; the validation sets the level of the signature's
+    /// report afterwards.
     pub fn report(&self) -> ValidationReport {
         let sub = match self {
             Self::Revoked { depth: 0, .. } => SubIndication::RevokedNoPoe,
             Self::Revoked { .. } => SubIndication::RevokedCaNoPoe,
+            Self::OnHold { .. } => SubIndication::TryLater,
             Self::Missing { .. } => SubIndication::CertificateChainGeneralFailure,
             Self::IssuerOutOfBounds { .. } => SubIndication::RevocationOutOfBoundsNoPoe,
         };
@@ -80,8 +89,9 @@ impl Item {
 
     /// What the item says of `certificate`, judged at its own date: the CRL's `thisUpdate`
     /// or the response's `producedAt`. Judging there rather than at the control date makes
-    /// an expired item usable, as DSS does; every other refusal of `status` drops it.
-    fn verdict(&self, certificate: &[u8], issuer: &[u8]) -> Option<Verdict> {
+    /// an expired item usable, as DSS does; every other refusal of `status` drops it, a
+    /// critical extension of a response only when `refuse_critical` is set.
+    fn verdict(&self, certificate: &[u8], issuer: &[u8], refuse_critical: bool) -> Option<Verdict> {
         let expired_from;
         let mut responder = None;
         let (date, revoked, reason) = match self {
@@ -99,7 +109,12 @@ impl Item {
             }
             Self::Ocsp(response) => {
                 let date = response.produced_at();
-                let said = match response.status(certificate, issuer, date).ok()? {
+                let status = if refuse_critical {
+                    response.status(certificate, issuer, date)
+                } else {
+                    response.status_ignoring_critical_extensions(certificate, issuer, date)
+                };
+                let said = match status.ok()? {
                     OcspStatus::Good => (date, None, None),
                     OcspStatus::Revoked {
                         date: revoked,
@@ -168,6 +183,8 @@ type Pair = (Vec<u8>, Vec<u8>);
 /// The revocation data of one signature, read once, with what was already judged.
 pub(crate) struct RevocationPool {
     items: Vec<Item>,
+    /// Refuse an OCSP response holding a critical extension.
+    refuse_critical: bool,
     /// The verdict of item `i` on a (certificate, issuer) pair.
     verdicts: RefCell<HashMap<(usize, Pair), Option<Verdict>>>,
     /// The source's answer on a (certificate, issuer) pair.
@@ -177,8 +194,10 @@ pub(crate) struct RevocationPool {
 impl RevocationPool {
     /// Reads `items`, most trusted first. Items that are not a readable CRL or OCSP
     /// response and exact repeats are dropped before the 256-item cap applies, so a caller
-    /// listing the signature's own data first keeps it whatever follows.
-    pub(crate) fn from_der(items: &[RevocationData]) -> Self {
+    /// listing the signature's own data first keeps it whatever follows. An OCSP response,
+    /// stored or fetched, holding a critical extension gives no verdict when
+    /// `refuse_critical` is set.
+    pub(crate) fn from_der(items: &[RevocationData], refuse_critical: bool) -> Self {
         let mut seen: HashSet<&[u8]> = HashSet::new();
         let mut read = Vec::new();
         for data in items {
@@ -198,6 +217,7 @@ impl RevocationPool {
         }
         Self {
             items: read,
+            refuse_critical,
             verdicts: RefCell::new(HashMap::new()),
             answers: RefCell::new(HashMap::new()),
         }
@@ -214,7 +234,7 @@ impl RevocationPool {
         if let Some(known) = self.verdicts.borrow().get(&key) {
             return *known;
         }
-        let verdict = item.verdict(certificate, issuer);
+        let verdict = item.verdict(certificate, issuer, self.refuse_critical);
         self.verdicts.borrow_mut().insert(key, verdict);
         verdict
     }
@@ -233,7 +253,7 @@ impl RevocationPool {
             .revocation(certificate, issuer)
             .ok()
             .and_then(|data| Item::read(&data))
-            .and_then(|item| item.verdict(certificate, issuer));
+            .and_then(|item| item.verdict(certificate, issuer, self.refuse_critical));
         self.answers.borrow_mut().insert(key, verdict);
         verdict
     }
@@ -245,8 +265,8 @@ impl RevocationPool {
 /// `notBefore` to its `notAfter`, and, when `issued_from` is given, at or after it, except
 /// a revocation dated at or before `time` other than a `certificateHold`, which stays true
 /// however old its proof; the latest one decides. A revocation dated at or before `time`
-/// refuses the path, a later one does not, and a certificate no usable item covers is
-/// [`RevocationDefect::Missing`].
+/// refuses the path, [`RevocationDefect::OnHold`] when it is a `certificateHold`, a later one
+/// does not, and a certificate no usable item covers is [`RevocationDefect::Missing`].
 ///
 /// An item issued after the certificate's `notAfter` is dropped, for the signer, its CAs and
 /// a timestamp authority alike, as DSS 6.5.1 does, except a CRL whose `expiredCertsOnCRL`,
@@ -258,13 +278,15 @@ impl RevocationPool {
 /// certificate's deciding data must be within its validity at `issuers_at`, the control
 /// date, or the path is [`RevocationDefect::IssuerOutOfBounds`], as DSS judges it under
 /// every policy: its CA, the anchor aside, and the delegated OCSP responder that signed it,
-/// the anchor's included. With [`ValidationPolicy::judge_issuer_of_revoked_data`] off, a
+/// the anchor's included unless [`ValidationPolicy::judge_anchor_delegated_responder`] is off
+/// (ADR-0031). With [`ValidationPolicy::judge_issuer_of_revoked_data`] off, a
 /// certificate whose deciding data says "revoked" is skipped, as DSS does (ADR-0030). A
 /// timestamp authority's path passes `None`: it was built at the control date already, so
 /// its CAs are within their validity there.
 ///
 /// [`ValidationPolicy::ignore_expired_certs_on_crl`]: crate::ValidationPolicy::ignore_expired_certs_on_crl
 /// [`ValidationPolicy::judge_issuer_of_revoked_data`]: crate::ValidationPolicy::judge_issuer_of_revoked_data
+/// [`ValidationPolicy::judge_anchor_delegated_responder`]: crate::ValidationPolicy::judge_anchor_delegated_responder
 pub(crate) fn judge_path(
     path: &CertificatePath,
     pool: &RevocationPool,
@@ -312,7 +334,11 @@ pub(crate) fn judge_path(
         if let Some(date) = latest.revoked
             && date <= time
         {
-            return Err(RevocationDefect::Revoked { depth, date });
+            return Err(if latest.hold {
+                RevocationDefect::OnHold { depth, date }
+            } else {
+                RevocationDefect::Revoked { depth, date }
+            });
         }
         deciding.push(latest);
     }
@@ -333,7 +359,9 @@ pub(crate) fn judge_path(
                     .ok_or(out_of_bounds.clone())?;
                 in_validity(&ca, at, depth + 1).map_err(|_| out_of_bounds.clone())?;
             }
+            let anchor_delegate = depth + 1 == last;
             if let Some((not_before, not_after)) = verdict.responder
+                && (policy.judge_anchor_delegated_responder || !anchor_delegate)
                 && !(not_before..=not_after).contains(&at)
             {
                 return Err(out_of_bounds);
@@ -367,6 +395,7 @@ mod tests {
                 RevocationDefect::IssuerOutOfBounds { depth: 0 },
                 RevocationOutOfBoundsNoPoe,
             ),
+            (RevocationDefect::OnHold { depth: 1, date }, TryLater),
         ];
         for (defect, sub) in rows {
             let report = defect.report();
