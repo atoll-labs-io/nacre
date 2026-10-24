@@ -314,7 +314,7 @@ fn validity_before_revocation_switch() {
 /// A switch of `ValidationPolicy`: its name and what turns it off.
 type Switch = (&'static str, fn(&mut ValidationPolicy));
 
-const SWITCHES: [Switch; 11] = [
+const SWITCHES: [Switch; 12] = [
     ("refuse_later_revisions", |p| {
         p.refuse_later_revisions = false
     }),
@@ -343,6 +343,9 @@ const SWITCHES: [Switch; 11] = [
     ("refuse_misplaced_xref", |p| p.refuse_misplaced_xref = false),
     ("ignore_expired_certs_on_crl", |p| {
         p.ignore_expired_certs_on_crl = false
+    }),
+    ("judge_issuer_of_revoked_data", |p| {
+        p.judge_issuer_of_revoked_data = false
     }),
 ];
 

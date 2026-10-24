@@ -3,9 +3,9 @@
 //! builds the same bytes.
 
 use std::str::FromStr;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
-use der::asn1::{BitString, GeneralizedTime, OctetString};
+use der::asn1::{BitString, GeneralizedTime, Null, OctetString};
 use der::flagset::FlagSet;
 use der::oid::ObjectIdentifier;
 use der::{Any, DateTime, Decode, Encode, Header, Length, Tag};
@@ -35,11 +35,19 @@ use x509_cert::serial_number::SerialNumber;
 use x509_cert::spki::SubjectPublicKeyInfoOwned;
 use x509_cert::time::{Time, Validity};
 
+// The OCSP declarations of nacre-revocation, which its public API does not expose (ADR-0018).
+#[allow(dead_code, unreachable_pub)]
+#[path = "../../../nacre-revocation/src/ocsp/asn1.rs"]
+mod asn1;
+
 pub const UNSIGNED: &[u8] = include_bytes!("../corpus/unsigned.pdf");
 
 const TIME_STAMPING: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.3.6.1.5.5.7.3.8");
 const EXPIRED_CERTS_ON_CRL: ObjectIdentifier = ObjectIdentifier::new_unwrap("2.5.29.60");
 const EXTENDED_KEY_USAGE: ObjectIdentifier = ObjectIdentifier::new_unwrap("2.5.29.37");
+const OCSP_SIGNING: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.3.6.1.5.5.7.3.9");
+const OCSP_NOCHECK: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.3.6.1.5.5.7.48.1.5");
+const ARCHIVE_CUTOFF: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.3.6.1.5.5.7.48.1.6");
 const ECDSA_WITH_SHA256: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.840.10045.4.3.2");
 const SHA256: ObjectIdentifier = ObjectIdentifier::new_unwrap("2.16.840.1.101.3.4.2.1");
 const TST_INFO: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.840.113549.1.9.16.1.4");
@@ -61,13 +69,15 @@ pub fn key(secret: &[u8; 32]) -> SigningKey {
     SigningKey::from_slice(secret).unwrap()
 }
 
-/// What a forged certificate is: a CA, a document signer, or a timestamp authority whose
-/// critical `extendedKeyUsage` is `id-kp-timeStamping` alone.
+/// What a forged certificate is: a CA, a document signer, a timestamp authority whose
+/// critical `extendedKeyUsage` is `id-kp-timeStamping` alone, or an OCSP responder its
+/// issuer delegated (`id-kp-OCSPSigning`, `id-pkix-ocsp-nocheck`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Role {
     Ca,
     Signer,
     Tsa,
+    OcspResponder,
 }
 
 /// The extensions of a forged certificate: its role's usual ones, or a leaf's set apart.
@@ -78,7 +88,7 @@ pub enum Extensions {
     KeyUsage(FlagSet<KeyUsages>),
     /// The role's extensions, its `keyUsage` given twice.
     RepeatedKeyUsage,
-    /// The role's extensions, a CA's `subjectKeyIdentifier` left out.
+    /// The role's extensions, the `subjectKeyIdentifier` of a CA or a responder left out.
     WithoutKeyIdentifier,
 }
 
@@ -114,7 +124,7 @@ impl BuilderProfile for Profile {
             (Extensions::KeyUsage(usage), _) => usage,
             (_, Role::Ca) => KeyUsages::KeyCertSign | KeyUsages::CRLSign,
             (_, Role::Signer) => KeyUsages::DigitalSignature | KeyUsages::NonRepudiation,
-            (_, Role::Tsa) => KeyUsages::DigitalSignature.into(),
+            (_, Role::Tsa | Role::OcspResponder) => KeyUsages::DigitalSignature.into(),
         };
         let key_usage = KeyUsage(usage)
             .to_extension(tbs.subject(), std::slice::from_ref(&basic_constraints))?;
@@ -122,7 +132,9 @@ impl BuilderProfile for Profile {
         if self.extensions == Extensions::RepeatedKeyUsage {
             extensions.push(key_usage);
         }
-        if ca && self.extensions != Extensions::WithoutKeyIdentifier {
+        if (ca || self.role == Role::OcspResponder)
+            && self.extensions != Extensions::WithoutKeyIdentifier
+        {
             let digest = Sha256::digest(spk.subject_public_key.raw_bytes());
             extensions.push(
                 SubjectKeyIdentifier(OctetString::new(&digest[..20])?)
@@ -134,6 +146,18 @@ impl BuilderProfile for Profile {
                 extn_id: EXTENDED_KEY_USAGE,
                 critical: true,
                 extn_value: OctetString::new(ExtendedKeyUsage(vec![TIME_STAMPING]).to_der()?)?,
+            });
+        }
+        if self.role == Role::OcspResponder {
+            extensions.push(Extension {
+                extn_id: EXTENDED_KEY_USAGE,
+                critical: false,
+                extn_value: OctetString::new(ExtendedKeyUsage(vec![OCSP_SIGNING]).to_der()?)?,
+            });
+            extensions.push(Extension {
+                extn_id: OCSP_NOCHECK,
+                critical: false,
+                extn_value: OctetString::new(Null.to_der()?)?,
             });
         }
         Ok(extensions)
@@ -288,6 +312,86 @@ pub fn crl_with_expired_certs_on_crl(
     let signature: DerSignature = key.sign_prehash(&Sha256::digest(&tbs)).unwrap();
     list.signature = BitString::from_bytes(signature.as_bytes()).unwrap();
     list.to_der().unwrap()
+}
+
+/// A basic OCSP response on `certificate` (issued by `issuer`), signed with `key` and naming
+/// `responder` by name, `embed` in its `certs` when given. `thisUpdate` is `produced`,
+/// `nextUpdate` 7 days later; the status is "revoked" at `revoked` when given, else
+/// "good", and `archive_cutoff` becomes a non-critical single extension.
+#[allow(clippy::too_many_arguments)]
+pub fn ocsp(
+    certificate: &Certificate,
+    issuer: &Certificate,
+    key: &SigningKey,
+    responder: &Certificate,
+    embed: Option<&Certificate>,
+    produced: Time,
+    revoked: Option<Time>,
+    archive_cutoff: Option<Time>,
+) -> Vec<u8> {
+    use asn1::{
+        BasicOcspResponse, CertStatus, ID_PKIX_OCSP_BASIC, OcspRequest, OcspResponse,
+        OcspResponseStatus, ResponderId, ResponseBytes, ResponseData, RevokedInfo, SingleResponse,
+    };
+    let generalized = |time: SystemTime| GeneralizedTime::from_system_time(time).unwrap();
+    let request = nacre_revocation::OcspRequest::new(
+        &certificate.to_der().unwrap(),
+        &issuer.to_der().unwrap(),
+        &[1],
+    )
+    .unwrap();
+    let request = OcspRequest::from_der(&request.to_der().unwrap()).unwrap();
+    let cert_id = request.tbs_request.request_list[0].req_cert.clone();
+    let cert_status = match revoked {
+        None => CertStatus::Good(Null),
+        Some(date) => CertStatus::Revoked(RevokedInfo {
+            revocation_time: generalized(date.to_system_time()),
+            revocation_reason: None,
+        }),
+    };
+    let single_extensions = archive_cutoff.map(|from| {
+        vec![Extension {
+            extn_id: ARCHIVE_CUTOFF,
+            critical: false,
+            extn_value: OctetString::new(generalized(from.to_system_time()).to_der().unwrap())
+                .unwrap(),
+        }]
+    });
+    let produced = produced.to_system_time();
+    let data = ResponseData {
+        version: x509_cert::certificate::Version::V1,
+        responder_id: ResponderId::ByName(responder.tbs_certificate().subject().clone()),
+        produced_at: generalized(produced),
+        responses: vec![SingleResponse {
+            cert_id,
+            cert_status,
+            this_update: generalized(produced),
+            next_update: Some(generalized(produced + Duration::from_secs(7 * 86_400))),
+            single_extensions,
+        }],
+        response_extensions: None,
+    };
+    let signature: DerSignature = key
+        .sign_prehash(&Sha256::digest(data.to_der().unwrap()))
+        .unwrap();
+    let basic = BasicOcspResponse {
+        tbs_response_data: data,
+        signature_algorithm: AlgorithmIdentifierOwned {
+            oid: ECDSA_WITH_SHA256,
+            parameters: None,
+        },
+        signature: BitString::from_bytes(signature.as_bytes()).unwrap(),
+        certs: embed.map(|certificate| vec![Any::encode_from(certificate).unwrap()]),
+    };
+    OcspResponse {
+        response_status: OcspResponseStatus::Successful,
+        response_bytes: Some(ResponseBytes {
+            response_type: ID_PKIX_OCSP_BASIC,
+            response: OctetString::new(basic.to_der().unwrap()).unwrap(),
+        }),
+    }
+    .to_der()
+    .unwrap()
 }
 
 /// A P-256 signer holding `chain`, signer first.
@@ -507,10 +611,24 @@ pub fn resign(pdf: &[u8], signer: &dyn Signer) -> Vec<u8> {
 /// `pdf` given one revision whose catalog points at a `/DSS` listing `certificates` under
 /// `/Certs` and `crls` under `/CRLs`, each as an unfiltered stream.
 pub fn with_dss(pdf: &[u8], certificates: &[Vec<u8>], crls: &[Vec<u8>]) -> Vec<u8> {
+    with_dss_ocsps(pdf, certificates, crls, &[])
+}
+
+/// [`with_dss`], with `ocsps` under `/OCSPs`.
+pub fn with_dss_ocsps(
+    pdf: &[u8],
+    certificates: &[Vec<u8>],
+    crls: &[Vec<u8>],
+    ocsps: &[Vec<u8>],
+) -> Vec<u8> {
     let doc = Document::parse(pdf).unwrap();
     let mut update = doc.update();
     let mut dss = Dictionary::new();
-    for (key, items) in [(&b"Certs"[..], certificates), (&b"CRLs"[..], crls)] {
+    for (key, items) in [
+        (&b"Certs"[..], certificates),
+        (&b"CRLs"[..], crls),
+        (&b"OCSPs"[..], ocsps),
+    ] {
         if items.is_empty() {
             continue;
         }

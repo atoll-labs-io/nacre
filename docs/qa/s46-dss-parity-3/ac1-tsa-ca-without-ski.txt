@@ -1,0 +1,491 @@
+# QA s46-dss-parity-3 — scenario c1: k1, a CA without subjectKeyIdentifier on a timestamp authority's path (driver scenarios.md, surface endpoint, platform lib)
+# Tree under test: c8008090d7801e9d92db1668577692a83c9994a1 (copy of git ls-files in a mktemp -d directory; no .env* file to copy; Install 'cargo fetch' and Build 'cargo build --workspace --all-features' exit 0)
+# Program: scratch binary crate qa-scen at crates/qa-scen of the copy, calling the public API of nacre-validate (ValidationPolicy and its twelve fields, validate_with_policy, TrustAnchors, RevocationSource) and nacre-revocation (OcspResponse::from_der, delegated_responder, archive_cutoff);
+#   inputs are PDFs, CRLs and OCSP responses built at run time under this program's own fictitious PKI (keys [0x81..0x8e; 32]) through the test bench's crates/nacre-validate/tests/support/forge.rs (included by #[path]),
+#   altered OCSP responses re-signed through nacre-revocation's src/ocsp/asn1.rs (included by #[path]), or files read from crates/nacre-validate/tests/corpus/.
+# Working directory: <copy>/crates/qa-scen   stdin: none
+# Command: ../../target/debug/qa-scen c1
+# Run twice; the two outputs are identical. Times are UTC; SystemTime tv_sec 1792652400 = 2026-10-22T07:00:00Z, 1792659600 = 2026-10-22T09:00:00Z, 1767225600 = 2026-01-01T00:00:00Z.
+
+## stdout+stderr
+Signer under the intermediate, B-T stamped 2026-10-22T08:00Z by a TSA under 'QA46 TSA CA' (issued by the root), token carrying [TSA, TSA CA]; /DSS CRLs of 10:00Z from the TSA CA, the root and the intermediate; control date 2026-10-23T00:00Z
+k1: TSA CA WITHOUT subjectKeyIdentifier, the intermediate's CRL revokes the signer at 09:00Z (after the stamp)
+  [strict] Signature1 indication=Indeterminate sub=Some(RevokedNoPoe) defect=Some(Revocation(Revoked { depth: 0, date: SystemTime { tv_sec: 1792659600, tv_nsec: 0 } })) chain=Some(3) bst=None
+  [dss] Signature1 indication=Indeterminate sub=Some(RevokedNoPoe) defect=Some(Revocation(Revoked { depth: 0, date: SystemTime { tv_sec: 1792659600, tv_nsec: 0 } })) chain=Some(3) bst=None
+  [strict minus refuse_later_revisions] Signature1 indication=Indeterminate sub=Some(RevokedNoPoe) defect=Some(Revocation(Revoked { depth: 0, date: SystemTime { tv_sec: 1792659600, tv_nsec: 0 } })) chain=Some(3) bst=None
+  [strict minus refuse_sneaky_signatures] Signature1 indication=Indeterminate sub=Some(RevokedNoPoe) defect=Some(Revocation(Revoked { depth: 0, date: SystemTime { tv_sec: 1792659600, tv_nsec: 0 } })) chain=Some(3) bst=None
+  [strict minus refuse_trailing_data] Signature1 indication=Indeterminate sub=Some(RevokedNoPoe) defect=Some(Revocation(Revoked { depth: 0, date: SystemTime { tv_sec: 1792659600, tv_nsec: 0 } })) chain=Some(3) bst=None
+  [strict minus list_unusable_signatures] Signature1 indication=Indeterminate sub=Some(RevokedNoPoe) defect=Some(Revocation(Revoked { depth: 0, date: SystemTime { tv_sec: 1792659600, tv_nsec: 0 } })) chain=Some(3) bst=None
+  [strict minus judge_signer_key_usage] Signature1 indication=Indeterminate sub=Some(RevokedNoPoe) defect=Some(Revocation(Revoked { depth: 0, date: SystemTime { tv_sec: 1792659600, tv_nsec: 0 } })) chain=Some(3) bst=None
+  [strict minus judge_validity_before_revocation] Signature1 indication=Indeterminate sub=Some(RevokedNoPoe) defect=Some(Revocation(Revoked { depth: 0, date: SystemTime { tv_sec: 1792659600, tv_nsec: 0 } })) chain=Some(3) bst=None
+  [strict minus judge_malformed_extensions] Signature1 indication=Indeterminate sub=Some(RevokedNoPoe) defect=Some(Revocation(Revoked { depth: 0, date: SystemTime { tv_sec: 1792659600, tv_nsec: 0 } })) chain=Some(3) bst=None
+  [strict minus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(RevokedNoPoe) defect=Some(Revocation(Revoked { depth: 0, date: SystemTime { tv_sec: 1792659600, tv_nsec: 0 } })) chain=Some(3) bst=None
+  [strict minus refuse_unsupported_sub_filters] Signature1 indication=Indeterminate sub=Some(RevokedNoPoe) defect=Some(Revocation(Revoked { depth: 0, date: SystemTime { tv_sec: 1792659600, tv_nsec: 0 } })) chain=Some(3) bst=None
+  [strict minus refuse_misplaced_xref] Signature1 indication=Indeterminate sub=Some(RevokedNoPoe) defect=Some(Revocation(Revoked { depth: 0, date: SystemTime { tv_sec: 1792659600, tv_nsec: 0 } })) chain=Some(3) bst=None
+  [strict minus ignore_expired_certs_on_crl] Signature1 indication=Indeterminate sub=Some(RevokedNoPoe) defect=Some(Revocation(Revoked { depth: 0, date: SystemTime { tv_sec: 1792659600, tv_nsec: 0 } })) chain=Some(3) bst=None
+  [strict minus judge_issuer_of_revoked_data] Signature1 indication=Indeterminate sub=Some(RevokedNoPoe) defect=Some(Revocation(Revoked { depth: 0, date: SystemTime { tv_sec: 1792659600, tv_nsec: 0 } })) chain=Some(3) bst=None
+control: same TSA CA WITH subjectKeyIdentifier, signer revoked at 09:00Z
+  [strict] Signature1 indication=TotalPassed sub=None defect=None chain=Some(3) bst=2026-10-22T08:00:00Z
+  [dss] Signature1 indication=TotalPassed sub=None defect=None chain=Some(3) bst=2026-10-22T08:00:00Z
+TSA CA WITHOUT subjectKeyIdentifier, signer not revoked
+  [strict] Signature1 indication=TotalPassed sub=None defect=None chain=Some(3) bst=None
+  [dss] Signature1 indication=TotalPassed sub=None defect=None chain=Some(3) bst=None
+## exit code: 0 (second run: 0)
+
+## The program, quoted whole: crates/qa-scen/Cargo.toml
+[package]
+name = "qa-scen"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+nacre-validate = { path = "../nacre-validate" }
+nacre-core = { path = "../nacre-core", features = ["test-signer"] }
+nacre-pades = { path = "../nacre-pades" }
+nacre-pdf = { path = "../nacre-pdf" }
+nacre-cms = { path = "../nacre-cms" }
+nacre-revocation = { path = "../nacre-revocation" }
+sha2 = "0.11"
+spki = "0.8"
+der = { version = "0.8", features = ["alloc", "derive", "oid", "pem"] }
+x509-cert = { version = "0.3", features = ["builder"] }
+p256 = { version = "0.14", features = ["ecdsa", "pkcs8", "pem"] }
+
+## crates/qa-scen/src/main.rs
+// QA scratch program for s46: calls the public interface of nacre-validate and nacre-revocation.
+// `forge` is the test bench's fictitious PKI, used here only to build input files;
+// `asn1` is nacre-revocation's OCSP declarations, used only to alter forged responses.
+#![allow(clippy::all, dead_code, unused_imports, unused_variables)]
+#[path = "../../nacre-validate/tests/support/forge.rs"]
+mod forge;
+#[allow(dead_code, unreachable_pub)]
+#[path = "../../nacre-revocation/src/ocsp/asn1.rs"]
+mod ocspasn1;
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use der::asn1::{BitString, GeneralizedTime, OctetString, UtcTime};
+use der::oid::ObjectIdentifier;
+use der::{DateTime, Decode, Encode};
+use forge::*;
+use nacre_core::{Indication, RevocationData, RevocationSource};
+use nacre_pades::Level;
+use nacre_revocation::{CrlReason, OcspResponse};
+use nacre_validate::*;
+use p256::ecdsa::signature::hazmat::PrehashSigner;
+use p256::ecdsa::{DerSignature, SigningKey};
+use sha2::{Digest, Sha256};
+use x509_cert::Certificate;
+use x509_cert::ext::Extension;
+use x509_cert::time::Time;
+
+const VCORPUS: &str = "../nacre-validate/tests/corpus/";
+const CATALOG: &str = "../../docs/security/attacks/";
+const ARCHIVE_CUTOFF: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.3.6.1.5.5.7.48.1.6");
+
+type R = Result<Vec<SignatureValidation>, Error>;
+
+fn iso(t: SystemTime) -> String {
+    let s = t.duration_since(UNIX_EPOCH).unwrap().as_secs();
+    let dt = DateTime::from_unix_duration(Duration::from_secs(s)).unwrap();
+    format!("{dt}")
+}
+fn show(label: &str, r: &R) {
+    match r {
+        Err(e) => println!("  [{label}] Err({e:?}) kind={:?} display=\"{e}\"", e.kind()),
+        Ok(v) => {
+            for s in v {
+                println!(
+                    "  [{label}] {} indication={:?} sub={:?} defect={:?} chain={:?} bst={}",
+                    s.field, s.report.indication(), s.report.sub_indication(), s.defect,
+                    s.chain.as_ref().map(|c| c.certificates.len()),
+                    s.best_signature_time.map_or("None".into(), iso)
+                );
+            }
+            if v.is_empty() { println!("  [{label}] no signature"); }
+        }
+    }
+}
+fn d(c: &Certificate) -> Vec<u8> { c.to_der().unwrap() }
+const SWITCHES: [&str; 12] = ["refuse_later_revisions", "refuse_sneaky_signatures", "refuse_trailing_data", "list_unusable_signatures",
+    "judge_signer_key_usage", "judge_validity_before_revocation", "judge_malformed_extensions", "require_fresh_revocation", "refuse_unsupported_sub_filters",
+    "refuse_misplaced_xref", "ignore_expired_certs_on_crl", "judge_issuer_of_revoked_data"];
+fn set(p: &mut ValidationPolicy, name: &str, v: bool) {
+    match name {
+        "refuse_later_revisions" => p.refuse_later_revisions = v,
+        "refuse_sneaky_signatures" => p.refuse_sneaky_signatures = v,
+        "refuse_trailing_data" => p.refuse_trailing_data = v,
+        "list_unusable_signatures" => p.list_unusable_signatures = v,
+        "judge_signer_key_usage" => p.judge_signer_key_usage = v,
+        "judge_validity_before_revocation" => p.judge_validity_before_revocation = v,
+        "judge_malformed_extensions" => p.judge_malformed_extensions = v,
+        "require_fresh_revocation" => p.require_fresh_revocation = v,
+        "refuse_unsupported_sub_filters" => p.refuse_unsupported_sub_filters = v,
+        "refuse_misplaced_xref" => p.refuse_misplaced_xref = v,
+        "ignore_expired_certs_on_crl" => p.ignore_expired_certs_on_crl = v,
+        "judge_issuer_of_revoked_data" => p.judge_issuer_of_revoked_data = v,
+        _ => unreachable!(),
+    }
+}
+fn without(name: &str) -> ValidationPolicy { let mut p = ValidationPolicy::strict(); set(&mut p, name, false); p }
+fn dss_with(name: &str) -> ValidationPolicy { let mut p = ValidationPolicy::dss(); set(&mut p, name, true); p }
+fn policies(switch: &str) -> Vec<(String, ValidationPolicy)> {
+    vec![("strict".into(), ValidationPolicy::strict()), ("dss".into(), ValidationPolicy::dss()),
+         (format!("strict minus {switch}"), without(switch)), (format!("dss plus {switch}"), dss_with(switch))]
+}
+
+// ---------- a fictitious PKI of this program (keys 0x81..)
+struct Pki { root: Certificate, rk: SigningKey, int: Certificate, ik: SigningKey, signer: Certificate, sk: SigningKey, tsa: Certificate, tk: SigningKey }
+impl Pki {
+    fn new() -> Self {
+        let rk = key(&[0x81; 32]); let ik = key(&[0x82; 32]); let sk = key(&[0x83; 32]); let tk = key(&[0x84; 32]);
+        let root = issue(Role::Ca, "CN=QA46 root,O=QA,C=FR", 1, &rk, None, &rk);
+        let int = issue(Role::Ca, "CN=QA46 intermediate,O=QA,C=FR", 2, &ik, Some(&root), &rk);
+        let signer = issue(Role::Signer, "CN=QA46 signer,O=QA,C=FR", 3, &sk, Some(&int), &ik);
+        let tsa = issue(Role::Tsa, "CN=QA46 TSA,O=QA,C=FR", 4, &tk, Some(&int), &ik);
+        Self { root, rk, int, ik, signer, sk, tsa, tk }
+    }
+    fn chain(&self, leaf: &Certificate, cas: &[&Certificate]) -> ChainSigner {
+        let mut chain = vec![d(leaf)]; chain.extend(cas.iter().map(|c| d(c)));
+        ChainSigner { key: self.sk.clone(), chain }
+    }
+    fn tsa_by(&self, key: &SigningKey, certs: Vec<Vec<u8>>) -> ForgedTsa { ForgedTsa { key: key.clone(), certificates: certs, gen_time: DateTime::new(2026, 10, 22, 8, 0, 0).unwrap(), imprint: None } }
+    fn usual_tsa(&self) -> ForgedTsa { self.tsa_by(&self.tk, vec![d(&self.tsa), d(&self.int)]) }
+    fn int_crl(&self, revoked: &[(&Certificate, Time)]) -> Vec<u8> { crl(&self.int, &self.ik, ten(), month(), revoked) }
+    fn root_crl(&self, revoked: &[(&Certificate, Time)]) -> Vec<u8> { crl(&self.root, &self.rk, ten(), month(), revoked) }
+    fn judge_anchors(&self, extra: &[&Certificate], pdf: &[u8], at: SystemTime, p: &ValidationPolicy) -> R {
+        let mut ders = vec![d(&self.root)]; ders.extend(extra.iter().map(|c| d(c)));
+        let anchors = TrustAnchors::from_certificates(ders.iter().map(|v| v.as_slice())).unwrap();
+        validate_with_policy(pdf, &anchors, at, None, p)
+    }
+    fn judge(&self, pdf: &[u8], at: SystemTime, p: &ValidationPolicy) -> R { self.judge_anchors(&[], pdf, at, p) }
+    fn all(&self, title: &str, pdf: &[u8], at: SystemTime, switch: &str) {
+        println!("{title}");
+        for (l, p) in policies(switch) { show(&l, &self.judge(pdf, at, &p)); }
+    }
+}
+fn ten() -> Time { time(2026, 10, 22, 10, 0, 0) }
+fn month() -> Time { time(2026, 11, 22, 0, 0, 0) }
+fn nine() -> Time { time(2026, 10, 22, 9, 0, 0) }
+fn control() -> SystemTime { instant(2026, 10, 23, 0, 0, 0) }
+
+/// Re-sign a forged OCSP response with `key` after `f` altered its tbsResponseData.
+fn mutate(resp: &[u8], key: &SigningKey, f: impl FnOnce(&mut ocspasn1::ResponseData)) -> Vec<u8> {
+    let mut outer = ocspasn1::OcspResponse::from_der(resp).unwrap();
+    let rb = outer.response_bytes.as_mut().unwrap();
+    let mut basic = ocspasn1::BasicOcspResponse::from_der(rb.response.as_bytes()).unwrap();
+    f(&mut basic.tbs_response_data);
+    let sig: DerSignature = key.sign_prehash(&Sha256::digest(basic.tbs_response_data.to_der().unwrap())).unwrap();
+    basic.signature = BitString::from_bytes(sig.as_bytes()).unwrap();
+    rb.response = OctetString::new(basic.to_der().unwrap()).unwrap();
+    outer.to_der().unwrap()
+}
+fn cutoff_ext(value: Vec<u8>, critical: bool) -> Extension { Extension { extn_id: ARCHIVE_CUTOFF, critical, extn_value: OctetString::new(value).unwrap() } }
+
+// ---------- c1: k1, a CA without SKI on a TSA path (AC1)
+fn tsa_ca(p: &Pki, ext: Extensions) -> (Certificate, SigningKey, Certificate, SigningKey) {
+    let ck = key(&[0x85; 32]); let tk = key(&[0x86; 32]);
+    let tc = issue_with(Role::Ca, "CN=QA46 TSA CA,O=QA,C=FR", 9, &ck, Some(&p.root), &p.rk, (time(2026, 1, 1, 0, 0, 0), time(2036, 1, 1, 0, 0, 0)), ext);
+    let t = issue(Role::Tsa, "CN=QA46 TSA under its CA,O=QA,C=FR", 10, &tk, Some(&tc), &ck);
+    (tc, ck, t, tk)
+}
+fn k1(p: &Pki, ext: Extensions, revoked: bool, token_carries_ca: bool) -> Vec<u8> {
+    let (tc, ck, t, tk) = tsa_ca(p, ext);
+    let certs = if token_carries_ca { vec![d(&t), d(&tc)] } else { vec![d(&t)] };
+    let dss_certs = if token_carries_ca { vec![] } else { vec![d(&tc)] };
+    let pdf = signed(&p.chain(&p.signer, &[&p.int]), Level::T { tsa: &p.tsa_by(&tk, certs) });
+    let rev: Vec<(&Certificate, Time)> = if revoked { vec![(&p.signer, nine())] } else { vec![] };
+    with_dss(&pdf, &dss_certs, &[crl(&tc, &ck, ten(), month(), &[]), p.root_crl(&[]), p.int_crl(&rev)])
+}
+fn c1() {
+    let p = Pki::new();
+    println!("Signer under the intermediate, B-T stamped 2026-10-22T08:00Z by a TSA under 'QA46 TSA CA' (issued by the root), token carrying [TSA, TSA CA]; /DSS CRLs of 10:00Z from the TSA CA, the root and the intermediate; control date 2026-10-23T00:00Z");
+    let pdf = k1(&p, Extensions::WithoutKeyIdentifier, true, true);
+    println!("k1: TSA CA WITHOUT subjectKeyIdentifier, the intermediate's CRL revokes the signer at 09:00Z (after the stamp)");
+    show("strict", &p.judge(&pdf, control(), &ValidationPolicy::strict()));
+    show("dss", &p.judge(&pdf, control(), &ValidationPolicy::dss()));
+    for sw in SWITCHES { show(&format!("strict minus {sw}"), &p.judge(&pdf, control(), &without(sw))); }
+    let pdf = k1(&p, Extensions::Usual, true, true);
+    println!("control: same TSA CA WITH subjectKeyIdentifier, signer revoked at 09:00Z");
+    show("strict", &p.judge(&pdf, control(), &ValidationPolicy::strict()));
+    show("dss", &p.judge(&pdf, control(), &ValidationPolicy::dss()));
+    let pdf = k1(&p, Extensions::WithoutKeyIdentifier, false, true);
+    println!("TSA CA WITHOUT subjectKeyIdentifier, signer not revoked");
+    show("strict", &p.judge(&pdf, control(), &ValidationPolicy::strict()));
+    show("dss", &p.judge(&pdf, control(), &ValidationPolicy::dss()));
+}
+fn c1e() {
+    let p = Pki::new();
+    println!("Boundaries and other shapes of k1; signer revoked at 09:00Z by the intermediate's CRL in every case; control date 2026-10-23T00:00Z");
+    // anchor without SKI holding the TSA directly
+    let r2k = key(&[0x87; 32]); let t3k = key(&[0x88; 32]);
+    let root2 = issue_with(Role::Ca, "CN=QA46 TSA root without SKI,O=QA,C=FR", 20, &r2k, None, &r2k, (time(2026, 1, 1, 0, 0, 0), time(2036, 1, 1, 0, 0, 0)), Extensions::WithoutKeyIdentifier);
+    let t3 = issue(Role::Tsa, "CN=QA46 TSA under SKI-less root,O=QA,C=FR", 21, &t3k, Some(&root2), &r2k);
+    let pdf = signed(&p.chain(&p.signer, &[&p.int]), Level::T { tsa: &p.tsa_by(&t3k, vec![d(&t3)]) });
+    let pdf = with_dss(&pdf, &[], &[crl(&root2, &r2k, ten(), month(), &[]), p.root_crl(&[]), p.int_crl(&[(&p.signer, nine())])]);
+    println!("TSA issued directly by a second trust anchor that has no subjectKeyIdentifier (anchors: root, SKI-less TSA root)");
+    for (l, pol) in [("strict", ValidationPolicy::strict()), ("dss", ValidationPolicy::dss())] { show(l, &p.judge_anchors(&[&root2], &pdf, control(), &pol)); }
+    // depth 2
+    for (label, ext) in [("WITHOUT", Extensions::WithoutKeyIdentifier), ("WITH", Extensions::Usual)] {
+        let c1k = key(&[0x89; 32]); let c2k = key(&[0x8a; 32]); let t4k = key(&[0x8b; 32]);
+        let tc1 = issue_with(Role::Ca, "CN=QA46 TSA upper CA,O=QA,C=FR", 22, &c1k, Some(&p.root), &p.rk, (time(2026, 1, 1, 0, 0, 0), time(2036, 1, 1, 0, 0, 0)), ext);
+        let tc2 = issue(Role::Ca, "CN=QA46 TSA lower CA,O=QA,C=FR", 23, &c2k, Some(&tc1), &c1k);
+        let t4 = issue(Role::Tsa, "CN=QA46 TSA under two CAs,O=QA,C=FR", 24, &t4k, Some(&tc2), &c2k);
+        let pdf = signed(&p.chain(&p.signer, &[&p.int]), Level::T { tsa: &p.tsa_by(&t4k, vec![d(&t4), d(&tc2), d(&tc1)]) });
+        let pdf = with_dss(&pdf, &[], &[crl(&tc2, &c2k, ten(), month(), &[]), crl(&tc1, &c1k, ten(), month(), &[]), p.root_crl(&[]), p.int_crl(&[(&p.signer, nine())])]);
+        println!("TSA path TSA -> lower CA (with SKI) -> upper CA {label} SKI -> root (the SKI-less CA at depth 2)");
+        show("strict", &p.judge(&pdf, control(), &ValidationPolicy::strict()));
+        show("dss", &p.judge(&pdf, control(), &ValidationPolicy::dss()));
+    }
+    // TSA CA reached only through /DSS Certs
+    let pdf = k1(&p, Extensions::WithoutKeyIdentifier, true, false);
+    println!("TSA CA WITHOUT SKI given only in /DSS Certs, token carrying [TSA] alone");
+    show("strict", &p.judge(&pdf, control(), &ValidationPolicy::strict()));
+    show("dss", &p.judge(&pdf, control(), &ValidationPolicy::dss()));
+    let pdf = k1(&p, Extensions::Usual, true, false);
+    println!("control: TSA CA WITH SKI given only in /DSS Certs, token carrying [TSA] alone");
+    show("strict", &p.judge(&pdf, control(), &ValidationPolicy::strict()));
+}
+
+// ---------- c2: v3 and v5, the twelfth switch (AC2)
+fn short_ca(p: &Pki) -> (Certificate, SigningKey, Certificate) {
+    let ck = key(&[0x8c; 32]);
+    let sc = issue_valid(Role::Ca, "CN=QA46 short-lived CA,O=QA,C=FR", 11, &ck, Some(&p.root), &p.rk, time(2026, 1, 1, 0, 0, 0), time(2026, 10, 22, 12, 0, 0));
+    let s2 = issue(Role::Signer, "CN=QA46 short-lived CA signer,O=QA,C=FR", 12, &p.sk, Some(&sc), &ck);
+    (sc, ck, s2)
+}
+const SW12: &str = "judge_issuer_of_revoked_data";
+fn c2() {
+    let p = Pki::new();
+    let (sc, ck, s2) = short_ca(&p);
+    let stamped = signed(&p.chain(&s2, &[&sc]), Level::T { tsa: &p.usual_tsa() });
+    println!("Short-lived CA under the root valid 2026-01-01..2026-10-22T12:00Z, its signer; B-T stamped 08:00Z by the TSA under the intermediate; /DSS CRLs of 10:00Z; control date 2026-10-23T00:00Z");
+    let v3 = with_dss(&stamped, &[], &[crl(&sc, &ck, ten(), month(), &[(&s2, nine())]), p.root_crl(&[]), p.int_crl(&[])]);
+    p.all("v3: the CA's CRL revokes the signer at 09:00Z (after the stamp)", &v3, control(), SW12);
+    let v5 = with_dss(&stamped, &[], &[crl(&sc, &ck, ten(), month(), &[]), p.root_crl(&[(&sc, nine())]), p.int_crl(&[])]);
+    p.all("v5: the root's CRL revokes the CA at 09:00Z, the CA's CRL says good", &v5, control(), SW12);
+    p.all("v3 judged at 2026-10-22T11:00Z (CA still valid)", &v3, instant(2026, 10, 22, 11, 0, 0), SW12);
+}
+fn c2e() {
+    let p = Pki::new();
+    let (sc, ck, s2) = short_ca(&p);
+    let stamped = signed(&p.chain(&s2, &[&sc]), Level::T { tsa: &p.usual_tsa() });
+    let basic = signed(&p.chain(&s2, &[&sc]), Level::B);
+    println!("Same PKI as c2; control date 2026-10-23T00:00Z unless said");
+    let early = with_dss(&stamped, &[], &[crl(&sc, &ck, ten(), month(), &[(&s2, time(2026, 10, 22, 7, 0, 0))]), p.root_crl(&[]), p.int_crl(&[])]);
+    p.all("v3 with the revocation at 07:00Z, BEFORE the stamp", &early, control(), SW12);
+    let bb = with_dss(&basic, &[], &[crl(&sc, &ck, ten(), month(), &[(&s2, nine())]), p.root_crl(&[])]);
+    p.all("v3 as a B-B (no stamp), revocation at 09:00Z", &bb, control(), SW12);
+    let resp = ocsp(&s2, &sc, &ck, &sc, None, ten(), Some(nine()), None);
+    let viaocsp = with_dss_ocsps(&stamped, &[], &[p.root_crl(&[]), p.int_crl(&[])], &[resp]);
+    p.all("v3 through an OCSP response of the CA (issuer-signed, produced 10:00Z) saying revoked at 09:00Z, no CA CRL", &viaocsp, control(), SW12);
+    let hold = with_dss(&stamped, &[], &[crl_with_reasons(&sc, &ck, ten(), month(), &[(&s2, nine(), Some(CrlReason::CertificateHold))]), p.root_crl(&[]), p.int_crl(&[])]);
+    p.all("v3 with reason certificateHold at 09:00Z", &hold, control(), SW12);
+    let v3 = with_dss(&stamped, &[], &[crl(&sc, &ck, ten(), month(), &[(&s2, nine())]), p.root_crl(&[]), p.int_crl(&[])]);
+    p.all("v3 at control date 2026-10-22T12:00:00Z (= CA notAfter)", &v3, instant(2026, 10, 22, 12, 0, 0), SW12);
+    p.all("v3 at control date 2026-10-22T12:00:01Z", &v3, instant(2026, 10, 22, 12, 0, 1), SW12);
+    let both = with_dss(&stamped, &[], &[crl(&sc, &ck, ten(), month(), &[(&s2, nine())]), p.root_crl(&[(&sc, nine())]), p.int_crl(&[])]);
+    p.all("v3 and v5 together: CA revokes the signer and root revokes the CA, both at 09:00Z", &both, control(), SW12);
+}
+
+// ---------- c3: e2/e3, a delegated OCSP responder (AC3)
+fn delegate(p: &Pki, role: Role, not_before: Time, not_after: Time) -> (Certificate, SigningKey) {
+    let k = key(&[0x8d; 32]);
+    (issue_with(role, "CN=QA46 OCSP delegate,O=QA,C=FR", 13, &k, Some(&p.int), &p.ik, (not_before, not_after), Extensions::Usual), k)
+}
+fn jan() -> Time { time(2026, 1, 1, 0, 0, 0) }
+fn c3() {
+    let p = Pki::new();
+    let stamped = signed(&p.chain(&p.signer, &[&p.int]), Level::T { tsa: &p.usual_tsa() });
+    let basic = signed(&p.chain(&p.signer, &[&p.int]), Level::B);
+    println!("Signer under the intermediate; OCSP 'good' on the signer signed by a delegate of the intermediate (EKU OCSPSigning, ocsp-nocheck), embedded in the response; control date 2026-10-23T00:00Z");
+    let mk = |base: &[u8], nb: Time, na: Time, produced: Time, crls: Vec<Vec<u8>>| {
+        let (dg, k) = delegate(&p, Role::OcspResponder, nb, na);
+        let r = ocsp(&p.signer, &p.int, &k, &dg, Some(&dg), produced, None, None);
+        with_dss_ocsps(base, &[], &crls, &[r])
+    };
+    let pdf = mk(&stamped, jan(), time(2026, 10, 22, 12, 0, 0), time(2026, 10, 22, 11, 0, 0), vec![p.int_crl(&[]), p.root_crl(&[])]);
+    p.all("B-T stamped 08:00Z, response produced 11:00Z, delegate valid until 2026-10-22T12:00Z; /DSS also holds intermediate and root CRLs of 10:00Z", &pdf, control(), "require_fresh_revocation");
+    let e2 = mk(&basic, jan(), time(2026, 10, 22, 0, 0, 0), time(2026, 10, 20, 0, 0, 0), vec![p.root_crl(&[])]);
+    p.all("e2: B-B, response produced 2026-10-20T00:00Z (3 days before), delegate valid until 2026-10-22T00:00Z; /DSS root CRL only", &e2, control(), "require_fresh_revocation");
+    let fresh = mk(&basic, jan(), time(2026, 10, 22, 12, 0, 0), time(2026, 10, 22, 11, 0, 0), vec![p.root_crl(&[])]);
+    p.all("B-B, response produced 2026-10-22T11:00Z (13 h before), delegate valid until 12:00Z; /DSS root CRL only", &fresh, control(), "require_fresh_revocation");
+    let e3 = mk(&basic, jan(), time(2036, 1, 1, 0, 0, 0), time(2026, 10, 20, 0, 0, 0), vec![p.root_crl(&[])]);
+    p.all("e3: as e2 with the delegate valid until 2036", &e3, control(), "require_fresh_revocation");
+    println!("Accessor OcspResponse::delegated_responder(issuer = intermediate)");
+    let (dg, k) = delegate(&p, Role::OcspResponder, jan(), time(2026, 10, 22, 12, 0, 0));
+    let r = OcspResponse::from_der(&ocsp(&p.signer, &p.int, &k, &dg, Some(&dg), time(2026, 10, 22, 11, 0, 0), None, None)).unwrap();
+    let got = r.delegated_responder(&d(&p.int));
+    println!("  delegate-signed response: {:?}", got.as_ref().map(|o| o.as_ref().map(|v| if *v == d(&dg) { "Some(<DER identical to the delegate certificate>)".to_string() } else { format!("Some(<{} bytes, NOT the delegate>)", v.len()) })));
+    let r2 = OcspResponse::from_der(&ocsp(&p.signer, &p.int, &p.ik, &p.int, None, time(2026, 10, 22, 11, 0, 0), None, None)).unwrap();
+    println!("  intermediate-signed response: {:?}", r2.delegated_responder(&d(&p.int)));
+    println!("  archive_cutoff on the delegate-signed response (none set): {:?}", r.archive_cutoff(&d(&p.signer), &d(&p.int)));
+}
+fn c3e() {
+    let p = Pki::new();
+    let stamped = signed(&p.chain(&p.signer, &[&p.int]), Level::T { tsa: &p.usual_tsa() });
+    let eleven = time(2026, 10, 22, 11, 0, 0);
+    let crls = || vec![p.int_crl(&[]), p.root_crl(&[])];
+    let (dg, k) = delegate(&p, Role::OcspResponder, jan(), time(2026, 10, 22, 12, 0, 0));
+    let pdf = with_dss_ocsps(&stamped, &[], &crls(), &[ocsp(&p.signer, &p.int, &k, &dg, Some(&dg), eleven, None, None)]);
+    println!("B-T stamped 08:00Z, delegate of the intermediate valid until 2026-10-22T12:00Z, 'good' response produced 11:00Z, intermediate and root CRLs of 10:00Z");
+    p.all("control date 2026-10-22T12:00:00Z (= delegate notAfter)", &pdf, instant(2026, 10, 22, 12, 0, 0), SW12);
+    p.all("control date 2026-10-22T12:00:01Z", &pdf, instant(2026, 10, 22, 12, 0, 1), SW12);
+    let noembed = with_dss_ocsps(&stamped, &[d(&dg)], &crls(), &[ocsp(&p.signer, &p.int, &k, &dg, None, eleven, None, None)]);
+    p.all("delegate NOT embedded in the response (only in /DSS Certs)", &noembed, control(), SW12);
+    let rev = with_dss_ocsps(&stamped, &[], &crls(), &[ocsp(&p.signer, &p.int, &k, &dg, Some(&dg), eleven, Some(nine()), None)]);
+    p.all("the expired delegate's response says REVOKED at 09:00Z (after the stamp)", &rev, control(), SW12);
+    // delegate of the root answering on the intermediate
+    let rk2 = key(&[0x8e; 32]);
+    let dgr = issue_with(Role::OcspResponder, "CN=QA46 root OCSP delegate,O=QA,C=FR", 14, &rk2, Some(&p.root), &p.rk, (jan(), time(2026, 10, 22, 12, 0, 0)), Extensions::Usual);
+    let on_int = ocsp(&p.int, &p.root, &rk2, &dgr, Some(&dgr), eleven, None, None);
+    let pdf = with_dss_ocsps(&stamped, &[], &[p.int_crl(&[])], &[on_int]);
+    p.all("delegate of the ROOT (anchor) valid until 12:00Z answers 'good' on the intermediate (produced 11:00Z); /DSS intermediate CRL only", &pdf, control(), SW12);
+    // delegate without OCSPSigning
+    let (bad, bk) = delegate(&p, Role::Signer, jan(), time(2036, 1, 1, 0, 0, 0));
+    let resp = ocsp(&p.signer, &p.int, &bk, &bad, Some(&bad), eleven, None, None);
+    let pdf = with_dss_ocsps(&stamped, &[], &crls(), &[resp.clone()]);
+    p.all("'delegate' without id-kp-OCSPSigning (a signer certificate), valid to 2036", &pdf, control(), SW12);
+    println!("Accessor delegated_responder on invalid inputs");
+    println!("  delegate without OCSPSigning: {:?}", OcspResponse::from_der(&resp).unwrap().delegated_responder(&d(&p.int)));
+    let (late, lk) = delegate(&p, Role::OcspResponder, time(2026, 10, 22, 11, 30, 0), time(2036, 1, 1, 0, 0, 0));
+    let r = OcspResponse::from_der(&ocsp(&p.signer, &p.int, &lk, &late, Some(&late), eleven, None, None)).unwrap();
+    println!("  delegate valid only from 11:30Z, producedAt 11:00Z: {:?}", r.delegated_responder(&d(&p.int)));
+    println!("  issuer argument not a certificate (b\"garbage\"): {:?}", r.delegated_responder(b"garbage"));
+    println!("  issuer argument the root (not the CertID issuer): {:?}", OcspResponse::from_der(&ocsp(&p.signer, &p.int, &k, &dg, Some(&dg), eleven, None, None)).unwrap().delegated_responder(&d(&p.root)));
+}
+
+// ---------- c4: e4/e5, archiveCutoff under the eleventh switch (AC4)
+const SW11: &str = "ignore_expired_certs_on_crl";
+fn expiring(p: &Pki) -> Certificate { issue_valid(Role::Signer, "CN=QA46 expiring signer,O=QA,C=FR", 16, &p.sk, Some(&p.int), &p.ik, jan(), nine()) }
+fn c4() {
+    let p = Pki::new();
+    let s5 = expiring(&p);
+    let stamped = signed(&p.chain(&s5, &[&p.int]), Level::T { tsa: &p.usual_tsa() });
+    let basic = signed(&p.chain(&s5, &[&p.int]), Level::B);
+    println!("Signer valid until 2026-10-22T09:00Z; intermediate-signed 'good' OCSP response on it produced 10:00Z with archiveCutoff 2026-01-01; /DSS intermediate and root CRLs of 10:00Z (the intermediate's covers the TSA); control date 2026-10-23T00:00Z");
+    let resp = ocsp(&s5, &p.int, &p.ik, &p.int, None, ten(), None, Some(jan()));
+    let e5 = with_dss_ocsps(&stamped, &[], &[p.int_crl(&[]), p.root_crl(&[])], &[resp.clone()]);
+    p.all("e5: B-T stamped 08:00Z", &e5, control(), SW11);
+    let e4 = with_dss_ocsps(&basic, &[], &[p.root_crl(&[])], &[resp.clone()]);
+    p.all("e4: B-B, /DSS root CRL and the response", &e4, control(), SW11);
+    let none = with_dss_ocsps(&stamped, &[], &[p.int_crl(&[]), p.root_crl(&[])], &[ocsp(&s5, &p.int, &p.ik, &p.int, None, ten(), None, None)]);
+    p.all("control: B-T, same response WITHOUT archiveCutoff", &none, control(), SW11);
+    println!("Accessor archive_cutoff: {:?}", OcspResponse::from_der(&resp).unwrap().archive_cutoff(&d(&s5), &d(&p.int)).map(|o| o.map(iso)));
+}
+fn c4e() {
+    let p = Pki::new();
+    let s5 = expiring(&p);
+    let stamped = signed(&p.chain(&s5, &[&p.int]), Level::T { tsa: &p.usual_tsa() });
+    let crls = || vec![p.int_crl(&[]), p.root_crl(&[])];
+    let base = |cut: Option<Time>| ocsp(&s5, &p.int, &p.ik, &p.int, None, ten(), None, cut);
+    let run = |title: &str, resp: Vec<u8>| { let pdf = with_dss_ocsps(&stamped, &[], &crls(), &[resp]); p.all(title, &pdf, control(), SW11); };
+    println!("As c4 e5 (B-T stamped 08:00Z, signer notAfter 09:00Z, response produced 10:00Z), the archiveCutoff varied; control date 2026-10-23T00:00Z");
+    run("archiveCutoff 09:00:00Z (= notAfter)", base(Some(nine())));
+    run("archiveCutoff 09:00:01Z", base(Some(time(2026, 10, 22, 9, 0, 1))));
+    let g = |v: Vec<u8>, crit: bool| mutate(&base(None), &p.ik, |t| t.responses[0].single_extensions = Some(vec![cutoff_ext(v, crit)]));
+    run("archiveCutoff value is garbage bytes", g(b"garbage".to_vec(), false));
+    run("archiveCutoff value is empty", g(vec![], false));
+    run("archiveCutoff 2026-01-01 encoded as UTCTime", g(UtcTime::from_unix_duration(Duration::from_secs(1767225600)).unwrap().to_der().unwrap(), false));
+    run("archiveCutoff 2026-01-01 marked critical", g(GeneralizedTime::from_unix_duration(Duration::from_secs(1767225600)).unwrap().to_der().unwrap(), true));
+    run("archiveCutoff 2026-01-01 placed in responseExtensions instead of singleExtensions", mutate(&base(None), &p.ik, |t| t.response_extensions = Some(vec![cutoff_ext(GeneralizedTime::from_unix_duration(Duration::from_secs(1767225600)).unwrap().to_der().unwrap(), false)])));
+    run("archiveCutoff 2026-01-01, response signed by the wrong key (root key)", ocsp(&s5, &p.int, &p.rk, &p.int, None, ten(), None, Some(jan())));
+    run("archiveCutoff 2026-01-01, response says REVOKED at 08:30Z (after the stamp)", ocsp(&s5, &p.int, &p.ik, &p.int, None, ten(), Some(time(2026, 10, 22, 8, 30, 0)), Some(jan())));
+    run("archiveCutoff 2026-01-01, response says REVOKED at 07:00Z (before the stamp)", ocsp(&s5, &p.int, &p.ik, &p.int, None, ten(), Some(time(2026, 10, 22, 7, 0, 0)), Some(jan())));
+    println!("Accessor archive_cutoff on invalid inputs");
+    let r = OcspResponse::from_der(&base(Some(jan()))).unwrap();
+    println!("  certificate not in the response (the TSA): {:?}", r.archive_cutoff(&d(&p.tsa), &d(&p.int)));
+    println!("  certificate argument garbage: {:?}", r.archive_cutoff(b"garbage", &d(&p.int)));
+    println!("  garbage value: {:?}", OcspResponse::from_der(&g(b"garbage".to_vec(), false)).unwrap().archive_cutoff(&d(&s5), &d(&p.int)));
+    println!("  UTCTime value: {:?}", OcspResponse::from_der(&g(UtcTime::from_unix_duration(Duration::from_secs(1767225600)).unwrap().to_der().unwrap(), false)).unwrap().archive_cutoff(&d(&s5), &d(&p.int)));
+    println!("  critical extension, from_der: {:?}", OcspResponse::from_der(&g(GeneralizedTime::from_unix_duration(Duration::from_secs(1767225600)).unwrap().to_der().unwrap(), true)).map(|r| r.archive_cutoff(&d(&s5), &d(&p.int))));
+}
+
+// ---------- c5: twelve switches, catalogue, ADR (AC5)
+struct Stub { int: Vec<u8>, int_crl: Vec<u8>, root_crl: Vec<u8> }
+impl RevocationSource for Stub {
+    fn revocation(&self, _c: &[u8], issuer: &[u8]) -> Result<RevocationData, nacre_core::Error> {
+        Ok(RevocationData::Crl(if issuer == self.int { self.int_crl.clone() } else { self.root_crl.clone() }))
+    }
+}
+fn read(path: &str) -> Vec<u8> { std::fs::read(path).unwrap_or_else(|e| panic!("{path}: {e}")) }
+fn verdict(r: &R) -> String {
+    match r {
+        Err(e) => { let s = format!("{e:?}"); format!("Err({})", s.split(|c: char| !c.is_alphanumeric()).next().unwrap()) }
+        Ok(v) => format!("{:?}", v.iter().map(|s| (s.field.clone(), s.report.indication(), s.report.sub_indication())).collect::<Vec<_>>()),
+    }
+}
+fn detail(r: &R) -> String { match r { Err(e) => format!("Err({e:?})"), Ok(v) => format!("{:?}", v.iter().map(|s| (&s.field, &s.defect)).collect::<Vec<_>>()) } }
+fn catalog(names: &BTreeSet<String>) -> BTreeMap<String, Vec<String>> {
+    let mut cells: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for doc in ["pades.md", "cms.md", "revocation.md", "tsp.md"] {
+        let Ok(text) = std::fs::read_to_string(format!("{CATALOG}{doc}")) else { continue };
+        for line in text.lines().filter(|l| l.starts_with('|')) {
+            let parts: Vec<&str> = line.trim().trim_matches('|').split('|').map(str::trim).collect();
+            let Some(case) = parts.iter().find(|c| names.contains(c.trim_matches('`'))) else { continue };
+            cells.entry(case.trim_matches('`').to_string()).or_default().push(format!("{doc}: {}", parts.last().unwrap()));
+        }
+    }
+    cells
+}
+fn ticks(cell: &str) -> Vec<String> { cell.split('`').skip(1).step_by(2).map(String::from).collect() }
+fn c5(error: bool) {
+    let chain_int = read(&format!("{VCORPUS}chain/intermediate.der"));
+    let chain_root = read(&format!("{VCORPUS}chain/root.der"));
+    let anchors = TrustAnchors::from_certificates([chain_root.as_slice()]).unwrap();
+    let int_c = Certificate::from_der(&chain_int).unwrap(); let root_c = Certificate::from_der(&chain_root).unwrap();
+    let t = time(2026, 10, 21, 12, 0, 0);
+    let stub = Stub { int: chain_int.clone(), int_crl: crl(&int_c, &key(&[0x32; 32]), t, time(2026, 12, 1, 0, 0, 0), &[]), root_crl: crl(&root_c, &key(&[0x31; 32]), t, time(2026, 12, 1, 0, 0, 0), &[]) };
+    let at = instant(2026, 10, 22, 0, 0, 0);
+    let run = |pdf: &[u8], p: &ValidationPolicy| validate_with_policy(pdf, &anchors, at, Some(&stub), p);
+    println!("ValidationPolicy::strict() = {:?}", ValidationPolicy::strict());
+    println!("ValidationPolicy::dss()    = {:?}", ValidationPolicy::dss());
+    println!("ValidationPolicy::default() == strict(): {}", format!("{:?}", ValidationPolicy::default()) == format!("{:?}", ValidationPolicy::strict()));
+    println!("Anchor chain/root.der, control date 2026-10-22T00:00Z, RevocationSource answering \"not revoked\" CRLs of the chain intermediate and root issued 2026-10-21T12:00Z (corpus keys [0x32;32], [0x31;32])");
+    if error {
+        let mut inputs: Vec<(String, Vec<u8>)> = vec![("chain/chain-dss.pdf".into(), read(&format!("{VCORPUS}chain/chain-dss.pdf"))), ("unsigned.pdf".into(), read(&format!("{VCORPUS}unsigned.pdf"))), ("empty input".into(), vec![]), ("not a PDF".into(), b"hello".to_vec())];
+        let a = read(&format!("{VCORPUS}attacks/xref-misplaced-startxref.pdf")); inputs.push(("attacks/xref-misplaced-startxref.pdf truncated to half".into(), a[..a.len() / 2].to_vec()));
+        for (n, pdf) in inputs {
+            let s = run(&pdf, &ValidationPolicy::strict());
+            println!("{n}: strict {}  detail {}", verdict(&s), detail(&s));
+            println!("  dss {}", verdict(&run(&pdf, &ValidationPolicy::dss())));
+            let changed: Vec<&str> = SWITCHES.iter().copied().filter(|sw| verdict(&run(&pdf, &without(sw))) != verdict(&s)).collect();
+            println!("  switches whose removal alone changes the verdict: {changed:?}");
+        }
+        return;
+    }
+    let mut files: Vec<String> = std::fs::read_dir(format!("{VCORPUS}attacks")).unwrap().map(|e| e.unwrap().file_name().into_string().unwrap()).filter(|n| n.ends_with(".pdf")).collect();
+    files.sort();
+    let names: BTreeSet<String> = files.iter().cloned().collect();
+    let cat = catalog(&names);
+    let (mut m6, mut m7) = (0, 0);
+    for f in &files {
+        let pdf = read(&format!("{VCORPUS}attacks/{f}"));
+        let s = run(&pdf, &ValidationPolicy::strict());
+        let dv = run(&pdf, &ValidationPolicy::dss());
+        let changed: BTreeSet<String> = SWITCHES.iter().filter(|sw| verdict(&run(&pdf, &without(sw))) != verdict(&s)).map(|s| s.to_string()).collect();
+        let opened = verdict(&dv) != verdict(&s) && matches!(&dv, Ok(v) if v.iter().any(|x| x.defect.is_none()));
+        let cells = cat.get(f).cloned().unwrap_or_default();
+        let named: BTreeSet<String> = cells.iter().flat_map(|c| ticks(c.split_once(": ").unwrap().1)).filter(|n| SWITCHES.contains(&n.as_str())).collect();
+        let starts = cells.iter().any(|c| c.split_once(": ").unwrap().1.starts_with("`dss()`"));
+        println!("{f}: strict {} | dss {} | switches changing it {changed:?} | catalogue names {named:?} | opened {opened}", verdict(&s), verdict(&dv));
+        if cells.len() != 1 || named != changed { m6 += 1; println!("  MISMATCH isolation: rows {}", cells.len()); }
+        if starts != opened { m7 += 1; println!("  MISMATCH opened: catalogue {starts}, observed {opened}"); }
+    }
+    println!("SUMMARY files={} isolation mismatches={m6} opened mismatches={m7}", files.len());
+    for doc in ["pades.md", "cms.md", "revocation.md", "tsp.md"] {
+        let text = std::fs::read_to_string(format!("{CATALOG}{doc}")).unwrap_or_default();
+        for sw in ["judge_issuer_of_revoked_data", "ignore_expired_certs_on_crl", "archiveCutoff", "ADR-0030"] { println!("  {doc} mentions {sw}: {}", text.matches(sw).count()); }
+    }
+}
+
+fn main() {
+    match std::env::args().nth(1).as_deref() {
+        Some("c1") => c1(), Some("c1e") => c1e(), Some("c2") => c2(), Some("c2e") => c2e(),
+        Some("c3") => c3(), Some("c3e") => c3e(), Some("c4") => c4(), Some("c4e") => c4e(),
+        Some("c5") => c5(false), Some("c5e") => c5(true),
+        _ => eprintln!("usage: qa-scen c1|c1e|c2|c2e|c3|c3e|c4|c4e|c5|c5e"),
+    }
+}

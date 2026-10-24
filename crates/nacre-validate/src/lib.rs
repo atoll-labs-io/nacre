@@ -42,20 +42,23 @@
 //! DSS does. Before that claimed time, a CA below the anchor without
 //! `subjectKeyIdentifier` gives `INDETERMINATE` / `CERTIFICATE_CHAIN_GENERAL_FAILURE`
 //! ([`Defect::CaKeyIdentifierMissing`]), and revocation data whose issuing CA, below the
-//! anchor, is out of its validity at the control date gives `INDETERMINATE` /
-//! `REVOCATION_OUT_OF_BOUNDS_NO_POE` ([`RevocationDefect::IssuerOutOfBounds`]), as DSS
-//! does. These rules, DSS's own, apply under every policy. [`validate_with_anchors`]
+//! anchor, or whose delegated OCSP responder is out of its validity at the control date
+//! gives `INDETERMINATE` / `REVOCATION_OUT_OF_BOUNDS_NO_POE`
+//! ([`RevocationDefect::IssuerOutOfBounds`]), as DSS does. A timestamp token whose
+//! authority's path holds a CA below the anchor without `subjectKeyIdentifier` proves no
+//! time. These rules, DSS's own, apply under every policy. [`validate_with_anchors`]
 //! does the same with no source. [`build_chain`] builds and judges a path with no PDF, for
 //! any format. [`validate`] trusts no anchor, so a sound signature ends `INDETERMINATE` /
 //! `NO_CERTIFICATE_CHAIN_FOUND`. Document timestamps (`/SubFilter /ETSI.RFC3161`) are left
 //! out of the result.
 //!
 //! Every rule above that DSS 6.5.1 does not apply is a switch of a [`ValidationPolicy`]
-//! (ADR-0026, ADR-0029): later revisions, sneaky signatures, trailing data after the last
-//! `%%EOF`, unusable signatures listed, the signer's key usage, validity judged before
-//! revocation, malformed extensions judged, fresh revocation, unsupported `/SubFilter`s
-//! refused, a misplaced cross-reference offset refused, and a CRL's `expiredCertsOnCRL`
-//! ignored. [`validate`],
+//! (ADR-0026, ADR-0029, ADR-0030): later revisions, sneaky signatures, trailing data after
+//! the last `%%EOF`, unusable signatures listed, the signer's key usage, validity judged
+//! before revocation, malformed extensions judged, fresh revocation, unsupported
+//! `/SubFilter`s refused, a misplaced cross-reference offset refused, a CRL's
+//! `expiredCertsOnCRL` and an OCSP response's `archiveCutoff` ignored, and the issuer of
+//! data saying "revoked" judged. [`validate`],
 //! [`validate_with_anchors`] and [`validate_with_revocation`] apply
 //! [`ValidationPolicy::strict`], every switch on. [`validate_with_policy`] takes the
 //! policy; [`ValidationPolicy::dss`] turns every switch off to give DSS's verdict, and

@@ -125,16 +125,20 @@ pub fn validate_with_revocation(
 /// `/SubFilter`, missing or not a name included, is verified as a detached CMS. With
 /// [`ValidationPolicy::refuse_misplaced_xref`] off, a cross-reference offset landing on
 /// whitespace before its section is read past that whitespace. With
-/// [`ValidationPolicy::ignore_expired_certs_on_crl`] off, a CRL issued after a
-/// certificate's `notAfter` counts for it when its `expiredCertsOnCRL` is at or before that
-/// `notAfter`. With
+/// [`ValidationPolicy::ignore_expired_certs_on_crl`] off, a CRL or an OCSP response issued
+/// after a certificate's `notAfter` counts for it when its `expiredCertsOnCRL` or its
+/// `archiveCutoff` is at or before that `notAfter`. With
+/// [`ValidationPolicy::judge_issuer_of_revoked_data`] off, a certificate whose deciding
+/// revocation data says "revoked" escapes the issuer rule below (ADR-0030). With
 /// [`ValidationPolicy::judge_malformed_extensions`] off, a certificate of a verified
 /// signature's CMS or of one of its signature timestamp tokens that repeats an extension
 /// is an [`Error::MalformedCertificate`]; the `/DSS` certificates are not scanned.
 ///
-/// Under every policy, revocation data whose issuing CA, below the anchor, is out of its
-/// validity at `at` gives [`RevocationDefect::IssuerOutOfBounds`], and a CA below the
-/// anchor without `subjectKeyIdentifier` gives [`Defect::CaKeyIdentifierMissing`].
+/// Under every policy, revocation data whose issuing CA, below the anchor, or whose
+/// delegated OCSP responder is out of its validity at `at` gives
+/// [`RevocationDefect::IssuerOutOfBounds`], and a CA below the anchor without
+/// `subjectKeyIdentifier` gives [`Defect::CaKeyIdentifierMissing`] on the signer's path and
+/// takes any proof of time from a timestamp token on its authority's path (ADR-0030).
 ///
 /// [`RevocationDefect::IssuerOutOfBounds`]: crate::RevocationDefect::IssuerOutOfBounds
 pub fn validate_with_policy(
@@ -375,7 +379,7 @@ impl Context<'_> {
                     time,
                     issued_from,
                     Some(self.at),
-                    !self.policy.ignore_expired_certs_on_crl,
+                    self.policy,
                 )
                 .map_err(Defect::Revocation)
                 .and_then(|()| self.after_revocation(&path, signed, time));
@@ -425,13 +429,8 @@ impl Context<'_> {
                 in_validity(certificate, time, depth).map_err(Defect::OutOfRangeNotRevoked)?;
             }
         }
-        for (depth, ca) in certificates.iter().enumerate().skip(1) {
-            if !matches!(
-                ca.tbs_certificate().get_extension::<SubjectKeyIdentifier>(),
-                Ok(Some(_))
-            ) {
-                return Err(Defect::CaKeyIdentifierMissing { depth });
-            }
+        if let Some(depth) = ca_without_key_identifier(path) {
+            return Err(Defect::CaKeyIdentifierMissing { depth });
         }
         let Some(signer) = certificates.first() else {
             return Ok(());
@@ -450,8 +449,9 @@ impl Context<'_> {
     }
 
     /// The `genTime` `token` proves for `signed`, when it verifies over the signature value,
-    /// its authority's path reaches an anchor at the control date and passes revocation
-    /// there, and it is not after the control date.
+    /// its authority's path reaches an anchor at the control date, holds no CA below the
+    /// anchor without `subjectKeyIdentifier`, as DSS 6.5.1 requires (ADR-0030), and passes
+    /// revocation there, and it is not after the control date.
     fn proven_time(
         &self,
         token: &Token<'_>,
@@ -476,19 +476,34 @@ impl Context<'_> {
             Rules::STRICT,
         )
         .ok()?;
-        judge_path(
-            &path,
-            pool,
-            self.source,
-            self.at,
-            None,
-            None,
-            !self.policy.ignore_expired_certs_on_crl,
-        )
-        .ok()?;
+        if ca_without_key_identifier(&path).is_some() {
+            return None;
+        }
+        judge_path(&path, pool, self.source, self.at, None, None, self.policy).ok()?;
         let time = x509_cert::time::Time::from(verified.gen_time()).to_system_time();
         (time <= self.at).then_some(time)
     }
+}
+
+/// The depth of the first CA of `path`, below the anchor and above the leaf, without
+/// `subjectKeyIdentifier`.
+fn ca_without_key_identifier(path: &CertificatePath) -> Option<usize> {
+    let below_anchor = path
+        .certificates
+        .split_last()
+        .map_or(&[][..], |(_, below)| below);
+    below_anchor
+        .iter()
+        .filter_map(|der| Certificate::from_der(der).ok())
+        .enumerate()
+        .skip(1)
+        .find(|(_, ca)| {
+            !matches!(
+                ca.tbs_certificate().get_extension::<SubjectKeyIdentifier>(),
+                Ok(Some(_))
+            )
+        })
+        .map(|(depth, _)| depth)
 }
 
 fn is_document_timestamp(dict: &Dictionary) -> bool {
