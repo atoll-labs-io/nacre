@@ -89,6 +89,30 @@ fn usf_contents_zeros_is_rejected() {
 }
 
 #[test]
+fn usf_v_direct_is_rejected() {
+    let defect = rejected(include_bytes!("corpus/attacks/usf-v-direct.pdf"));
+    assert!(
+        matches!(defect, Defect::NotASignatureDictionary),
+        "{defect:?}"
+    );
+}
+
+#[test]
+fn usf_v_stream_is_rejected() {
+    let defect = rejected(include_bytes!("corpus/attacks/usf-v-stream.pdf"));
+    assert!(
+        matches!(defect, Defect::NotASignatureDictionary),
+        "{defect:?}"
+    );
+}
+
+#[test]
+fn subfilter_unsupported_is_rejected() {
+    let defect = rejected(include_bytes!("corpus/attacks/subfilter-unsupported.pdf"));
+    assert!(matches!(defect, Defect::UnsupportedSubFilter), "{defect:?}");
+}
+
+#[test]
 fn usf_byterange_missing_is_rejected() {
     let defect = rejected(include_bytes!("corpus/attacks/usf-byterange-missing.pdf"));
     assert!(matches!(defect, Defect::ByteRangeMalformed), "{defect:?}");

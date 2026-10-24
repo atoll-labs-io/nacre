@@ -52,6 +52,18 @@ fn main() {
         &hand(&[(b"Contents", Object::String(Vec::new()))]),
     );
     write(&dir, "usf-contents-zeros", &zero_slot());
+    write(&dir, "usf-v-direct", &valued(Object::Integer(7)));
+    write(
+        &dir,
+        "usf-v-stream",
+        &valued(Object::Reference(ObjectId::new(4, 0))),
+    );
+
+    write(
+        &dir,
+        "subfilter-unsupported",
+        &sub_filtered(&signer, b"adbe.x509.rsa_sha1"),
+    );
 
     let contents = (&b"Contents"[..], Object::String(base_der));
     write(
@@ -1157,11 +1169,21 @@ fn hand(extra: &[(&[u8], Object)]) -> Vec<u8> {
         sig.insert(key, value.clone());
     }
     let sig_id = update.add(Object::Dictionary(sig)).unwrap();
+    with_field(update, Object::Reference(sig_id))
+}
 
+/// `unsigned.pdf` with a signature field whose `/V` is `value`, written by hand.
+fn valued(value: Object) -> Vec<u8> {
+    let doc = Document::parse(UNSIGNED).unwrap();
+    with_field(doc.update(), value)
+}
+
+/// `update` given the invisible signature field `Signature1`, its `/V` being `value`.
+fn with_field(mut update: nacre_pdf::Update<'_, '_>, value: Object) -> Vec<u8> {
     let mut field = Dictionary::new();
     field.insert(b"FT", name(b"Sig"));
     field.insert(b"T", Object::String(b"Signature1".to_vec()));
-    field.insert(b"V", Object::Reference(sig_id));
+    field.insert(b"V", value);
     field.insert(b"Type", name(b"Annot"));
     field.insert(b"Subtype", name(b"Widget"));
     field.insert(b"Rect", Object::Array(vec![Object::Integer(0); 4]));
@@ -1184,6 +1206,20 @@ fn spec() -> SignatureSpec {
         contents_len: CAPACITY,
         entries,
     }
+}
+
+/// `unsigned.pdf` signed by `signer`, its CMS correct, under `/SubFilter /<sub_filter>`.
+fn sub_filtered(signer: &TestSigner, sub_filter: &[u8]) -> Vec<u8> {
+    let doc = Document::parse(UNSIGNED).unwrap();
+    let mut spec = spec();
+    spec.sub_filter = sub_filter.to_vec();
+    let prepared = doc.update().sign(spec).unwrap();
+    let mut hasher = Sha256::new();
+    for part in prepared.signed_parts() {
+        hasher.update(part);
+    }
+    let cms = sign_detached(&hasher.finalize(), signer, &Profile::PADES, None).unwrap();
+    prepared.embed(&cms).unwrap()
 }
 
 /// A signature slot laid out by the writer and left all zeros.
