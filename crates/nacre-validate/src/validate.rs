@@ -4,10 +4,11 @@ use der::asn1::ObjectIdentifier;
 use der::{Decode, Encode, Header, Reader, SliceReader, Tag};
 use nacre_cms::SignedData;
 use nacre_core::{DigestAlgorithm, RevocationData, RevocationSource};
-use nacre_pdf::{Dictionary, Document, Object};
+use nacre_pdf::{Dictionary, Document, Object, ReadOptions};
 use sha2::{Digest, Sha256};
 
 use x509_cert::Certificate;
+use x509_cert::ext::pkix::SubjectKeyIdentifier;
 
 use crate::chain::{Purpose, Rules, build_path, in_validity, repeats_extension};
 use crate::date::pdf_date;
@@ -121,10 +122,21 @@ pub fn validate_with_revocation(
 /// [`ValidationPolicy::list_unusable_signatures`] off, a field whose `/V`, `/Contents` or
 /// `/ByteRange` cannot be used is left out of the result. With
 /// [`ValidationPolicy::refuse_unsupported_sub_filters`] off, a signature under any other
-/// `/SubFilter` name is verified as a detached CMS. With
+/// `/SubFilter`, missing or not a name included, is verified as a detached CMS. With
+/// [`ValidationPolicy::refuse_misplaced_xref`] off, a cross-reference offset landing on
+/// whitespace before its section is read past that whitespace. With
+/// [`ValidationPolicy::ignore_expired_certs_on_crl`] off, a CRL issued after a
+/// certificate's `notAfter` counts for it when its `expiredCertsOnCRL` is at or before that
+/// `notAfter`. With
 /// [`ValidationPolicy::judge_malformed_extensions`] off, a certificate of a verified
 /// signature's CMS or of one of its signature timestamp tokens that repeats an extension
 /// is an [`Error::MalformedCertificate`]; the `/DSS` certificates are not scanned.
+///
+/// Under every policy, revocation data whose issuing CA, below the anchor, is out of its
+/// validity at `at` gives [`RevocationDefect::IssuerOutOfBounds`], and a CA below the
+/// anchor without `subjectKeyIdentifier` gives [`Defect::CaKeyIdentifierMissing`].
+///
+/// [`RevocationDefect::IssuerOutOfBounds`]: crate::RevocationDefect::IssuerOutOfBounds
 pub fn validate_with_policy(
     pdf: &[u8],
     anchors: &TrustAnchors,
@@ -143,12 +155,14 @@ fn validate_with(
     policy: &ValidationPolicy,
     max_signatures: usize,
 ) -> Result<Vec<SignatureValidation>, Error> {
-    let (pdf, doc) = match Document::parse(pdf) {
+    let mut options = ReadOptions::default();
+    options.misplaced_xref = !policy.refuse_misplaced_xref;
+    let (pdf, doc) = match Document::parse_with_options(pdf, &options) {
         Err(nacre_pdf::Error::TrailingData { offset }) if !policy.refuse_trailing_data => {
             let prefix = pdf
                 .get(..offset)
                 .ok_or(nacre_pdf::Error::TrailingData { offset })?;
-            (prefix, Document::parse(prefix)?)
+            (prefix, Document::parse_with_options(prefix, &options)?)
         }
         parsed => (pdf, parsed?),
     };
@@ -209,7 +223,7 @@ fn validate_with(
     }
     let first = checked.iter().filter_map(|(_, _, at, _)| *at).min();
     let later = match first {
-        Some(first) => qualify(pdf, &doc, first, policy.refuse_sneaky_signatures)?,
+        Some(first) => qualify(pdf, &doc, first, policy.refuse_sneaky_signatures, &options)?,
         None => Vec::new(),
     };
     let dss = if anchors.is_empty() {
@@ -354,9 +368,17 @@ impl Context<'_> {
             },
         ) {
             Ok(path) => {
-                let defect = judge_path(&path, &pool, self.source, time, issued_from)
-                    .map_err(Defect::Revocation)
-                    .and_then(|()| self.after_revocation(&path, signed, time));
+                let defect = judge_path(
+                    &path,
+                    &pool,
+                    self.source,
+                    time,
+                    issued_from,
+                    Some(self.at),
+                    !self.policy.ignore_expired_certs_on_crl,
+                )
+                .map_err(Defect::Revocation)
+                .and_then(|()| self.after_revocation(&path, signed, time));
                 match defect {
                     Ok(()) => {
                         SignatureValidation::sound(field, mine, Some(path), best_signature_time)
@@ -381,8 +403,9 @@ impl Context<'_> {
     }
 
     /// What is judged once `path`'s revocation passed at `time`: the validity of each
-    /// certificate below the anchor when the walk left it out, then the claimed signing
-    /// time, which must be readable and within the signer's validity.
+    /// certificate below the anchor when the walk left it out, then the
+    /// `subjectKeyIdentifier` of each CA below the anchor, then the claimed signing time,
+    /// which must be readable and within the signer's validity.
     fn after_revocation(
         &self,
         path: &CertificatePath,
@@ -400,6 +423,14 @@ impl Context<'_> {
         if !self.policy.judge_validity_before_revocation {
             for (depth, certificate) in certificates.iter().enumerate() {
                 in_validity(certificate, time, depth).map_err(Defect::OutOfRangeNotRevoked)?;
+            }
+        }
+        for (depth, ca) in certificates.iter().enumerate().skip(1) {
+            if !matches!(
+                ca.tbs_certificate().get_extension::<SubjectKeyIdentifier>(),
+                Ok(Some(_))
+            ) {
+                return Err(Defect::CaKeyIdentifierMissing { depth });
             }
         }
         let Some(signer) = certificates.first() else {
@@ -445,7 +476,16 @@ impl Context<'_> {
             Rules::STRICT,
         )
         .ok()?;
-        judge_path(&path, pool, self.source, self.at, None).ok()?;
+        judge_path(
+            &path,
+            pool,
+            self.source,
+            self.at,
+            None,
+            None,
+            !self.policy.ignore_expired_certs_on_crl,
+        )
+        .ok()?;
         let time = x509_cert::time::Time::from(verified.gen_time()).to_system_time();
         (time <= self.at).then_some(time)
     }
@@ -502,10 +542,10 @@ fn signed_bytes(
 ) -> Result<(usize, Vec<u8>, [usize; 2]), Defect> {
     let dict = dict.ok_or(Defect::NotASignatureDictionary)?;
 
-    match dict.get(b"SubFilter") {
-        Some(Object::Name(n))
-            if !policy.refuse_unsupported_sub_filters || SUB_FILTERS.contains(&n.as_slice()) => {}
-        _ => return Err(Defect::UnsupportedSubFilter),
+    if policy.refuse_unsupported_sub_filters
+        && !matches!(dict.get(b"SubFilter"), Some(Object::Name(n)) if SUB_FILTERS.contains(&n.as_slice()))
+    {
+        return Err(Defect::UnsupportedSubFilter);
     }
 
     let contents = match follow_once(doc, dict.get(b"Contents")) {

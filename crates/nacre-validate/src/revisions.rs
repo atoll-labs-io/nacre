@@ -4,7 +4,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use nacre_pdf::{Dictionary, Document, Object, ObjectId};
+use nacre_pdf::{Dictionary, Document, Object, ObjectId, ReadOptions};
 
 use crate::Error;
 use crate::report::{AllowedChange, LaterRevision, RevisionVerdict};
@@ -44,12 +44,13 @@ pub(crate) struct Qualified {
 }
 
 /// The verdict on every revision after `first`, the index of the oldest signed revision,
-/// sneaky signatures judged when `sneaky` is set.
+/// sneaky signatures judged when `sneaky` is set, each state read with `options`.
 pub(crate) fn qualify(
     pdf: &[u8],
     doc: &Document<'_>,
     first: usize,
     sneaky: bool,
+    options: &ReadOptions,
 ) -> Result<Vec<Qualified>, Error> {
     let ends: Vec<usize> = doc.revisions().iter().skip(first).map(|r| r.end).collect();
     let count = ends.len().saturating_sub(1);
@@ -65,13 +66,13 @@ pub(crate) fn qualify(
     if later.is_empty() {
         return Ok(Vec::new());
     }
-    let mut previous = State::read(pdf, signed);
+    let mut previous = State::read(pdf, signed, options);
     // Where the signature widgets of the first certified state lie: a signature shown
     // anywhere else appeared after the certification.
     let mut certified: Option<Placed> = None;
     let mut out = Vec::with_capacity(later.len());
     for &end in later {
-        let current = State::read(pdf, end);
+        let current = State::read(pdf, end, options);
         if let Some(before) = previous.as_ref().filter(|s| s.doc_mdp.is_some()) {
             certified.get_or_insert_with(|| before.placed_signature_widgets());
         }
@@ -145,8 +146,8 @@ struct State<'a> {
 }
 
 impl<'a> State<'a> {
-    fn read(pdf: &'a [u8], end: usize) -> Option<Self> {
-        let doc = Document::parse(pdf.get(..end)?).ok()?;
+    fn read(pdf: &'a [u8], end: usize, options: &ReadOptions) -> Option<Self> {
+        let doc = Document::parse_with_options(pdf.get(..end)?, options).ok()?;
         let objects = doc.reachable().ok()?;
         // An unreadable permission is the strictest one for the revision after this state.
         let (doc_mdp, doc_mdp_readable) = match doc.doc_mdp_level() {

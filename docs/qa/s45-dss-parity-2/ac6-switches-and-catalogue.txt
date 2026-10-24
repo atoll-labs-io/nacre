@@ -1,0 +1,799 @@
+# QA s45-dss-parity-2 — scenario c6: eleven switches over the attack corpus against the catalogue (driver scenarios.md, surface endpoint, platform lib)
+# Tree under test: c688c438ab08fe6c7805061025a1055b695ee70a (copy of git ls-files in a mktemp -d directory; no .env* file to copy; Install 'cargo fetch' and Build 'cargo build --workspace --all-features' exit 0)
+# Program: scratch binary crate qa-scen at crates/qa-scen of the copy, calling the public API of nacre-validate and nacre-pdf;
+#   input PDFs and CRLs are built with this program's own fictitious PKI (keys [0x71..0x77; 32]) through the test bench's crates/nacre-validate/tests/support/forge.rs (included by #[path]),
+#   or read from crates/nacre-validate/tests/corpus/ and crates/nacre-pdf/tests/corpus/hostile/.
+# Working directory: <copy>/crates/qa-scen   stdin: none
+# Command: ../../target/debug/qa-scen c6
+# Run twice; the two outputs are identical. bst 1792656000 = 2026-10-22T08:00:00Z; revocation date 1792652400 = 2026-10-22T07:00:00Z.
+
+## stdout+stderr
+Anchor chain/root.der, control date 2026-10-22T00:00Z, RevocationSource answering "not revoked" CRLs of the chain intermediate and root issued 2026-10-21T12:00Z (forged here with the corpus keys [0x32;32], [0x31;32] named in examples/forge_chain_attacks.rs)
+byterange-not-from-start.pdf
+  strict: [("Signature1", TotalFailed, Some(FormatFailure))]  defects [("Signature1", Some(ByteRangeNotFromStart))]
+  dss:    [("Signature1", TotalFailed, Some(FormatFailure))]
+  switches whose removal alone changes the verdict: {}
+  opened under dss: false
+    catalog pades.md: aucune
+byterange-not-whole-file.pdf
+  strict: [("Signature1", TotalFailed, Some(FormatFailure))]  defects [("Signature1", Some(ByteRangeNotWholeFile))]
+  dss:    [("Signature1", Indeterminate, Some(NoCertificateChainFound))]
+  switches whose removal alone changes the verdict: {"refuse_later_revisions"}
+  opened under dss: true
+    catalog pades.md: `dss()` (`refuse_later_revisions`)
+byterange-outside-file.pdf
+  strict: [("Signature1", TotalFailed, Some(FormatFailure))]  defects [("Signature1", Some(ByteRangeOutsideFile))]
+  dss:    [("Signature1", TotalFailed, Some(FormatFailure))]
+  switches whose removal alone changes the verdict: {}
+  opened under dss: false
+    catalog pades.md: aucune
+byterange-overlap.pdf
+  strict: [("Signature1", TotalFailed, Some(FormatFailure))]  defects [("Signature1", Some(ByteRangeOverlap))]
+  dss:    [("Signature1", TotalFailed, Some(FormatFailure))]
+  switches whose removal alone changes the verdict: {}
+  opened under dss: false
+    catalog pades.md: aucune
+chain-ca-key-usage.pdf
+  strict: [("Signature1", Indeterminate, Some(ChainConstraintsFailure))]  defects [("Signature1", Some(Chain(CaKeyUsage { depth: 1 })))]
+  dss:    [("Signature1", Indeterminate, Some(ChainConstraintsFailure))]
+  switches whose removal alone changes the verdict: {}
+  opened under dss: false
+    catalog cms.md: aucune
+chain-critical-extension.pdf
+  strict: [("Signature1", Indeterminate, Some(CertificateChainGeneralFailure))]  defects [("Signature1", Some(Chain(UnsupportedCriticalExtension { depth: 1, oid: ObjectIdentifier(1.3.6.1.4.1.32473.1) })))]
+  dss:    [("Signature1", Indeterminate, Some(CertificateChainGeneralFailure))]
+  switches whose removal alone changes the verdict: {}
+  opened under dss: false
+    catalog cms.md: aucune
+chain-dss-junk.pdf
+  strict: [("Signature1", TotalPassed, None)]  defects [("Signature1", None)]
+  dss:    [("Signature1", TotalPassed, None)]
+  switches whose removal alone changes the verdict: {}
+  opened under dss: false
+    catalog cms.md: aucune
+  a signature without defect under strict
+chain-expired.pdf
+  strict: [("Signature1", Indeterminate, Some(OutOfBoundsNoPoe))]  defects [("Signature1", Some(Chain(Expired { depth: 0 })))]
+  dss:    [("Signature1", Indeterminate, Some(CertificateChainGeneralFailure))]
+  switches whose removal alone changes the verdict: {"judge_validity_before_revocation"}
+  opened under dss: false
+    catalog cms.md: aucune ; `judge_validity_before_revocation` : la révocation est jugée d'abord, chemin gardé ; sans donnée utilisable, CERTIFICATE_CHAIN_GENERAL_FAILURE, avec un « non révoqué » émis avant le notAfter, OUT_OF_BOUNDS_NOT_REVOKED
+chain-extended-key-usage.pdf
+  strict: [("Signature1", Indeterminate, Some(ChainConstraintsFailure))]  defects [("Signature1", Some(Chain(ExtendedKeyUsage { depth: 0 })))]
+  dss:    [("Signature1", TotalPassed, None)]
+  switches whose removal alone changes the verdict: {"judge_signer_key_usage"}
+  opened under dss: true
+    catalog cms.md: `dss()` (`judge_signer_key_usage`)
+chain-impostor-root.pdf
+  strict: [("Signature1", Indeterminate, Some(NoCertificateChainFound))]  defects [("Signature1", None)]
+  dss:    [("Signature1", Indeterminate, Some(NoCertificateChainFound))]
+  switches whose removal alone changes the verdict: {}
+  opened under dss: false
+    catalog cms.md: aucune
+  a signature without defect under strict
+chain-key-usage.pdf
+  strict: [("Signature1", Indeterminate, Some(ChainConstraintsFailure))]  defects [("Signature1", Some(Chain(KeyUsage)))]
+  dss:    [("Signature1", TotalPassed, None)]
+  switches whose removal alone changes the verdict: {"judge_signer_key_usage"}
+  opened under dss: true
+    catalog cms.md: `dss()` (`judge_signer_key_usage`)
+chain-leaf-as-ca.pdf
+  strict: [("Signature1", Indeterminate, Some(ChainConstraintsFailure))]  defects [("Signature1", Some(Chain(NotACa { depth: 1 })))]
+  dss:    [("Signature1", Indeterminate, Some(ChainConstraintsFailure))]
+  switches whose removal alone changes the verdict: {}
+  opened under dss: false
+    catalog cms.md: aucune
+chain-malformed-extension.pdf
+  strict: [("Signature1", Indeterminate, Some(CertificateChainGeneralFailure))]  defects [("Signature1", Some(Chain(MalformedExtension { depth: 0 })))]
+  dss:    Err(MalformedCertificate)
+  switches whose removal alone changes the verdict: {"judge_malformed_extensions"}
+  opened under dss: false
+    catalog cms.md: aucune ; `judge_malformed_extensions` : validate rend Error::MalformedCertificate au lieu d'un verdict, comme DSS répond par une erreur ; les certificats des jetons d'horodatage de signature sont examinés de même, ceux du /DSS non
+chain-not-yet-valid.pdf
+  strict: [("Signature1", Indeterminate, Some(OutOfBoundsNoPoe))]  defects [("Signature1", Some(Chain(NotYetValid { depth: 0 })))]
+  dss:    [("Signature1", Indeterminate, Some(CertificateChainGeneralFailure))]
+  switches whose removal alone changes the verdict: {"judge_validity_before_revocation"}
+  opened under dss: false
+    catalog cms.md: aucune ; `judge_validity_before_revocation` : la révocation est jugée d'abord, comme pour chain-expired.pdf
+chain-path-length.pdf
+  strict: [("Signature1", Indeterminate, Some(ChainConstraintsFailure))]  defects [("Signature1", Some(Chain(PathLength { depth: 2 })))]
+  dss:    [("Signature1", Indeterminate, Some(ChainConstraintsFailure))]
+  switches whose removal alone changes the verdict: {}
+  opened under dss: false
+    catalog cms.md: aucune
+eaa-freetext.pdf
+  strict: [("Certification", TotalFailed, Some(FormatFailure))]  defects [("Certification", Some(RevisionNotAllowed { end: 10251 }))]
+  dss:    [("Certification", Indeterminate, Some(NoCertificateChainFound))]
+  switches whose removal alone changes the verdict: {"refuse_later_revisions"}
+  opened under dss: true
+    catalog pades.md: `dss()` (`refuse_later_revisions`)
+isa-appended-revision.pdf
+  strict: [("Signature1", TotalFailed, Some(FormatFailure))]  defects [("Signature1", Some(RevisionNotAllowed { end: 3755 }))]
+  dss:    [("Signature1", Indeterminate, Some(NoCertificateChainFound))]
+  switches whose removal alone changes the verdict: {"refuse_later_revisions"}
+  opened under dss: true
+    catalog pades.md: `dss()` (`refuse_later_revisions`)
+isa-no-xref.pdf
+  strict: Err(Pdf)  defects Err(Pdf(TrailingData { offset: 3179 }))
+  dss:    [("Signature1", Indeterminate, Some(NoCertificateChainFound))]
+  switches whose removal alone changes the verdict: {"refuse_trailing_data"}
+  opened under dss: true
+    catalog pades.md: `dss()` (`refuse_trailing_data`) : le préfixe jusqu'au dernier %%EOF est jugé
+shadow-dss-page.pdf
+  strict: [("Signature1", TotalFailed, Some(FormatFailure))]  defects [("Signature1", Some(RevisionNotAllowed { end: 3823 }))]
+  dss:    [("Signature1", Indeterminate, Some(NoCertificateChainFound))]
+  switches whose removal alone changes the verdict: {"refuse_later_revisions"}
+  opened under dss: true
+    catalog pades.md: `dss()` (`refuse_later_revisions`)
+shadow-fill-late-definition.pdf
+  strict: [("Certification", TotalFailed, Some(FormatFailure))]  defects [("Certification", Some(RevisionNotAllowed { end: 11292 }))]
+  dss:    [("Certification", Indeterminate, Some(NoCertificateChainFound))]
+  switches whose removal alone changes the verdict: {"refuse_later_revisions"}
+  opened under dss: true
+    catalog pades.md: `dss()` (`refuse_later_revisions`)
+shadow-form-field.pdf
+  strict: [("Signature1", TotalFailed, Some(FormatFailure))]  defects [("Signature1", Some(RevisionNotAllowed { end: 4297 }))]
+  dss:    [("Signature1", Indeterminate, Some(NoCertificateChainFound))]
+  switches whose removal alone changes the verdict: {"refuse_later_revisions"}
+  opened under dss: true
+    catalog pades.md: `dss()` (`refuse_later_revisions`)
+shadow-hide-and-replace.pdf
+  strict: [("Signature1", TotalFailed, Some(FormatFailure))]  defects [("Signature1", Some(RevisionNotAllowed { end: 3834 }))]
+  dss:    [("Signature1", Indeterminate, Some(NoCertificateChainFound))]
+  switches whose removal alone changes the verdict: {"refuse_later_revisions"}
+  opened under dss: true
+    catalog pades.md: `dss()` (`refuse_later_revisions`)
+shadow-hide.pdf
+  strict: [("Signature1", TotalFailed, Some(FormatFailure))]  defects [("Signature1", Some(RevisionNotAllowed { end: 3756 }))]
+  dss:    [("Signature1", Indeterminate, Some(NoCertificateChainFound))]
+  switches whose removal alone changes the verdict: {"refuse_later_revisions"}
+  opened under dss: true
+    catalog pades.md: `dss()` (`refuse_later_revisions`)
+shadow-late-definition.pdf
+  strict: [("Signature1", TotalFailed, Some(FormatFailure))]  defects [("Signature1", Some(RevisionNotAllowed { end: 3617 }))]
+  dss:    [("Signature1", Indeterminate, Some(NoCertificateChainFound))]
+  switches whose removal alone changes the verdict: {"refuse_later_revisions"}
+  opened under dss: true
+    catalog pades.md: `dss()` (`refuse_later_revisions`)
+shadow-replace.pdf
+  strict: [("Signature1", TotalFailed, Some(FormatFailure))]  defects [("Signature1", Some(RevisionNotAllowed { end: 3342 }))]
+  dss:    [("Signature1", Indeterminate, Some(NoCertificateChainFound))]
+  switches whose removal alone changes the verdict: {"refuse_later_revisions"}
+  opened under dss: true
+    catalog pades.md: `dss()` (`refuse_later_revisions`)
+ssa-empty-field-signed.pdf
+  strict: [("Certification", TotalFailed, Some(FormatFailure)), ("Sneaky", TotalFailed, Some(FormatFailure))]  defects [("Certification", Some(RevisionNotAllowed { end: 10562 })), ("Sneaky", Some(AddedByRevisionNotAllowed { end: 19195 }))]
+  dss:    [("Certification", Indeterminate, Some(NoCertificateChainFound)), ("Sneaky", Indeterminate, Some(NoCertificateChainFound))]
+  switches whose removal alone changes the verdict: {"refuse_later_revisions", "refuse_sneaky_signatures"}
+  opened under dss: true
+    catalog pades.md: `dss()` (`refuse_later_revisions` pour la certification, `refuse_sneaky_signatures` pour Sneaky)
+ssa-hidden-widget-shown.pdf
+  strict: [("Sneaky", TotalFailed, Some(FormatFailure)), ("Certification", TotalFailed, Some(FormatFailure))]  defects [("Sneaky", Some(AddedByRevisionNotAllowed { end: 19959 })), ("Certification", Some(RevisionNotAllowed { end: 19959 }))]
+  dss:    [("Sneaky", Indeterminate, Some(NoCertificateChainFound)), ("Certification", Indeterminate, Some(NoCertificateChainFound))]
+  switches whose removal alone changes the verdict: {"refuse_later_revisions", "refuse_sneaky_signatures"}
+  opened under dss: true
+    catalog pades.md: `dss()` (`refuse_later_revisions` pour la certification, `refuse_sneaky_signatures` pour Sneaky)
+ssa-indirect-rect.pdf
+  strict: [("Sneaky", TotalFailed, Some(FormatFailure)), ("Certification", TotalFailed, Some(FormatFailure))]  defects [("Sneaky", Some(AddedByRevisionNotAllowed { end: 20030 })), ("Certification", Some(RevisionNotAllowed { end: 20030 }))]
+  dss:    [("Sneaky", Indeterminate, Some(NoCertificateChainFound)), ("Certification", Indeterminate, Some(NoCertificateChainFound))]
+  switches whose removal alone changes the verdict: {"refuse_later_revisions", "refuse_sneaky_signatures"}
+  opened under dss: true
+    catalog pades.md: `dss()` (`refuse_later_revisions` pour la certification, `refuse_sneaky_signatures` pour Sneaky)
+ssa-kid-widget-shown.pdf
+  strict: [("Sneaky", TotalFailed, Some(FormatFailure)), ("Certification", TotalFailed, Some(FormatFailure))]  defects [("Sneaky", Some(AddedByRevisionNotAllowed { end: 20086 })), ("Certification", Some(RevisionNotAllowed { end: 20086 }))]
+  dss:    [("Sneaky", Indeterminate, Some(NoCertificateChainFound)), ("Certification", Indeterminate, Some(NoCertificateChainFound))]
+  switches whose removal alone changes the verdict: {"refuse_later_revisions", "refuse_sneaky_signatures"}
+  opened under dss: true
+    catalog pades.md: `dss()` (`refuse_later_revisions` pour la certification, `refuse_sneaky_signatures` pour Sneaky)
+ssa-layer-widget-shown.pdf
+  strict: [("Sneaky", TotalFailed, Some(FormatFailure)), ("Certification", TotalFailed, Some(FormatFailure))]  defects [("Sneaky", Some(AddedByRevisionNotAllowed { end: 20242 })), ("Certification", Some(RevisionNotAllowed { end: 20242 }))]
+  dss:    [("Sneaky", Indeterminate, Some(NoCertificateChainFound)), ("Certification", Indeterminate, Some(NoCertificateChainFound))]
+  switches whose removal alone changes the verdict: {"refuse_later_revisions", "refuse_sneaky_signatures"}
+  opened under dss: true
+    catalog pades.md: `dss()` (`refuse_later_revisions` pour la certification, `refuse_sneaky_signatures` pour Sneaky)
+ssa-moved-rect.pdf
+  strict: [("Sneaky", TotalFailed, Some(FormatFailure)), ("Certification", TotalFailed, Some(FormatFailure))]  defects [("Sneaky", Some(AddedByRevisionNotAllowed { end: 19939 })), ("Certification", Some(RevisionNotAllowed { end: 19939 }))]
+  dss:    [("Sneaky", Indeterminate, Some(NoCertificateChainFound)), ("Certification", Indeterminate, Some(NoCertificateChainFound))]
+  switches whose removal alone changes the verdict: {"refuse_later_revisions", "refuse_sneaky_signatures"}
+  opened under dss: true
+    catalog pades.md: `dss()` (`refuse_later_revisions` pour la certification, `refuse_sneaky_signatures` pour Sneaky)
+ssa-orphan-widget.pdf
+  strict: [("Certification", TotalFailed, Some(FormatFailure)), ("Sneaky", TotalFailed, Some(FormatFailure))]  defects [("Certification", Some(RevisionNotAllowed { end: 19873 })), ("Sneaky", Some(AddedByRevisionNotAllowed { end: 19873 }))]
+  dss:    [("Certification", Indeterminate, Some(NoCertificateChainFound)), ("Sneaky", Indeterminate, Some(NoCertificateChainFound))]
+  switches whose removal alone changes the verdict: {"refuse_later_revisions", "refuse_sneaky_signatures"}
+  opened under dss: true
+    catalog pades.md: `dss()` (`refuse_later_revisions` pour la certification, `refuse_sneaky_signatures` pour Sneaky)
+ssa-outside-fields.pdf
+  strict: [("Certification", TotalFailed, Some(FormatFailure))]  defects [("Certification", Some(RevisionNotAllowed { end: 19655 }))]
+  dss:    [("Certification", Indeterminate, Some(NoCertificateChainFound))]
+  switches whose removal alone changes the verdict: {"refuse_later_revisions", "refuse_sneaky_signatures"}
+  opened under dss: true
+    catalog pades.md: `dss()` (`refuse_later_revisions` ou `refuse_sneaky_signatures`, chacun seul, pour la certification, que seule la signature hors de /Fields faisait refuser)
+ssa-split-widget.pdf
+  strict: [("Certification", TotalFailed, Some(FormatFailure)), ("Sneaky", TotalFailed, Some(FormatFailure))]  defects [("Certification", Some(RevisionNotAllowed { end: 19038 })), ("Sneaky", Some(AddedByRevisionNotAllowed { end: 19038 }))]
+  dss:    [("Certification", Indeterminate, Some(NoCertificateChainFound)), ("Sneaky", Indeterminate, Some(NoCertificateChainFound))]
+  switches whose removal alone changes the verdict: {"refuse_later_revisions", "refuse_sneaky_signatures"}
+  opened under dss: true
+    catalog pades.md: `dss()` (`refuse_later_revisions` pour la certification, `refuse_sneaky_signatures` pour Sneaky)
+ssa-toggle-noview-shown.pdf
+  strict: [("Certification", TotalFailed, Some(FormatFailure)), ("Sneaky", TotalFailed, Some(FormatFailure))]  defects [("Certification", Some(RevisionNotAllowed { end: 19744 })), ("Sneaky", Some(AddedByRevisionNotAllowed { end: 19744 }))]
+  dss:    [("Certification", Indeterminate, Some(NoCertificateChainFound)), ("Sneaky", Indeterminate, Some(NoCertificateChainFound))]
+  switches whose removal alone changes the verdict: {"refuse_later_revisions", "refuse_sneaky_signatures"}
+  opened under dss: true
+    catalog pades.md: `dss()` (`refuse_later_revisions` pour la certification ; `refuse_sneaky_signatures` pour Sneaky, et pour la certification, que seule la signature de Sneaky faisait refuser)
+ssa-unlisted-widget-shown.pdf
+  strict: [("Sneaky", TotalFailed, Some(FormatFailure)), ("Certification", TotalFailed, Some(FormatFailure))]  defects [("Sneaky", Some(AddedByRevisionNotAllowed { end: 20106 })), ("Certification", Some(RevisionNotAllowed { end: 20106 }))]
+  dss:    [("Sneaky", Indeterminate, Some(NoCertificateChainFound)), ("Certification", Indeterminate, Some(NoCertificateChainFound))]
+  switches whose removal alone changes the verdict: {"refuse_later_revisions", "refuse_sneaky_signatures"}
+  opened under dss: true
+    catalog pades.md: `dss()` (`refuse_later_revisions` pour la certification, `refuse_sneaky_signatures` pour Sneaky)
+ssa-unreadable-rect.pdf
+  strict: [("Certification", TotalFailed, Some(FormatFailure)), ("Sneaky", TotalFailed, Some(FormatFailure))]  defects [("Certification", Some(RevisionNotAllowed { end: 19745 })), ("Sneaky", Some(AddedByRevisionNotAllowed { end: 19745 }))]
+  dss:    [("Certification", Indeterminate, Some(NoCertificateChainFound)), ("Sneaky", Indeterminate, Some(NoCertificateChainFound))]
+  switches whose removal alone changes the verdict: {"refuse_later_revisions", "refuse_sneaky_signatures"}
+  opened under dss: true
+    catalog pades.md: `dss()` (`refuse_later_revisions` pour la certification ; `refuse_sneaky_signatures` pour Sneaky, et pour la certification, que seule la signature de Sneaky faisait refuser)
+ssa-visible-signature.pdf
+  strict: [("Certification", TotalFailed, Some(FormatFailure)), ("Sneaky", TotalFailed, Some(FormatFailure))]  defects [("Certification", Some(RevisionNotAllowed { end: 18961 })), ("Sneaky", Some(AddedByRevisionNotAllowed { end: 18961 }))]
+  dss:    [("Certification", Indeterminate, Some(NoCertificateChainFound)), ("Sneaky", Indeterminate, Some(NoCertificateChainFound))]
+  switches whose removal alone changes the verdict: {"refuse_later_revisions", "refuse_sneaky_signatures"}
+  opened under dss: true
+    catalog pades.md: `dss()` (`refuse_later_revisions` pour la certification ; `refuse_sneaky_signatures` pour Sneaky, et pour la certification, que seule la signature de Sneaky faisait refuser)
+ssa-zero-rect-shown.pdf
+  strict: [("Sneaky", TotalFailed, Some(FormatFailure)), ("Certification", TotalFailed, Some(FormatFailure))]  defects [("Sneaky", Some(AddedByRevisionNotAllowed { end: 19932 })), ("Certification", Some(RevisionNotAllowed { end: 19932 }))]
+  dss:    [("Sneaky", Indeterminate, Some(NoCertificateChainFound)), ("Certification", Indeterminate, Some(NoCertificateChainFound))]
+  switches whose removal alone changes the verdict: {"refuse_later_revisions", "refuse_sneaky_signatures"}
+  opened under dss: true
+    catalog pades.md: `dss()` (`refuse_later_revisions` pour la certification, `refuse_sneaky_signatures` pour Sneaky)
+subfilter-unsupported.pdf
+  strict: [("Signature1", TotalFailed, Some(FormatFailure))]  defects [("Signature1", Some(UnsupportedSubFilter))]
+  dss:    [("Signature1", Indeterminate, Some(NoCertificateChainFound))]
+  switches whose removal alone changes the verdict: {"refuse_unsupported_sub_filters"}
+  opened under dss: true
+    catalog pades.md: `dss()` (`refuse_unsupported_sub_filters`) : la signature est vérifiée comme un CMS détaché, sans niveau ETSI, que DSS rend PDF-NOT-ETSI ; de même un /SubFilter absent ou qui n'est pas un nom (cas p03, p04, p04b du spike de s18)
+swa-wrapped.pdf
+  strict: [("Signature1", TotalFailed, Some(FormatFailure))]  defects [("Signature1", Some(GapNotContents))]
+  dss:    [("Signature1", TotalFailed, Some(FormatFailure))]
+  switches whose removal alone changes the verdict: {}
+  opened under dss: false
+    catalog pades.md: aucune
+usf-byterange-missing.pdf
+  strict: [("Signature1", TotalFailed, Some(FormatFailure))]  defects [("Signature1", Some(ByteRangeMalformed))]
+  dss:    []
+  switches whose removal alone changes the verdict: {"list_unusable_signatures"}
+  opened under dss: false
+    catalog pades.md: aucune ; `list_unusable_signatures` : le champ n'est pas listé
+usf-byterange-null.pdf
+  strict: [("Signature1", TotalFailed, Some(FormatFailure))]  defects [("Signature1", Some(ByteRangeMalformed))]
+  dss:    []
+  switches whose removal alone changes the verdict: {"list_unusable_signatures"}
+  opened under dss: false
+    catalog pades.md: aucune ; `list_unusable_signatures` : le champ n'est pas listé
+usf-byterange-short.pdf
+  strict: [("Signature1", TotalFailed, Some(FormatFailure))]  defects [("Signature1", Some(ByteRangeMalformed))]
+  dss:    []
+  switches whose removal alone changes the verdict: {"list_unusable_signatures"}
+  opened under dss: false
+    catalog pades.md: aucune ; `list_unusable_signatures` : le champ n'est pas listé
+usf-contents-empty.pdf
+  strict: [("Signature1", TotalFailed, Some(FormatFailure))]  defects [("Signature1", Some(ContentsMissing))]
+  dss:    []
+  switches whose removal alone changes the verdict: {"list_unusable_signatures"}
+  opened under dss: false
+    catalog pades.md: aucune ; `list_unusable_signatures` : le champ n'est pas listé
+usf-contents-missing.pdf
+  strict: [("Signature1", TotalFailed, Some(FormatFailure))]  defects [("Signature1", Some(ContentsMissing))]
+  dss:    []
+  switches whose removal alone changes the verdict: {"list_unusable_signatures"}
+  opened under dss: false
+    catalog pades.md: aucune ; `list_unusable_signatures` : le champ n'est pas listé
+usf-contents-null.pdf
+  strict: [("Signature1", TotalFailed, Some(FormatFailure))]  defects [("Signature1", Some(ContentsMissing))]
+  dss:    []
+  switches whose removal alone changes the verdict: {"list_unusable_signatures"}
+  opened under dss: false
+    catalog pades.md: aucune ; `list_unusable_signatures` : le champ n'est pas listé
+usf-contents-zeros.pdf
+  strict: [("Signature1", TotalFailed, Some(FormatFailure))]  defects [("Signature1", Some(ContentsNotDer))]
+  dss:    []
+  switches whose removal alone changes the verdict: {"list_unusable_signatures"}
+  opened under dss: false
+    catalog pades.md: aucune ; `list_unusable_signatures` : le champ n'est pas listé
+usf-v-direct.pdf
+  strict: [("Signature1", TotalFailed, Some(FormatFailure))]  defects [("Signature1", Some(NotASignatureDictionary))]
+  dss:    []
+  switches whose removal alone changes the verdict: {"list_unusable_signatures"}
+  opened under dss: false
+    catalog pades.md: aucune ; `list_unusable_signatures` : le champ n'est pas listé, comme DSS
+usf-v-stream.pdf
+  strict: [("Signature1", TotalFailed, Some(FormatFailure))]  defects [("Signature1", Some(NotASignatureDictionary))]
+  dss:    []
+  switches whose removal alone changes the verdict: {"list_unusable_signatures"}
+  opened under dss: false
+    catalog pades.md: aucune ; `list_unusable_signatures` : le champ n'est pas listé, comme DSS
+xref-misplaced-startxref.pdf
+  strict: Err(Pdf)  defects Err(Pdf(NotAnXrefSection { offset: 3957 }))
+  dss:    [("Signature1", TotalPassed, None)]
+  switches whose removal alone changes the verdict: {"refuse_misplaced_xref"}
+  opened under dss: true
+    catalog pades.md: `dss()` (`refuse_misplaced_xref`) : les blancs avant la section sont sautés, par ReadOptions::misplaced_xref de nacre-pdf, comme DSS lit le fichier ; un décalage qui ne tombe pas sur un blanc reste refusé
+SUMMARY files=51 isolation mismatches=0 opened mismatches=0 files with a defect-free signature under strict=2
+switches named by at least one catalogue cell of a corpus file: 9 of 11: {"judge_malformed_extensions", "judge_signer_key_usage", "judge_validity_before_revocation", "list_unusable_signatures", "refuse_later_revisions", "refuse_misplaced_xref", "refuse_sneaky_signatures", "refuse_trailing_data", "refuse_unsupported_sub_filters"}
+  pades.md mentions refuse_misplaced_xref: 1
+  pades.md mentions ignore_expired_certs_on_crl: 0
+  pades.md mentions ADR-0029: 2
+  cms.md mentions refuse_misplaced_xref: 0
+  cms.md mentions ignore_expired_certs_on_crl: 0
+  cms.md mentions ADR-0029: 0
+  revocation.md mentions refuse_misplaced_xref: 0
+  revocation.md mentions ignore_expired_certs_on_crl: 2
+  revocation.md mentions ADR-0029: 1
+## exit code: 0 (second run: 0)
+
+## The program, quoted whole: crates/qa-scen/Cargo.toml
+[package]
+name = "qa-scen"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+nacre-validate = { path = "../nacre-validate" }
+nacre-core = { path = "../nacre-core", features = ["test-signer"] }
+nacre-pades = { path = "../nacre-pades" }
+nacre-pdf = { path = "../nacre-pdf" }
+nacre-cms = { path = "../nacre-cms" }
+sha2 = "0.11"
+spki = "0.8"
+der = { version = "0.8", features = ["alloc", "oid", "pem"] }
+x509-cert = { version = "0.3", features = ["builder"] }
+p256 = { version = "0.14", features = ["ecdsa", "pkcs8", "pem"] }
+
+## crates/qa-scen/src/main.rs
+// QA scratch program for s45: calls the public interface of nacre-validate and nacre-pdf.
+// `forge` is the test bench's fictitious PKI, used here only to build input files.
+#![allow(clippy::all, dead_code, unused_imports, unused_variables)]
+#[path = "../../nacre-validate/tests/support/forge.rs"]
+mod forge;
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::time::SystemTime;
+
+use der::asn1::{BitString, GeneralizedTime, OctetString, UtcTime};
+use der::oid::ObjectIdentifier;
+use der::{DateTime, Decode, Encode};
+use forge::*;
+use nacre_core::{Indication, RevocationData, RevocationSource};
+use nacre_pades::Level;
+use nacre_pdf::{Document, ReadOptions};
+use nacre_validate::*;
+use p256::ecdsa::signature::hazmat::PrehashSigner;
+use p256::ecdsa::{DerSignature, SigningKey};
+use sha2::{Digest, Sha256};
+use x509_cert::Certificate;
+use x509_cert::crl::CertificateList;
+use x509_cert::ext::Extension;
+use x509_cert::time::Time;
+
+const VCORPUS: &str = "../nacre-validate/tests/corpus/";
+const HOSTILE: &str = "../nacre-pdf/tests/corpus/hostile/";
+const CATALOG: &str = "../../docs/security/attacks/";
+
+type R = Result<Vec<SignatureValidation>, Error>;
+
+fn show(label: &str, r: &R) {
+    match r {
+        Err(e) => println!("  [{label}] Err({e:?}) kind={:?} display=\"{e}\"", e.kind()),
+        Ok(v) => {
+            println!("  [{label}] signatures: {}", v.len());
+            for s in v {
+                println!(
+                    "    field={} indication={:?} sub={:?} defect={:?} digest={} sig={} chain={:?} bst={:?} level={:?}",
+                    s.field, s.report.indication(), s.report.sub_indication(), s.defect,
+                    s.digest_verified, s.signature_verified,
+                    s.chain.as_ref().map(|c| c.certificates.len()), s.best_signature_time, s.report.level()
+                );
+            }
+        }
+    }
+}
+fn read(path: &str) -> Vec<u8> { std::fs::read(path).unwrap_or_else(|e| panic!("{path}: {e}")) }
+fn d(c: &Certificate) -> Vec<u8> { c.to_der().unwrap() }
+fn without(name: &str) -> ValidationPolicy {
+    let mut p = ValidationPolicy::strict();
+    match name {
+        "refuse_later_revisions" => p.refuse_later_revisions = false,
+        "refuse_sneaky_signatures" => p.refuse_sneaky_signatures = false,
+        "refuse_trailing_data" => p.refuse_trailing_data = false,
+        "list_unusable_signatures" => p.list_unusable_signatures = false,
+        "judge_signer_key_usage" => p.judge_signer_key_usage = false,
+        "judge_validity_before_revocation" => p.judge_validity_before_revocation = false,
+        "judge_malformed_extensions" => p.judge_malformed_extensions = false,
+        "require_fresh_revocation" => p.require_fresh_revocation = false,
+        "refuse_unsupported_sub_filters" => p.refuse_unsupported_sub_filters = false,
+        "refuse_misplaced_xref" => p.refuse_misplaced_xref = false,
+        "ignore_expired_certs_on_crl" => p.ignore_expired_certs_on_crl = false,
+        _ => unreachable!(),
+    }
+    p
+}
+fn policies(switch: &'static str) -> Vec<(String, ValidationPolicy)> {
+    vec![("strict".into(), ValidationPolicy::strict()), ("dss".into(), ValidationPolicy::dss()), (format!("strict minus {switch}"), without(switch))]
+}
+fn esc(b: &[u8]) -> String { b.iter().map(|c| match c { b'\n' => "\\n".to_string(), b'\r' => "\\r".to_string(), 32..=126 => (*c as char).to_string(), _ => format!("\\x{c:02x}") }).collect() }
+
+// ---------- a fictitious PKI of this program (keys 0x71..0x76)
+struct Pki { root: Certificate, rk: SigningKey, int: Certificate, ik: SigningKey, signer: Certificate, sk: SigningKey, tsa: Certificate, tk: SigningKey }
+impl Pki {
+    fn new() -> Self {
+        let rk = key(&[0x71; 32]); let ik = key(&[0x72; 32]); let sk = key(&[0x73; 32]); let tk = key(&[0x74; 32]);
+        let root = issue(Role::Ca, "CN=QA45 root,O=QA,C=FR", 1, &rk, None, &rk);
+        let int = issue(Role::Ca, "CN=QA45 intermediate,O=QA,C=FR", 2, &ik, Some(&root), &rk);
+        let signer = issue(Role::Signer, "CN=QA45 signer,O=QA,C=FR", 3, &sk, Some(&int), &ik);
+        let tsa = issue(Role::Tsa, "CN=QA45 TSA,O=QA,C=FR", 4, &tk, Some(&int), &ik);
+        Self { root, rk, int, ik, signer, sk, tsa, tk }
+    }
+    fn chain(&self, leaf: &Certificate, cas: &[&Certificate]) -> ChainSigner {
+        let mut chain = vec![d(leaf)]; chain.extend(cas.iter().map(|c| d(c)));
+        ChainSigner { key: self.sk.clone(), chain }
+    }
+    fn tsa_with(&self, certs: Vec<Vec<u8>>) -> ForgedTsa { ForgedTsa { key: self.tk.clone(), certificates: certs, gen_time: DateTime::new(2026, 10, 22, 8, 0, 0).unwrap(), imprint: None } }
+    fn int_crl(&self, revoked: &[(&Certificate, Time)]) -> Vec<u8> { crl(&self.int, &self.ik, time(2026, 10, 22, 10, 0, 0), time(2026, 11, 22, 0, 0, 0), revoked) }
+    fn root_crl(&self) -> Vec<u8> { crl(&self.root, &self.rk, time(2026, 10, 22, 10, 0, 0), time(2026, 11, 22, 0, 0, 0), &[]) }
+    fn judge_root(root: &Certificate, pdf: &[u8], at: SystemTime, p: &ValidationPolicy) -> R {
+        let r = d(root); let anchors = TrustAnchors::from_certificates([r.as_slice()]).unwrap();
+        validate_with_policy(pdf, &anchors, at, None, p)
+    }
+    fn judge(&self, pdf: &[u8], at: SystemTime, p: &ValidationPolicy) -> R { Self::judge_root(&self.root, pdf, at, p) }
+    fn all(&self, title: &str, pdf: &[u8], at: SystemTime, switch: &'static str) {
+        println!("{title}");
+        for (l, p) in policies(switch) { show(&l, &self.judge(pdf, at, &p)); }
+    }
+}
+fn control() -> SystemTime { instant(2026, 10, 23, 0, 0, 0) }
+
+/// A CRL of `issuer` revoking nothing, with one CRL extension `oid` holding `value`, signed with `key`.
+fn crl_ext(issuer: &Certificate, key: &SigningKey, this_update: Time, value: Vec<u8>, critical: bool) -> Vec<u8> {
+    let der = crl(issuer, key, this_update, time(2026, 11, 22, 0, 0, 0), &[]);
+    let mut list: CertificateList = CertificateList::from_der(&der).unwrap();
+    list.tbs_cert_list.crl_extensions.get_or_insert_with(Vec::new).push(Extension {
+        extn_id: ObjectIdentifier::new_unwrap("2.5.29.60"), critical, extn_value: OctetString::new(value).unwrap() });
+    let tbs = list.tbs_cert_list.to_der().unwrap();
+    let sig: DerSignature = key.sign_prehash(&Sha256::digest(&tbs)).unwrap();
+    list.signature = BitString::from_bytes(sig.as_bytes()).unwrap();
+    list.to_der().unwrap()
+}
+
+/// Offset written after the last `startxref`, and where that number starts in the file.
+fn last_startxref(pdf: &[u8]) -> (usize, usize) {
+    let at = pdf.windows(9).rposition(|w| w == b"startxref").unwrap() + 9;
+    let start = at + pdf[at..].iter().position(|b| b.is_ascii_digit()).unwrap();
+    let end = start + pdf[start..].iter().position(|b| !b.is_ascii_digit()).unwrap();
+    (std::str::from_utf8(&pdf[start..end]).unwrap().parse().unwrap(), start)
+}
+fn set_startxref(pdf: &[u8], to: usize) -> Vec<u8> {
+    let (n, start) = last_startxref(pdf);
+    let (old, new) = (n.to_string(), to.to_string());
+    assert_eq!(old.len(), new.len());
+    let mut out = pdf.to_vec(); out[start..start + old.len()].copy_from_slice(new.as_bytes()); out
+}
+fn last_prev(pdf: &[u8]) -> (usize, usize) {
+    let at = pdf.windows(5).rposition(|w| w == b"/Prev").unwrap() + 5;
+    let start = at + pdf[at..].iter().position(|b| b.is_ascii_digit()).unwrap();
+    let end = start + pdf[start..].iter().position(|b| !b.is_ascii_digit()).unwrap();
+    (std::str::from_utf8(&pdf[start..end]).unwrap().parse().unwrap(), start)
+}
+fn set_prev(pdf: &[u8], to: usize) -> Vec<u8> {
+    let (n, start) = last_prev(pdf);
+    let (old, new) = (n.to_string(), to.to_string());
+    assert_eq!(old.len(), new.len());
+    let mut out = pdf.to_vec(); out[start..start + old.len()].copy_from_slice(new.as_bytes()); out
+}
+fn parse_both(label: &str, pdf: &[u8]) {
+    let mut o = ReadOptions::default(); o.misplaced_xref = true;
+    match Document::parse(pdf) { Ok(doc) => println!("  [nacre_pdf::Document::parse] Ok revisions={:?}", doc.revisions().iter().map(|r| (r.startxref, r.end)).collect::<Vec<_>>()), Err(e) => println!("  [nacre_pdf::Document::parse] Err({e:?})") }
+    match Document::parse_with_options(pdf, &o) { Ok(doc) => println!("  [nacre_pdf::Document::parse_with_options misplaced_xref] Ok revisions(startxref,end)={:?} signature_fields={}", doc.revisions().iter().map(|r| (r.startxref, r.end)).collect::<Vec<_>>(), doc.signature_fields().len()), Err(e) => println!("  [nacre_pdf::Document::parse_with_options misplaced_xref] Err({e:?})") }
+}
+
+// ---------- c1: refuse_misplaced_xref (AC1)
+fn c1() {
+    let h = read(&format!("{HOSTILE}startxref-off-by-one.pdf"));
+    let (n, _) = last_startxref(&h);
+    println!("nacre-pdf hostile corpus startxref-off-by-one.pdf: {} bytes, startxref {n}, bytes [{n}..{}] = \"{}\"", h.len(), n + 6, esc(&h[n..n + 6]));
+    parse_both("hostile", &h);
+    println!("  validate (default policy):"); show("validate", &validate(&h));
+    for (l, p) in policies("refuse_misplaced_xref") { show(&l, &validate_with_policy(&h, &TrustAnchors::default(), control(), None, &p)); }
+
+    let pki = Pki::new();
+    let signed = signed(&pki.chain(&pki.signer, &[&pki.int]), Level::B);
+    let dss = with_dss(&signed, &[], &[pki.int_crl(&[]), pki.root_crl()]);
+    let (n, _) = last_startxref(&dss);
+    println!("QA45 B-B signature + /DSS update (CRLs): last startxref {n}, bytes [{}..{}] = \"{}\"", n - 3, n + 4, esc(&dss[n - 3..n + 4]));
+    pki.all("  unpatched:", &dss, control(), "refuse_misplaced_xref");
+    let m = set_startxref(&dss, n - 1);
+    println!("QA45 same file, last startxref patched {n} -> {} (lands on \"{}\")", n - 1, esc(&dss[n - 1..n]));
+    parse_both("m", &m);
+    pki.all("  validation:", &m, control(), "refuse_misplaced_xref");
+
+    let c = read(&format!("{VCORPUS}attacks/xref-misplaced-startxref.pdf"));
+    let (n, _) = last_startxref(&c);
+    println!("corpus attacks/xref-misplaced-startxref.pdf: startxref {n} lands on \"{}\" before \"{}\"", esc(&c[n..n + 1]), esc(&c[n + 1..n + 5]));
+    parse_both("c", &c);
+    println!("  anchored on chain/root.der, 2026-10-22, no source:");
+    let root = Certificate::from_der(&read(&format!("{VCORPUS}chain/root.der"))).unwrap();
+    for (l, p) in policies("refuse_misplaced_xref") { show(&l, &Pki::judge_root(&root, &c, instant(2026, 10, 22, 0, 0, 0), &p)); }
+    println!("  validate (default policy):"); show("validate", &validate(&c));
+}
+fn c1e() {
+    let pki = Pki::new();
+    let signed = signed(&pki.chain(&pki.signer, &[&pki.int]), Level::B);
+    let crls = [pki.int_crl(&[]), pki.root_crl()];
+    let dss = with_dss(&signed, &[], &crls);
+    let (n, _) = last_startxref(&dss);
+    for (label, to) in [("one byte after (inside the keyword `xref`)", n + 1), ("two bytes before", n - 2), ("five bytes before", n - 5)] {
+        let m = set_startxref(&dss, to);
+        println!("QA45 B-B + /DSS, last startxref {n} -> {to}, {label}, byte there \"{}\"", esc(&dss[to..to + 1]));
+        parse_both("", &m);
+        pki.all("  validation:", &m, control(), "refuse_misplaced_xref");
+    }
+    let mut far = dss.clone();
+    let (_, start) = last_startxref(&far); let digits = n.to_string().len();
+    far[start..start + digits].copy_from_slice("9".repeat(digits).as_bytes());
+    println!("QA45 B-B + /DSS, last startxref -> {} (past the end of the file, {} bytes)", "9".repeat(digits), far.len());
+    parse_both("", &far);
+    pki.all("  validation:", &far, control(), "refuse_misplaced_xref");
+
+    let three = with_dss(&dss, &[], &crls);
+    let (p, _) = last_prev(&three);
+    println!("QA45 B-B + two /DSS updates: last trailer /Prev {p}, bytes [{}..{}] = \"{}\"", p - 2, p + 4, esc(&three[p - 2..p + 4]));
+    let m = set_prev(&three, p - 1);
+    println!("  /Prev patched {p} -> {} (lands on \"{}\")", p - 1, esc(&three[p - 1..p]));
+    parse_both("", &m);
+    pki.all("  validation:", &m, control(), "refuse_misplaced_xref");
+    let m = set_prev(&three, p + 1);
+    println!("  /Prev patched {p} -> {} (lands on \"{}\")", p + 1, esc(&three[p + 1..p + 2]));
+    parse_both("", &m);
+    pki.all("  validation:", &m, control(), "refuse_misplaced_xref");
+    println!("empty input / not a PDF:");
+    for (l, p) in policies("refuse_misplaced_xref") { show(&format!("{l} empty"), &validate_with_policy(b"", &TrustAnchors::default(), control(), None, &p)); show(&format!("{l} not a PDF"), &validate_with_policy(b"startxref\n0\n%%EOF\n", &TrustAnchors::default(), control(), None, &p)); }
+}
+
+// ---------- c2: missing or non-name /SubFilter (AC2)
+fn c2() {
+    let pki = Pki::new();
+    let chain = pki.chain(&pki.signer, &[&pki.int]);
+    let base = custom_signed(&chain, b"ETSI.CAdES.detached", Some(b"D:20261022080000Z"));
+    let crls = [pki.int_crl(&[]), pki.root_crl()];
+    pki.all("QA45 custom signature, /SubFilter /ETSI.CAdES.detached, /M, CRLs in /DSS (baseline)", &with_dss(&base, &[], &crls), control(), "refuse_unsupported_sub_filters");
+    for (label, to) in [("/SubFilter removed", &b""[..]), ("/SubFilter 7 (an integer)", b"/SubFilter 7"), ("/SubFilter (ETSI.CAdES) (a string)", b"/SubFilter (ETSI.CAdES)"), ("/SubFilter [/ETSI.CAdES] (an array)", b"/SubFilter [/ETSI.CAdES]"), ("/SubFilter null", b"/SubFilter null")] {
+        let f = with_dss(&resign(&patch(&base, b"/SubFilter /ETSI.CAdES.detached", to), &chain), &[], &crls);
+        pki.all(&format!("QA45 custom signature, {label}, re-signed, CRLs in /DSS"), &f, control(), "refuse_unsupported_sub_filters");
+    }
+}
+fn c2e() {
+    let pki = Pki::new();
+    let chain = pki.chain(&pki.signer, &[&pki.int]);
+    let base = custom_signed(&chain, b"ETSI.CAdES.detached", Some(b"D:20261022080000Z"));
+    let crls = [pki.int_crl(&[]), pki.root_crl()];
+    let f = with_dss(&patch(&base, b"/SubFilter /ETSI.CAdES.detached", b""), &[], &crls);
+    pki.all("QA45 /SubFilter removed, NOT re-signed (signed bytes changed)", &f, control(), "refuse_unsupported_sub_filters");
+    let other = ChainSigner { key: key(&[0x76; 32]), chain: chain.chain.clone() };
+    let f = with_dss(&resign(&patch(&base, b"/SubFilter /ETSI.CAdES.detached", b""), &other), &[], &crls);
+    pki.all("QA45 /SubFilter removed, re-signed with a key that is not the certificate's", &f, control(), "refuse_unsupported_sub_filters");
+    let f = with_dss(&resign(&patch(&base, b"/SubFilter /ETSI.CAdES.detached", b""), &chain), &[], &crls);
+    println!("QA45 /SubFilter removed, re-signed, no anchor");
+    for (l, p) in policies("refuse_unsupported_sub_filters") { show(&l, &validate_with_policy(&f, &TrustAnchors::default(), control(), None, &p)); }
+    let f = with_dss(&resign(&patch(&base, b"/SubFilter /ETSI.CAdES.detached", b"/SubFilter /ETSI.RFC3161"), &chain), &[], &crls);
+    pki.all("QA45 /SubFilter /ETSI.RFC3161 over a signature CMS", &f, control(), "refuse_unsupported_sub_filters");
+}
+
+// ---------- c3: ignore_expired_certs_on_crl (AC3)
+fn c3() {
+    let pki = Pki::new();
+    let (nb, na) = (time(2026, 1, 1, 0, 0, 0), time(2026, 10, 22, 9, 0, 0));
+    let signer = issue_valid(Role::Signer, "CN=QA45 expiring signer,O=QA,C=FR", 5, &pki.sk, Some(&pki.int), &pki.ik, nb, na);
+    let chain = pki.chain(&signer, &[&pki.int]);
+    let stamped = signed(&chain, Level::T { tsa: &pki.tsa_with(vec![d(&pki.tsa)]) });
+    let basic = signed(&chain, Level::B);
+    println!("Signer notAfter 2026-10-22T09:00Z; B-T stamped 08:00Z; control date 2026-10-23T00:00Z; /DSS: intermediate CRL + root CRL of 10:00Z");
+    let ecoc = |from: Time| crl_with_expired_certs_on_crl(&pki.int, &pki.ik, time(2026, 10, 22, 10, 0, 0), time(2026, 11, 22, 0, 0, 0), from);
+    let cases: Vec<(&str, Vec<u8>)> = vec![
+        ("intermediate CRL 10:00, expiredCertsOnCRL 2026-01-01T00:00Z", ecoc(time(2026, 1, 1, 0, 0, 0))),
+        ("intermediate CRL 10:00, expiredCertsOnCRL 2026-10-22T09:00:00Z (= notAfter)", ecoc(time(2026, 10, 22, 9, 0, 0))),
+        ("intermediate CRL 10:00, expiredCertsOnCRL 2026-10-22T09:00:01Z (one second after notAfter)", ecoc(time(2026, 10, 22, 9, 0, 1))),
+        ("intermediate CRL 10:00, no expiredCertsOnCRL", pki.int_crl(&[])),
+        ("intermediate CRL 08:30 (before notAfter), no expiredCertsOnCRL", crl(&pki.int, &pki.ik, time(2026, 10, 22, 8, 30, 0), time(2026, 11, 22, 0, 0, 0), &[])),
+    ];
+    for (label, c) in &cases {
+        pki.all(&format!("B-T, {label}"), &with_dss(&stamped, &[], &[c.clone(), pki.root_crl()]), control(), "ignore_expired_certs_on_crl");
+    }
+    pki.all("B-B (no stamp), intermediate CRL 10:00, expiredCertsOnCRL 2026-01-01", &with_dss(&basic, &[], &[cases[0].1.clone(), pki.root_crl()]), control(), "ignore_expired_certs_on_crl");
+}
+fn c3e() {
+    let pki = Pki::new();
+    let signer = issue_valid(Role::Signer, "CN=QA45 expiring signer,O=QA,C=FR", 5, &pki.sk, Some(&pki.int), &pki.ik, time(2026, 1, 1, 0, 0, 0), time(2026, 10, 22, 9, 0, 0));
+    let stamped = signed(&pki.chain(&signer, &[&pki.int]), Level::T { tsa: &pki.tsa_with(vec![d(&pki.tsa)]) });
+    let ten = time(2026, 10, 22, 10, 0, 0);
+    let gt = GeneralizedTime::from_system_time(instant(2026, 1, 1, 0, 0, 0)).unwrap().to_der().unwrap();
+    let ut = UtcTime::from_system_time(instant(2026, 1, 1, 0, 0, 0)).unwrap().to_der().unwrap();
+    let cases: Vec<(&str, Vec<u8>)> = vec![
+        ("expiredCertsOnCRL value is garbage bytes", crl_ext(&pki.int, &pki.ik, ten, vec![0xde, 0xad, 0xbe, 0xef], false)),
+        ("expiredCertsOnCRL value is an empty OCTET STRING content", crl_ext(&pki.int, &pki.ik, ten, vec![], false)),
+        ("expiredCertsOnCRL as a UTCTime 2026-01-01 instead of GeneralizedTime", crl_ext(&pki.int, &pki.ik, ten, ut, false)),
+        ("expiredCertsOnCRL GeneralizedTime 2026-01-01, CRL signed by the root key (bad signature)", crl_ext(&pki.int, &pki.rk, ten, gt.clone(), false)),
+        ("expiredCertsOnCRL GeneralizedTime 2026-01-01, extension marked critical", crl_ext(&pki.int, &pki.ik, ten, gt.clone(), true)),
+    ];
+    for (label, c) in &cases {
+        pki.all(&format!("B-T, signer notAfter 09:00, {label}"), &with_dss(&stamped, &[], &[c.clone(), pki.root_crl()]), control(), "ignore_expired_certs_on_crl");
+    }
+}
+
+// ---------- c4: revocation data from a CA out of its validity (AC4)
+fn c4() {
+    let pki = Pki::new();
+    let ck = key(&[0x75; 32]);
+    let ca = issue_valid(Role::Ca, "CN=QA45 short-lived CA,O=QA,C=FR", 6, &ck, Some(&pki.root), &pki.rk, time(2026, 1, 1, 0, 0, 0), time(2026, 10, 22, 12, 0, 0));
+    let signer = issue(Role::Signer, "CN=QA45 short-lived CA signer,O=QA,C=FR", 7, &pki.sk, Some(&ca), &ck);
+    let chain = pki.chain(&signer, &[&ca]);
+    let tsa = pki.tsa_with(vec![d(&pki.tsa), d(&pki.int)]);
+    let ten = time(2026, 10, 22, 10, 0, 0); let month = time(2026, 11, 22, 0, 0, 0);
+    let crls = vec![crl(&ca, &ck, ten, month, &[]), pki.root_crl(), pki.int_crl(&[])];
+    let bt = with_dss(&signed(&chain, Level::T { tsa: &tsa }), &[], &crls);
+    let bb = with_dss(&signed(&chain, Level::B), &[], &crls);
+    println!("CA (under the root) valid 2026-01-01 .. 2026-10-22T12:00Z; signer under it valid to 2036; /DSS: CA CRL, root CRL, intermediate CRL (TSA path), all 10:00Z");
+    for (at_l, at) in [("2026-10-23T00:00Z (CA expired)", control()), ("2026-10-22T11:00Z (CA valid)", instant(2026, 10, 22, 11, 0, 0)), ("2026-10-22T12:00:00Z (= CA notAfter)", instant(2026, 10, 22, 12, 0, 0)), ("2026-10-22T12:00:01Z (one second after)", instant(2026, 10, 22, 12, 0, 1))] {
+        pki.all(&format!("B-T stamped 08:00, control date {at_l}"), &bt, at, "judge_validity_before_revocation");
+        pki.all(&format!("B-B (no stamp), control date {at_l}"), &bb, at, "judge_validity_before_revocation");
+    }
+}
+fn c4e() {
+    let pki = Pki::new();
+    let ck = key(&[0x75; 32]);
+    let ca = issue_valid(Role::Ca, "CN=QA45 short-lived CA,O=QA,C=FR", 6, &ck, Some(&pki.root), &pki.rk, time(2026, 1, 1, 0, 0, 0), time(2026, 10, 22, 12, 0, 0));
+    let signer = issue(Role::Signer, "CN=QA45 short-lived CA signer,O=QA,C=FR", 7, &pki.sk, Some(&ca), &ck);
+    let chain = pki.chain(&signer, &[&ca]);
+    let tsa = pki.tsa_with(vec![d(&pki.tsa), d(&pki.int)]);
+    let ten = time(2026, 10, 22, 10, 0, 0); let thirteen = time(2026, 10, 22, 13, 0, 0); let month = time(2026, 11, 22, 0, 0, 0);
+    let bt = signed(&chain, Level::T { tsa: &tsa });
+    let cases: Vec<(&str, Vec<Vec<u8>>)> = vec![
+        ("root CRL of 13:00 (after the CA's notAfter)", vec![crl(&ca, &ck, ten, month, &[]), crl(&pki.root, &pki.rk, thirteen, month, &[]), pki.int_crl(&[])]),
+        ("CA's own CRL of 13:00 (issued after it expired)", vec![crl(&ca, &ck, thirteen, month, &[]), pki.root_crl(), pki.int_crl(&[])]),
+        ("no CA CRL at all", vec![pki.root_crl(), pki.int_crl(&[])]),
+        ("CA CRL of 10:00 revoking the signer at 07:00", vec![crl(&ca, &ck, ten, month, &[(&signer, time(2026, 10, 22, 7, 0, 0))]), pki.root_crl(), pki.int_crl(&[])]),
+    ];
+    for (label, crls) in cases {
+        pki.all(&format!("B-T stamped 08:00, CA expired at 12:00, control 2026-10-23, {label}"), &with_dss(&bt, &[], &crls), control(), "judge_validity_before_revocation");
+    }
+}
+
+// ---------- c5: CA without subjectKeyIdentifier (AC5)
+fn has_ski(c: &Certificate) -> bool { c.tbs_certificate().extensions().map_or(false, |e| e.iter().any(|x| x.extn_id == ObjectIdentifier::new_unwrap("2.5.29.14"))) }
+fn c5() {
+    let pki = Pki::new();
+    let noski = issue_with(Role::Ca, "CN=QA45 intermediate,O=QA,C=FR", 8, &pki.ik, Some(&pki.root), &pki.rk, (time(2026, 1, 1, 0, 0, 0), time(2036, 1, 1, 0, 0, 0)), Extensions::WithoutKeyIdentifier);
+    println!("SKI present: QA45 intermediate={} QA45 SKI-less intermediate={} QA45 root={}", has_ski(&pki.int), has_ski(&noski), has_ski(&pki.root));
+    let tsa = pki.tsa_with(vec![d(&pki.tsa)]);
+    let crls = |rev: &[(&Certificate, Time)]| vec![crl(&noski, &pki.ik, time(2026, 10, 22, 10, 0, 0), time(2026, 11, 22, 0, 0, 0), rev), pki.root_crl()];
+    let good = pki.chain(&pki.signer, &[&pki.int]);
+    let bad = pki.chain(&pki.signer, &[&noski]);
+    pki.all("baseline: B-T under the intermediate with SKI", &with_dss(&signed(&good, Level::T { tsa: &tsa }), &[], &[pki.int_crl(&[]), pki.root_crl()]), control(), "judge_validity_before_revocation");
+    pki.all("B-T under the SKI-less intermediate, CRLs", &with_dss(&signed(&bad, Level::T { tsa: &tsa }), &[], &crls(&[])), control(), "judge_validity_before_revocation");
+    pki.all("B-B under the SKI-less intermediate, CRLs", &with_dss(&signed(&bad, Level::B), &[], &crls(&[])), control(), "judge_validity_before_revocation");
+    pki.all("B-T under the SKI-less intermediate, signer revoked 07:00", &with_dss(&signed(&bad, Level::T { tsa: &tsa }), &[], &crls(&[(&pki.signer, time(2026, 10, 22, 7, 0, 0))])), control(), "judge_validity_before_revocation");
+    pki.all("custom signature with no /M under the SKI-less intermediate, CRLs", &with_dss(&custom_signed(&bad, b"ETSI.CAdES.detached", None), &[], &crls(&[])), control(), "judge_validity_before_revocation");
+    println!("corpus chain/: subjectKeyIdentifier on its certificates");
+    for f in ["root.der", "intermediate.der", "impostor-root.der"] {
+        let c = Certificate::from_der(&read(&format!("{VCORPUS}chain/{f}"))).unwrap();
+        let ca = c.tbs_certificate().extensions().map_or(false, |e| e.iter().any(|x| x.extn_id == ObjectIdentifier::new_unwrap("2.5.29.19")));
+        println!("  chain/{f}: subject={} SKI={}", c.tbs_certificate().subject(), has_ski(&c));
+    }
+}
+fn c5e() {
+    let pki = Pki::new();
+    let noski_root = issue_with(Role::Ca, "CN=QA45 root,O=QA,C=FR", 1, &pki.rk, None, &pki.rk, (time(2026, 1, 1, 0, 0, 0), time(2036, 1, 1, 0, 0, 0)), Extensions::WithoutKeyIdentifier);
+    let tsa = pki.tsa_with(vec![d(&pki.tsa)]);
+    let pdf = with_dss(&signed(&pki.chain(&pki.signer, &[&pki.int]), Level::T { tsa: &tsa }), &[], &[pki.int_crl(&[]), pki.root_crl()]);
+    println!("Anchor without SKI (same name and key as the QA45 root), intermediate with SKI, B-T, CRLs");
+    for (l, p) in policies("judge_validity_before_revocation") { show(&l, &Pki::judge_root(&noski_root, &pdf, control(), &p)); }
+    // root -> int (SKI) -> sub (with or without SKI) -> signer
+    let subk = key(&[0x77; 32]);
+    let ten = time(2026, 10, 22, 10, 0, 0); let month = time(2026, 11, 22, 0, 0, 0); let span = (time(2026, 1, 1, 0, 0, 0), time(2036, 1, 1, 0, 0, 0));
+    for (label, sub_ext, int_ext) in [("root -> intermediate (SKI) -> sub-CA without SKI -> signer", Extensions::WithoutKeyIdentifier, Extensions::Usual), ("root -> intermediate without SKI -> sub-CA (SKI) -> signer", Extensions::Usual, Extensions::WithoutKeyIdentifier)] {
+        let int = issue_with(Role::Ca, "CN=QA45 intermediate,O=QA,C=FR", 2, &pki.ik, Some(&pki.root), &pki.rk, span, int_ext);
+        let sub = issue_with(Role::Ca, "CN=QA45 sub-CA,O=QA,C=FR", 9, &subk, Some(&int), &pki.ik, span, sub_ext);
+        let signer = issue(Role::Signer, "CN=QA45 deep signer,O=QA,C=FR", 10, &pki.sk, Some(&sub), &subk);
+        let pdf = with_dss(&signed(&pki.chain(&signer, &[&sub, &int]), Level::B), &[], &[crl(&sub, &subk, ten, month, &[]), crl(&int, &pki.ik, ten, month, &[]), pki.root_crl()]);
+        pki.all(&format!("B-B, {label}, CRLs of sub-CA, intermediate, root"), &pdf, control(), "judge_validity_before_revocation");
+    }
+}
+
+// ---------- c6: eleven switches over the attack corpus and the catalogue (AC6)
+const SWITCHES: [&str; 11] = ["refuse_later_revisions", "refuse_sneaky_signatures", "refuse_trailing_data", "list_unusable_signatures",
+    "judge_signer_key_usage", "judge_validity_before_revocation", "judge_malformed_extensions", "require_fresh_revocation", "refuse_unsupported_sub_filters",
+    "refuse_misplaced_xref", "ignore_expired_certs_on_crl"];
+struct Stub { int: Vec<u8>, int_crl: Vec<u8>, root_crl: Vec<u8> }
+impl RevocationSource for Stub {
+    fn revocation(&self, _c: &[u8], issuer: &[u8]) -> Result<RevocationData, nacre_core::Error> {
+        Ok(RevocationData::Crl(if issuer == self.int { self.int_crl.clone() } else { self.root_crl.clone() }))
+    }
+}
+fn verdict(r: &R) -> String {
+    match r {
+        Err(e) => { let s = format!("{e:?}"); format!("Err({})", s.split(|c: char| !c.is_alphanumeric()).next().unwrap()) }
+        Ok(v) => format!("{:?}", v.iter().map(|s| (s.field.clone(), s.report.indication(), s.report.sub_indication())).collect::<Vec<_>>()),
+    }
+}
+fn detail(r: &R) -> String { match r { Err(e) => format!("Err({e:?})"), Ok(v) => format!("{:?}", v.iter().map(|s| (&s.field, &s.defect)).collect::<Vec<_>>()) } }
+fn catalog(names: &BTreeSet<String>) -> BTreeMap<String, Vec<String>> {
+    let mut cells: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for doc in ["pades.md", "cms.md", "revocation.md", "tsp.md"] {
+        let Ok(text) = std::fs::read_to_string(format!("{CATALOG}{doc}")) else { continue };
+        for line in text.lines().filter(|l| l.starts_with('|')) {
+            let parts: Vec<&str> = line.trim().trim_matches('|').split('|').map(str::trim).collect();
+            let Some(case) = parts.iter().find(|c| names.contains(c.trim_matches('`'))) else { continue };
+            cells.entry(case.trim_matches('`').to_string()).or_default().push(format!("{doc}: {}", parts.last().unwrap()));
+        }
+    }
+    cells
+}
+fn ticks(cell: &str) -> Vec<String> { cell.split('`').skip(1).step_by(2).map(String::from).collect() }
+fn c6(error: bool) {
+    let chain_int = read(&format!("{VCORPUS}chain/intermediate.der"));
+    let chain_root = read(&format!("{VCORPUS}chain/root.der"));
+    let anchors = TrustAnchors::from_certificates([chain_root.as_slice()]).unwrap();
+    let int_c = Certificate::from_der(&chain_int).unwrap(); let root_c = Certificate::from_der(&chain_root).unwrap();
+    let t = time(2026, 10, 21, 12, 0, 0);
+    let stub = Stub { int: chain_int.clone(), int_crl: crl(&int_c, &key(&[0x32; 32]), t, time(2026, 12, 1, 0, 0, 0), &[]), root_crl: crl(&root_c, &key(&[0x31; 32]), t, time(2026, 12, 1, 0, 0, 0), &[]) };
+    let at = instant(2026, 10, 22, 0, 0, 0);
+    let run = |pdf: &[u8], p: &ValidationPolicy| validate_with_policy(pdf, &anchors, at, Some(&stub), p);
+    println!("Anchor chain/root.der, control date 2026-10-22T00:00Z, RevocationSource answering \"not revoked\" CRLs of the chain intermediate and root issued 2026-10-21T12:00Z (forged here with the corpus keys [0x32;32], [0x31;32] named in examples/forge_chain_attacks.rs)");
+    if error {
+        let mut inputs: Vec<(String, Vec<u8>)> = vec![("chain/chain-dss.pdf".into(), read(&format!("{VCORPUS}chain/chain-dss.pdf"))), ("unsigned.pdf".into(), read(&format!("{VCORPUS}unsigned.pdf"))), ("empty input".into(), vec![]), ("not a PDF".into(), b"hello".to_vec())];
+        let a = read(&format!("{VCORPUS}attacks/xref-misplaced-startxref.pdf")); inputs.push(("attacks/xref-misplaced-startxref.pdf truncated to half".into(), a[..a.len() / 2].to_vec()));
+        for (n, pdf) in inputs {
+            let s = run(&pdf, &ValidationPolicy::strict());
+            println!("{n}: strict {}  detail {}", verdict(&s), detail(&s));
+            println!("  dss {}", verdict(&run(&pdf, &ValidationPolicy::dss())));
+            let changed: Vec<&str> = SWITCHES.iter().copied().filter(|sw| verdict(&run(&pdf, &without(sw))) != verdict(&s)).collect();
+            println!("  switches whose removal alone changes the verdict: {changed:?}");
+        }
+        return;
+    }
+    let mut files: Vec<String> = std::fs::read_dir(format!("{VCORPUS}attacks")).unwrap().map(|e| e.unwrap().file_name().into_string().unwrap()).filter(|n| n.ends_with(".pdf")).collect();
+    files.sort();
+    let names: BTreeSet<String> = files.iter().cloned().collect();
+    let cat = catalog(&names);
+    let (mut m6, mut m7, mut clean) = (0, 0, 0);
+    for f in &files {
+        let pdf = read(&format!("{VCORPUS}attacks/{f}"));
+        let s = run(&pdf, &ValidationPolicy::strict());
+        let dv = run(&pdf, &ValidationPolicy::dss());
+        let changed: BTreeSet<String> = SWITCHES.iter().filter(|sw| verdict(&run(&pdf, &without(sw))) != verdict(&s)).map(|s| s.to_string()).collect();
+        let opened = verdict(&dv) != verdict(&s) && matches!(&dv, Ok(v) if v.iter().any(|x| x.defect.is_none()));
+        let strict_clean = matches!(&s, Ok(v) if v.iter().any(|x| x.defect.is_none()));
+        let cells = cat.get(f).cloned().unwrap_or_default();
+        println!("{f}\n  strict: {}  defects {}\n  dss:    {}\n  switches whose removal alone changes the verdict: {changed:?}\n  opened under dss: {opened}", verdict(&s), detail(&s), verdict(&dv));
+        for c in &cells { println!("    catalog {c}"); }
+        let named: BTreeSet<String> = cells.iter().flat_map(|c| ticks(c.split_once(": ").unwrap().1)).filter(|n| SWITCHES.contains(&n.as_str())).collect();
+        let starts = cells.iter().any(|c| c.split_once(": ").unwrap().1.starts_with("`dss()`"));
+        if cells.len() != 1 || named != changed { m6 += 1; println!("  MISMATCH isolation: catalog names {named:?}, observed {changed:?}, rows {}", cells.len()); }
+        if starts != opened { m7 += 1; println!("  MISMATCH opened: catalog {starts}, observed {opened}"); }
+        if strict_clean { clean += 1; println!("  a signature without defect under strict"); }
+    }
+    let used: BTreeSet<String> = cat.values().flatten().flat_map(|c| ticks(c.split_once(": ").unwrap().1)).filter(|n| SWITCHES.contains(&n.as_str())).collect();
+    println!("SUMMARY files={} isolation mismatches={m6} opened mismatches={m7} files with a defect-free signature under strict={clean}", files.len());
+    println!("switches named by at least one catalogue cell of a corpus file: {} of 11: {used:?}", used.len());
+    for doc in ["pades.md", "cms.md", "revocation.md"] {
+        let text = std::fs::read_to_string(format!("{CATALOG}{doc}")).unwrap();
+        for sw in ["refuse_misplaced_xref", "ignore_expired_certs_on_crl", "ADR-0029"] { println!("  {doc} mentions {sw}: {}", text.matches(sw).count()); }
+    }
+}
+
+fn main() {
+    match std::env::args().nth(1).as_deref() {
+        Some("c1") => c1(), Some("c1e") => c1e(), Some("c2") => c2(), Some("c2e") => c2e(),
+        Some("c3") => c3(), Some("c3e") => c3e(), Some("c4") => c4(), Some("c4e") => c4e(),
+        Some("c5") => c5(), Some("c5e") => c5e(), Some("c6") => c6(false), Some("c6e") => c6(true),
+        _ => eprintln!("usage: qa-scen c1|c1e|c2|c2e|c3|c3e|c4|c4e|c5|c5e|c6|c6e"),
+    }
+}

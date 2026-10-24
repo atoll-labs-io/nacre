@@ -5,7 +5,7 @@
 use std::str::FromStr;
 use std::time::SystemTime;
 
-use der::asn1::{GeneralizedTime, OctetString};
+use der::asn1::{BitString, GeneralizedTime, OctetString};
 use der::flagset::FlagSet;
 use der::oid::ObjectIdentifier;
 use der::{Any, DateTime, Decode, Encode, Header, Length, Tag};
@@ -24,9 +24,10 @@ use x509_cert::Certificate;
 use x509_cert::builder::profile::BuilderProfile;
 use x509_cert::builder::{Builder, CertificateBuilder, CrlBuilder};
 use x509_cert::certificate::TbsCertificate;
-use x509_cert::crl::RevokedCert;
+use x509_cert::crl::{CertificateList, RevokedCert};
 use x509_cert::ext::pkix::{
     BasicConstraints, CrlNumber, CrlReason, ExtendedKeyUsage, KeyUsage, KeyUsages,
+    SubjectKeyIdentifier,
 };
 use x509_cert::ext::{Extension, ToExtension};
 use x509_cert::name::Name;
@@ -37,6 +38,7 @@ use x509_cert::time::{Time, Validity};
 pub const UNSIGNED: &[u8] = include_bytes!("../corpus/unsigned.pdf");
 
 const TIME_STAMPING: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.3.6.1.5.5.7.3.8");
+const EXPIRED_CERTS_ON_CRL: ObjectIdentifier = ObjectIdentifier::new_unwrap("2.5.29.60");
 const EXTENDED_KEY_USAGE: ObjectIdentifier = ObjectIdentifier::new_unwrap("2.5.29.37");
 const ECDSA_WITH_SHA256: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.840.10045.4.3.2");
 const SHA256: ObjectIdentifier = ObjectIdentifier::new_unwrap("2.16.840.1.101.3.4.2.1");
@@ -76,6 +78,8 @@ pub enum Extensions {
     KeyUsage(FlagSet<KeyUsages>),
     /// The role's extensions, its `keyUsage` given twice.
     RepeatedKeyUsage,
+    /// The role's extensions, a CA's `subjectKeyIdentifier` left out.
+    WithoutKeyIdentifier,
 }
 
 struct Profile {
@@ -96,7 +100,7 @@ impl BuilderProfile for Profile {
 
     fn build_extensions(
         &self,
-        _spk: SubjectPublicKeyInfoRef<'_>,
+        spk: SubjectPublicKeyInfoRef<'_>,
         _issuer_spk: SubjectPublicKeyInfoRef<'_>,
         tbs: &TbsCertificate,
     ) -> x509_cert::builder::Result<Vec<Extension>> {
@@ -117,6 +121,13 @@ impl BuilderProfile for Profile {
         let mut extensions = vec![basic_constraints, key_usage.clone()];
         if self.extensions == Extensions::RepeatedKeyUsage {
             extensions.push(key_usage);
+        }
+        if ca && self.extensions != Extensions::WithoutKeyIdentifier {
+            let digest = Sha256::digest(spk.subject_public_key.raw_bytes());
+            extensions.push(
+                SubjectKeyIdentifier(OctetString::new(&digest[..20])?)
+                    .to_extension(tbs.subject(), &extensions)?,
+            );
         }
         if self.role == Role::Tsa {
             extensions.push(Extension {
@@ -250,6 +261,33 @@ pub fn crl_with_reasons(
         .unwrap()
         .to_der()
         .unwrap()
+}
+
+/// A CRL of `issuer` revoking nothing, signed with `key`, whose `expiredCertsOnCRL`
+/// extension (RFC 5280, 5.2.7, not critical) says it keeps entries for certificates expired
+/// since `from`.
+pub fn crl_with_expired_certs_on_crl(
+    issuer: &Certificate,
+    key: &SigningKey,
+    this_update: Time,
+    next_update: Time,
+    from: Time,
+) -> Vec<u8> {
+    let der = crl(issuer, key, this_update, next_update, &[]);
+    let mut list: CertificateList = CertificateList::from_der(&der).unwrap();
+    let from = GeneralizedTime::from_system_time(from.to_system_time()).unwrap();
+    list.tbs_cert_list
+        .crl_extensions
+        .get_or_insert_with(Vec::new)
+        .push(Extension {
+            extn_id: EXPIRED_CERTS_ON_CRL,
+            critical: false,
+            extn_value: OctetString::new(from.to_der().unwrap()).unwrap(),
+        });
+    let tbs = list.tbs_cert_list.to_der().unwrap();
+    let signature: DerSignature = key.sign_prehash(&Sha256::digest(&tbs)).unwrap();
+    list.signature = BitString::from_bytes(signature.as_bytes()).unwrap();
+    list.to_der().unwrap()
 }
 
 /// A P-256 signer holding `chain`, signer first.
@@ -433,6 +471,36 @@ pub fn patch(pdf: &[u8], from: &[u8], to: &[u8]) -> Vec<u8> {
     let mut replacement = to.to_vec();
     replacement.resize(from.len(), b' ');
     out[at..at + from.len()].copy_from_slice(&replacement);
+    out
+}
+
+/// `pdf`, whose last `/ByteRange` covers bytes patched since it was signed, signed again by
+/// `signer` over those bytes, its new CMS written in the same `/Contents` slot.
+pub fn resign(pdf: &[u8], signer: &dyn Signer) -> Vec<u8> {
+    let at = pdf
+        .windows(b"/ByteRange".len())
+        .rposition(|window| window == b"/ByteRange")
+        .unwrap();
+    let open = at + pdf[at..].iter().position(|b| *b == b'[').unwrap();
+    let close = open + pdf[open..].iter().position(|b| *b == b']').unwrap();
+    let range: Vec<usize> = std::str::from_utf8(&pdf[open + 1..close])
+        .unwrap()
+        .split_whitespace()
+        .map(|n| n.parse().unwrap())
+        .collect();
+    let [_, b, c, d] = range[..] else {
+        panic!("not a four-number /ByteRange");
+    };
+    let mut hasher = Sha256::new();
+    hasher.update(&pdf[..b]);
+    hasher.update(&pdf[c..c + d]);
+    let cms = sign_detached(&hasher.finalize(), signer, &nacre_cms::Profile::PADES, None).unwrap();
+    let hexed: String = cms.iter().map(|byte| format!("{byte:02X}")).collect();
+    let mut out = pdf.to_vec();
+    let slot = &mut out[b + 1..c - 1];
+    assert!(hexed.len() <= slot.len());
+    slot.fill(b'0');
+    slot[..hexed.len()].copy_from_slice(hexed.as_bytes());
     out
 }
 

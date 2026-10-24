@@ -7,7 +7,9 @@
 //! (FlateDecode with PNG predictors), object streams and hybrid files.
 //!
 //! The reader is strict: an input it cannot read exactly as written is refused with an
-//! [`Error`] naming the defect, never repaired. Every count, length and depth read from
+//! [`Error`] naming the defect, never repaired. One tolerance exists, opt-in through
+//! [`ReadOptions::misplaced_xref`] and off in [`Document::parse`]: a cross-reference
+//! section whose stated offset lands on whitespace before it. Every count, length and depth read from
 //! the input is bounded, so hostile input fails in bounded time and memory.
 //!
 //! It also appends one incremental revision through [`Document::update`]: new objects and
@@ -16,7 +18,8 @@
 //! bytes are always kept as an exact prefix.
 //!
 //! Out of scope: rendering, text, content streams, any other editing (removing or
-//! compacting objects, rewriting earlier revisions), and repair of any kind.
+//! compacting objects, rewriting earlier revisions), and repair of any kind beyond that one
+//! opt-in tolerance.
 
 mod acroform;
 mod document;
@@ -30,7 +33,7 @@ mod write;
 mod xref;
 
 pub use acroform::SignatureField;
-pub use document::Document;
+pub use document::{Document, ReadOptions};
 pub use error::Error;
 pub use limits::MAX_INPUT_LEN;
 pub use object::{Dictionary, Object, ObjectId, Stream};

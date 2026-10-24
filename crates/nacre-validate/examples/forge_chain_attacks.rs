@@ -2,7 +2,8 @@
 //! root of the same name as the root) and the signed PDFs of `tests/corpus/chain/`, then
 //! one PDF per chain attack into `tests/corpus/attacks/`. Each attack PDF is
 //! `tests/corpus/unsigned.pdf` correctly signed by a leaf whose path to `root.der` breaks
-//! exactly one rule.
+//! exactly one rule, but `xref-misplaced-startxref.pdf`: `chain-cms.pdf` given an empty
+//! update whose `startxref` lands on the end of line before its `xref`.
 //!
 //! `cargo run -p nacre-validate --example forge_chain_attacks -- crates/nacre-validate/tests/corpus`
 //!
@@ -26,12 +27,15 @@ use nacre_pades::{DateTime, sign};
 use nacre_pdf::{Dictionary, Document, Object};
 use p256::ecdsa::signature::hazmat::PrehashSigner;
 use p256::ecdsa::{DerSignature, SigningKey};
+use sha2::{Digest, Sha256};
 use spki::SubjectPublicKeyInfoRef;
 use x509_cert::Certificate;
 use x509_cert::builder::profile::BuilderProfile;
 use x509_cert::builder::{Builder, CertificateBuilder};
 use x509_cert::certificate::TbsCertificate;
-use x509_cert::ext::pkix::{BasicConstraints, ExtendedKeyUsage, KeyUsage, KeyUsages};
+use x509_cert::ext::pkix::{
+    BasicConstraints, ExtendedKeyUsage, KeyUsage, KeyUsages, SubjectKeyIdentifier,
+};
 use x509_cert::ext::{Extension, ToExtension};
 use x509_cert::name::Name;
 use x509_cert::serial_number::SerialNumber;
@@ -222,10 +226,39 @@ fn main() {
         })
         .collect();
     write_pdf(&attacks, "chain-dss-junk", &with_dss(&chain_cms, &junk));
+    write_pdf(
+        &attacks,
+        "xref-misplaced-startxref",
+        &misplaced_startxref(&chain_cms),
+    );
+}
+
+/// `pdf` given an empty update, an `xref` table with no entry and a trailer whose `/Prev`
+/// names the newest section, whose `startxref` names the end of line just before that
+/// `xref`.
+fn misplaced_startxref(pdf: &[u8]) -> Vec<u8> {
+    let doc = Document::parse(pdf).unwrap();
+    let newest = doc.revisions().last().unwrap();
+    let size = match newest.trailer.get(b"Size") {
+        Some(Object::Integer(size)) => *size,
+        other => panic!("/Size {other:?}"),
+    };
+    let root = doc.catalog_id();
+    let mut out = pdf.to_vec();
+    let misplaced = out.len();
+    out.extend_from_slice(
+        format!(
+            "\nxref\ntrailer\n<< /Size {size} /Root {} {} R /Prev {} >>\nstartxref\n{misplaced}\n%%EOF\n",
+            root.number, root.generation, newest.startxref
+        )
+        .as_bytes(),
+    );
+    out
 }
 
 /// A certificate profile reduced to what the corpus needs: a subject and an issuer,
-/// `basicConstraints`, a critical `keyUsage`, a validity and one optional extra extension.
+/// `basicConstraints`, a critical `keyUsage`, a `subjectKeyIdentifier` for a CA, a
+/// validity and one optional extra extension.
 struct Profile {
     subject: Name,
     issuer: Name,
@@ -276,7 +309,7 @@ impl BuilderProfile for Profile {
 
     fn build_extensions(
         &self,
-        _spk: SubjectPublicKeyInfoRef<'_>,
+        spk: SubjectPublicKeyInfoRef<'_>,
         _issuer_spk: SubjectPublicKeyInfoRef<'_>,
         tbs: &TbsCertificate,
     ) -> x509_cert::builder::Result<Vec<Extension>> {
@@ -288,6 +321,13 @@ impl BuilderProfile for Profile {
         let key_usage = KeyUsage(self.key_usage)
             .to_extension(tbs.subject(), std::slice::from_ref(&basic_constraints))?;
         let mut extensions = vec![basic_constraints, key_usage];
+        if self.ca {
+            let digest = Sha256::digest(spk.subject_public_key.raw_bytes());
+            extensions.push(
+                SubjectKeyIdentifier(OctetString::new(&digest[..20])?)
+                    .to_extension(tbs.subject(), &extensions)?,
+            );
+        }
         extensions.extend(self.extra.clone());
         Ok(extensions)
     }

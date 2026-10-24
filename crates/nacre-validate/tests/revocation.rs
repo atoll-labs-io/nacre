@@ -23,8 +23,8 @@ use nacre_validate::{
 use p256::ecdsa::SigningKey;
 use support::Stub;
 use support::forge::{
-    ChainSigner, Extensions, ForgedTsa, Role, crl, crl_with_reasons, custom_signed, instant, issue,
-    issue_valid, issue_with, key, signed, time, with_dss,
+    ChainSigner, Extensions, ForgedTsa, Role, crl, crl_with_expired_certs_on_crl, crl_with_reasons,
+    custom_signed, instant, issue, issue_valid, issue_with, key, signed, time, with_dss,
 };
 use x509_cert::Certificate;
 use x509_cert::time::Time;
@@ -787,4 +787,195 @@ fn data_issued_after_not_after_does_not_count() {
     assert_eq!(result.best_signature_time, Some(stamp_time()));
     let defect = refused(&result, SubIndication::CertificateChainGeneralFailure);
     assert_eq!(defect, RevocationDefect::Missing { depth: 0 });
+}
+
+/// s1, AC3: a B-T whose signer expired at 09:00, an hour after its stamp, with the
+/// intermediate's CRL of 10:00 in `/DSS`: its `expiredCertsOnCRL` decides with the switch
+/// off, never under `strict()`.
+#[test]
+fn expired_certs_on_crl_switch() {
+    let pki = Pki::new();
+    let (not_before, not_after) = expiring();
+    let signer = issue_valid(
+        Role::Signer,
+        "CN=Nacre policy signer,O=Nacre tests,C=FR",
+        5,
+        &pki.signer_key,
+        Some(&pki.intermediate),
+        &pki.intermediate_key,
+        not_before,
+        not_after,
+    );
+    let chain = ChainSigner {
+        key: pki.signer_key.clone(),
+        chain: vec![der(&signer), der(&pki.intermediate)],
+    };
+    let stamped = signed(
+        &chain,
+        Level::T {
+            tsa: &pki.tsa(None),
+        },
+    );
+    let with_ecoc = |from: Time| {
+        with_dss(
+            &stamped,
+            &[],
+            &[
+                crl_with_expired_certs_on_crl(
+                    &pki.intermediate,
+                    &pki.intermediate_key,
+                    time(2026, 10, 22, 10, 0, 0),
+                    time(2026, 11, 22, 0, 0, 0),
+                    from,
+                ),
+                pki.root_crl(&[]),
+            ],
+        )
+    };
+    let early = with_ecoc(time(2026, 1, 1, 0, 0, 0));
+    let off = strict_without(|p| p.ignore_expired_certs_on_crl = false);
+
+    let result = pki.judge_under(&early, control_date(), &ValidationPolicy::strict());
+    let defect = refused(&result, SubIndication::CertificateChainGeneralFailure);
+    assert_eq!(defect, RevocationDefect::Missing { depth: 0 });
+
+    let result = pki.judge_under(&early, control_date(), &off);
+    passed(&result);
+    assert_eq!(result.best_signature_time, Some(stamp_time()));
+
+    let late = with_ecoc(time(2026, 10, 22, 9, 30, 0));
+    let result = pki.judge_under(&late, control_date(), &off);
+    let defect = refused(&result, SubIndication::CertificateChainGeneralFailure);
+    assert_eq!(defect, RevocationDefect::Missing { depth: 0 });
+}
+
+/// p06, p06b and p06d, AC4: a CA under the root valid until 2026-10-22T12:00, judged on
+/// 2026-10-23, its signer's CRL and the root's both of 10:00.
+#[test]
+fn issuer_out_of_validity_is_revocation_out_of_bounds() {
+    let pki = Pki::new();
+    let ca_key = key(&[0x45; 32]);
+    let ca = issue_valid(
+        Role::Ca,
+        "CN=Nacre short-lived CA,O=Nacre tests,C=FR",
+        6,
+        &ca_key,
+        Some(&pki.root),
+        &pki.root_key,
+        time(2026, 1, 1, 0, 0, 0),
+        time(2026, 10, 22, 12, 0, 0),
+    );
+    let signer = issue(
+        Role::Signer,
+        "CN=Nacre short-lived CA signer,O=Nacre tests,C=FR",
+        7,
+        &pki.signer_key,
+        Some(&ca),
+        &ca_key,
+    );
+    let chain = ChainSigner {
+        key: pki.signer_key.clone(),
+        chain: vec![der(&signer), der(&ca)],
+    };
+    let tsa = ForgedTsa {
+        certificates: vec![der(&pki.tsa), der(&pki.intermediate)],
+        ..pki.tsa(None)
+    };
+    let ten = time(2026, 10, 22, 10, 0, 0);
+    let month = time(2026, 11, 22, 0, 0, 0);
+    let crls = |root_issued: Time| {
+        vec![
+            crl(&ca, &ca_key, ten, month, &[]),
+            crl(&pki.root, &pki.root_key, root_issued, month, &[]),
+            pki.intermediate_crl(&[]),
+        ]
+    };
+    let stamped = signed(&chain, Level::T { tsa: &tsa });
+    let basic = signed(&chain, Level::B);
+    let out_of_bounds = RevocationDefect::IssuerOutOfBounds { depth: 0 };
+
+    let pdf = with_dss(&stamped, &[], &crls(ten));
+    for policy in [ValidationPolicy::strict(), ValidationPolicy::dss()] {
+        let result = pki.judge_under(&pdf, control_date(), &policy);
+        assert_eq!(result.best_signature_time, Some(stamp_time()));
+        let defect = refused(&result, SubIndication::RevocationOutOfBoundsNoPoe);
+        assert_eq!(defect, out_of_bounds);
+    }
+
+    let pdf = with_dss(&basic, &[], &crls(ten));
+    let result = pki.judge_under(&pdf, control_date(), &ValidationPolicy::dss());
+    let defect = refused(&result, SubIndication::RevocationOutOfBoundsNoPoe);
+    assert_eq!(defect, out_of_bounds);
+
+    let pdf = with_dss(&stamped, &[], &crls(time(2026, 10, 22, 13, 0, 0)));
+    for policy in [ValidationPolicy::strict(), ValidationPolicy::dss()] {
+        let result = pki.judge_under(&pdf, control_date(), &policy);
+        let defect = refused(&result, SubIndication::CertificateChainGeneralFailure);
+        assert_eq!(defect, RevocationDefect::Missing { depth: 1 });
+    }
+}
+
+/// s2 to s4, AC5: the signer under an intermediate without `subjectKeyIdentifier`, same
+/// name and key as the usual one, its CRLs in `/DSS`.
+#[test]
+fn ca_without_key_identifier_is_a_general_failure() {
+    let pki = Pki::new();
+    let intermediate = issue_with(
+        Role::Ca,
+        "CN=Nacre revocation intermediate,O=Nacre tests,C=FR",
+        8,
+        &pki.intermediate_key,
+        Some(&pki.root),
+        &pki.root_key,
+        (time(2026, 1, 1, 0, 0, 0), time(2036, 1, 1, 0, 0, 0)),
+        Extensions::WithoutKeyIdentifier,
+    );
+    let chain = ChainSigner {
+        key: pki.signer_key.clone(),
+        chain: vec![der(&pki.signer), der(&intermediate)],
+    };
+    let crls =
+        |revoked: &[(&Certificate, Time)]| vec![pki.intermediate_crl(revoked), pki.root_crl(&[])];
+    let missing = |result: &SignatureValidation| {
+        assert_eq!(result.report.indication(), Indication::Indeterminate);
+        assert_eq!(
+            result.report.sub_indication(),
+            Some(SubIndication::CertificateChainGeneralFailure)
+        );
+        assert_eq!(result.chain.as_ref().unwrap().certificates.len(), 3);
+        assert!(
+            matches!(
+                result.defect,
+                Some(Defect::CaKeyIdentifierMissing { depth: 1 })
+            ),
+            "{:?}",
+            result.defect
+        );
+    };
+    let stamped = signed(
+        &chain,
+        Level::T {
+            tsa: &pki.tsa(None),
+        },
+    );
+    let unclaimed = custom_signed(&chain, b"ETSI.CAdES.detached", None);
+    let revoked = with_dss(
+        &stamped,
+        &[],
+        &crls(&[(&pki.signer, time(2026, 10, 22, 7, 0, 0))]),
+    );
+    for policy in [ValidationPolicy::strict(), ValidationPolicy::dss()] {
+        missing(&pki.judge_under(
+            &with_dss(&stamped, &[], &crls(&[])),
+            control_date(),
+            &policy,
+        ));
+        missing(&pki.judge_under(
+            &with_dss(&unclaimed, &[], &crls(&[])),
+            control_date(),
+            &policy,
+        ));
+        let result = pki.judge_under(&revoked, control_date(), &policy);
+        refused(&result, SubIndication::RevokedNoPoe);
+    }
 }
