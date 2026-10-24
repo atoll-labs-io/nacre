@@ -736,15 +736,15 @@ Constat de sécurité majeur de la revue de s17 (fix loop 1), porté à la perso
 ## s43-dss-parity — Rendre sous `dss()` le verdict de DSS sur les six formes que s41 a laissées
 **As** développeur Rust qui confronte Nacre à DSS **I want** que `ValidationPolicy::dss()` rende le verdict de DSS 6.5.1 sur chaque forme relevée par le spike de s18, et que `strict()` reste au moins aussi strict **so that** la campagne de s18 n'ait plus qu'à calculer le niveau.
 
-- **Complexity**: 3
+- **Complexity**: 4
 - **Depends on**: s41-validation-policy
 - **Surface**: `endpoint`
 - **Owns**: `crates/nacre-validate/`, `crates/nacre-pdf/`, `docs/security/attacks/`
 
 ### Acceptance criteria
-- [ ] Une signature sans `/M`, ou dont le `/M` est postérieur au `notAfter` du signataire, est rendue `INDETERMINATE` / `SIG_CONSTRAINTS_FAILURE` sous les deux préréglages, comme DSS.
-- [ ] Sous `dss()`, un signataire expiré dont les données de révocation du `/DSS` ont été émises après son `notAfter` est rendu `CERTIFICATE_CHAIN_GENERAL_FAILURE`, comme DSS ; des données émises avant `notAfter` gardent le verdict actuel.
-- [ ] Sous `dss()`, un certificat de jeton d'horodatage de signature qui répète une extension rend une erreur, comme pour le signataire (s41) ; sous `strict()`, il reste jugé comme un défaut.
+- [ ] Une signature sans `/M` lisible, ou dont le `/M` est postérieur au `notAfter` du signataire, est rendue `INDETERMINATE` / `SIG_CONSTRAINTS_FAILURE` sous les deux préréglages, comme DSS.
+- [ ] Sous les deux préréglages, une donnée de révocation émise après le `notAfter` du certificat qu'elle couvre ne compte pas, comme chez DSS : un signataire expiré depuis, même valide à la date prouvée par l'horodatage, sans autre donnée, est rendu `CERTIFICATE_CHAIN_GENERAL_FAILURE` sous `dss()` (et `OUT_OF_BOUNDS_NO_POE` sous `strict()` quand il est hors validité à la date jugée) ; des données émises avant `notAfter` gardent le verdict actuel.
+- [ ] Sous `dss()`, un certificat de jeton d'horodatage de signature qui répète une extension rend une erreur, comme pour le signataire (s41) ; sous `strict()`, l'horodatage ne prouve aucune date et la signature est jugée sans lui.
 - [ ] Un neuvième interrupteur, `refuse_unsupported_sub_filters`, actif sous `strict()` et inactif sous `dss()` : inactif, une signature au `/SubFilter` non pris en charge dont le CMS est sain est vérifiée et rendue `TOTAL_PASSED` sans niveau ETSI (`PDF-NOT-ETSI` chez DSS) ; un ADR complète la table de l'ADR-0026.
 - [ ] `nacre-pdf` signale un champ de signature dont le `/V` n'est pas une référence à un dictionnaire au lieu de refuser le fichier ; sous `strict()` la signature est listée en échec, sous `dss()` elle n'est pas listée, comme DSS (interrupteur des signatures inutilisables de s41).
 - [ ] Les atténuations ne laissent rien passer : un test parcourt tout le corpus d'attaques sous `strict()`, puis sous `strict()` privée d'un seul interrupteur, pour chacun des neuf ; seuls changent les verdicts que la règle de cet interrupteur explique, et le catalogue `docs/security/attacks/` nomme chacun d'eux.
