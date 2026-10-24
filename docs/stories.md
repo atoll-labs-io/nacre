@@ -311,10 +311,10 @@ Risque principal : la logique de preuve d'existence (POE) d'EN 319 102-1, où DS
 ## s18-validate-level — Rendre le niveau AdES exact atteint, identique à DSS
 **As** développeur Rust (Patelle d'abord) **I want** que la validation rende le niveau PAdES baseline atteint, et sous `ValidationPolicy::dss()` le verdict exact de DSS **so that** Patelle juge ses décisions sans DSS, et que la campagne du brief prouve l'identité avec DSS.
 
-- **Complexity**: 4
+- **Complexity**: 5
 - **Depends on**: s46-dss-parity-3
 - **Surface**: `endpoint`
-- **Owns**: `crates/nacre-validate/`, `crates/nacre-pdf/`, `conformance/campaign/`
+- **Owns**: `crates/nacre-validate/`, `crates/nacre-pdf/`, `crates/nacre-revocation/`, `conformance/campaign/`, `docs/security/attacks/`, `docs/decisions/0030-issuer-of-revoked-data-switch-and-archive-cutoff.md`
 
 ### Acceptance criteria
 - [ ] Les PDF de s06, s08, s11 et s12 sont rendus `PAdES-BASELINE-B`, `-T`, `-LT` et `-LTA`, chacun avec `TOTAL_PASSED`, sous les deux politiques.
@@ -325,7 +325,7 @@ Risque principal : la logique de preuve d'existence (POE) d'EN 319 102-1, où DS
 - [ ] Les rapports XML de DSS de chaque campagne sont conservés comme preuve.
 
 ### Notes for the agent
-La recherche et le plan d'un premier passage (avant s41) ont montré que DSS calcule le niveau sur la seule structure du fichier : la personne a choisi de le suivre (ADR-0025, option A, 2026-10-23). Les divergences relevées alors (révisions refusées par s15 et s40, règles s16, fraîcheur s17, USF, `isa-no-xref`, `chain-malformed-extension`, `/M` hors validité, certificat hors période) sont prises en charge par s41, s43, s45 et s46 ; un `startxref` décalé de plus qu'un blanc relève de s47 et la campagne n'en forge pas avant ; s18 ne les règle pas, elle les vérifie, sauf une divergence que la campagne révélerait encore. Risque principal : une branche de la règle de niveau de DSS que le spike n'a pas vue (`signingCertificate` v1, EPES, répondeur OCSP, ancre non auto-signée).
+La recherche et le plan d'un premier passage (avant s41) ont montré que DSS calcule le niveau sur la seule structure du fichier : la personne a choisi de le suivre (ADR-0025, option A, 2026-10-23). Les divergences relevées alors (révisions refusées par s15 et s40, règles s16, fraîcheur s17, USF, `isa-no-xref`, `chain-malformed-extension`, `/M` hors validité, certificat hors période) sont prises en charge par s41, s43, s45 et s46 ; un `startxref` décalé de plus qu'un blanc relève de s47 et la campagne n'en forge pas avant ; s18 les vérifie et règle celles que son cinquième spike a encore trouvées : `certificateHold` rendu `TRY_LATER` comme DSS sous les deux préréglages, et deux interrupteurs choisis par la personne le 2026-10-24, `judge_anchor_delegated_responder` (13e) et `refuse_critical_ocsp_extensions` (14e), actifs sous `strict()`. Risque principal : une branche de la règle de niveau de DSS que le spike n'a pas vue (`signingCertificate` v1, EPES, répondeur OCSP, ancre non auto-signée).
 
 ## s19-foreign-corpus — Confronter la validation à des signatures produites par d'autres outils
 **As** développeur de Nacre **I want** que le corpus de la campagne contienne des signatures produites par d'autres outils que Nacre **so that** l'accord avec DSS ne se limite pas aux angles morts de Nacre.
