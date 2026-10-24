@@ -309,22 +309,23 @@ Validation de chemin RFC 5280 écrite par Nacre sur les certificats de `x509-cer
 Risque principal : la logique de preuve d'existence (POE) d'EN 319 102-1, où DSS a ses interprétations. Spike du brief (constat 6), fait dans la recherche : confronter le rapport détaillé de DSS aux blocs de la norme sur une dizaine de cas limites et consigner, pour chaque divergence, si Nacre suit la norme ou DSS.
 
 ## s18-validate-level — Rendre le niveau AdES exact atteint, identique à DSS
-**As** développeur Rust (Patelle d'abord) **I want** que la validation rende le niveau PAdES baseline exact atteint **so that** Patelle juge ses décisions sans DSS, avec le même verdict.
+**As** développeur Rust (Patelle d'abord) **I want** que la validation rende le niveau PAdES baseline atteint, et sous `ValidationPolicy::dss()` le verdict exact de DSS **so that** Patelle juge ses décisions sans DSS, et que la campagne du brief prouve l'identité avec DSS.
 
 - **Complexity**: 4
-- **Depends on**: s17-validate-revocation
+- **Depends on**: s41-validation-policy
 - **Surface**: `endpoint`
 - **Owns**: `crates/nacre-validate/`, `conformance/campaign/`
 
 ### Acceptance criteria
-- [ ] Les PDF de s06, s08, s11 et s12 sont rendus `PAdES-BASELINE-B`, `-T`, `-LT` et `-LTA`, chacun avec `TOTAL_PASSED`.
-- [ ] Un PDF qui porte un attribut interdit par EN 319 142-1 (`signing-time`, comme ceux d'`ades-rs`) ou des données de révocation dans le CMS n'est jamais rendu au niveau baseline qu'il revendique.
-- [ ] Les horodatages de signature et de document sont vérifiés (empreinte, chaîne de la TSA, révocation) ; un horodatage invalide fait tomber le niveau qu'il porte.
-- [ ] `conformance/campaign/` lance la campagne du brief : sur tout le corpus, valide et invalide, attaques comprises, le verdict de `validate` (indication, sous-indication, niveau) est identique à celui de DSS dans 100 % des cas ; un seul écart fait échouer la campagne.
+- [ ] Les PDF de s06, s08, s11 et s12 sont rendus `PAdES-BASELINE-B`, `-T`, `-LT` et `-LTA`, chacun avec `TOTAL_PASSED`, sous les deux politiques.
+- [ ] Le niveau est structurel, comme DSS 6.5.1 le calcule (ADR-0025) : forme lue sur `/SubFilter` ; `PAdES-BES` pour un attribut `signing-time` ou un `/M` absent ; aucun niveau sans `signingCertificateV2` ; T pour tout horodatage de signature ou de document postérieur ; LT quand le `/DSS` couvre d'une donnée de révocation valide chaque certificat non auto-signé des chaînes du signataire et des TSA ; LTA pour un horodatage de document qui suit ce `/DSS`. Des données de révocation dans le CMS laissent `PAdES-BASELINE-B`, comme DSS.
+- [ ] Un horodatage de document valide compte comme preuve d'existence pour `best_signature_time`, comme l'horodatage de signature ; un horodatage invalide ne prouve rien, mais ne change pas le niveau structurel.
+- [ ] `conformance/campaign/` lance la campagne du brief sous `ValidationPolicy::dss()` : sur tout le corpus, valide et invalide, attaques comprises, sans exclusion, le verdict de `validate` (indication, sous-indication, niveau, et nombre de signatures listées) est identique à celui de DSS dans 100 % des cas ; un seul écart fait échouer la campagne.
+- [ ] La même campagne sous `ValidationPolicy::strict()` liste chaque cas où le verdict diffère de DSS avec la règle stricte qui l'explique ; un écart qu'aucune règle stricte n'explique fait échouer la campagne.
 - [ ] Les rapports XML de DSS de chaque campagne sont conservés comme preuve.
 
 ### Notes for the agent
-Risque principal : un écart de niveau avec DSS sur un cas limite ; la règle du brief n'en tolère aucun. S'appuyer sur les conclusions du spike de s17 pour chaque divergence connue.
+La recherche et le plan d'un premier passage (avant s41) ont montré que DSS calcule le niveau sur la seule structure du fichier : la personne a choisi de le suivre (ADR-0025, option A, 2026-10-23). Les divergences relevées alors (révisions refusées par s15 et s40, règles s16, fraîcheur s17, USF, `isa-no-xref`, `chain-malformed-extension`, `/M` hors validité, certificat hors période) sont prises en charge par s41 ; s18 ne les règle pas, elle les vérifie. Risque principal : une branche de la règle de niveau de DSS que le spike n'a pas vue (`signingCertificate` v1, EPES, répondeur OCSP, ancre non auto-signée).
 
 ## s19-foreign-corpus — Confronter la validation à des signatures produites par d'autres outils
 **As** développeur de Nacre **I want** que le corpus de la campagne contienne des signatures produites par d'autres outils que Nacre **so that** l'accord avec DSS ne se limite pas aux angles morts de Nacre.
@@ -696,3 +697,37 @@ Story contrat (ADR-0016, qui précise l'ADR-0012) : `nacre-core` est gelé et ne
 ### Notes for the agent
 Né de la revue de s15 (fix loops 0 à 3) : trois correctifs successifs ont fermé chacun une forme syntaxique et laissé la suivante. Poser la règle par l'effet visible (apparence du champ et de ses widgets, avant et après), pas par la structure. Nacre ne rend pas les PDF : « visible » se juge sur `/Rect`, les drapeaux `/F` (Hidden, NoView) et la présence d'un `/AP` non vide, jamais sur un rendu. Avant s16 : une fois les chaînes jugées, la signature d'un attaquant sans défaut pourrait se lire valide.
 
+## s41-validation-policy — Choisir à l'exécution entre les règles de DSS et les règles strictes de Nacre
+**As** développeur Rust qui valide des signatures **I want** passer à la validation une politique, stricte par défaut ou identique à DSS sur demande, chaque règle stricte pouvant être activée ou non **so that** j'obtienne exactement le verdict de DSS quand j'en ai besoin, sans perdre les protections de Nacre par défaut.
+
+- **Complexity**: 5
+- **Depends on**: s17-validate-revocation
+- **Surface**: `endpoint`
+- **Owns**: `crates/nacre-validate/`, `crates/nacre-pdf/`, `docs/security/attacks/`
+
+### Acceptance criteria
+- [ ] `ValidationPolicy` porte un interrupteur par règle propre à Nacre : révisions refusées après signature (s15, dont `/ByteRange` qui ne couvre pas tout le fichier), données ajoutées après le dernier `%%EOF` sans section xref (s14, `isa-no-xref`, que `nacre-pdf` signale au lieu d'échouer), apparence SSA ajoutée sur un PDF certifié (s40), `keyUsage` et EKU de la feuille (s16), fenêtre de fraîcheur de 24 h sans preuve d'existence (s17) ; deux préréglages, `ValidationPolicy::strict()` (toutes actives) et `ValidationPolicy::dss()` (aucune) ; `validate` et `validate_with_anchors` sans politique appliquent `strict()`.
+- [ ] Sous `dss()`, chaque cas que le spike de s18 a relevé rend le verdict de DSS 6.5.1 : révision ajoutée acceptée, feuille `keyCertSign` seule ou EKU `serverAuth` acceptée, certificat expiré ou pas encore valide rendu `CERTIFICATE_CHAIN_GENERAL_FAILURE` (#124), fichiers USF où DSS ne liste aucune signature rendus sans signature, `isa-no-xref` lu et jugé comme DSS le juge, `chain-malformed-extension` rendu comme une erreur et non un verdict, `/M` antérieur au `notBefore` du signataire rendu `SIG_CONSTRAINTS_FAILURE`.
+- [ ] `strict()` est au moins aussi strict que DSS : une règle que DSS applique et que Nacre n'avait pas (le `/M` hors validité) s'applique aussi sous `strict()`.
+- [ ] Sous `strict()`, la fenêtre de 24 h n'écarte que les données qui disent « non révoqué » : une donnée ancienne qui prouve une révocation reste une preuve, et la signature est rendue `REVOKED_NO_POE` (`certificateHold` excepté).
+- [ ] Un test de conformité par interrupteur montre, sur un même fichier, le verdict de DSS sous `dss()` et le verdict strict sous `strict()`.
+- [ ] `docs/security/attacks/` décrit, pour chaque attaque, la règle qui la ferme et la politique sous laquelle elle reste ouverte ; les mentions périmées « until s17 » disparaissent et les attaques de révocation de s17 (CRL d'une clé forgée, CRL émise avant `notBefore`, `/DSS` invalide, CRL périmée) y entrent.
+
+### Notes for the agent
+Décidé par la personne le 2026-10-23 : politique à l'exécution, sur le modèle des politiques XML de DSS, et non des features cargo (l'unification des features imposerait un mode à tout le graphe et empêcherait de tester les deux) ; `strict()` par défaut. Un appelant qui choisit `dss()` accepte des attaques que `strict()` ferme : la documentation de `dss()` le dit en tête. La recherche de s18 (cas c40 à c45, liste des 29 fichiers de révisions refusées) sert de point de départ. Ce choix demande un ADR.
+
+## s42-tsa-freshness — Appliquer la fenêtre de fraîcheur au chemin de l'autorité d'horodatage
+**As** développeur d'une application qui fait confiance aux horodatages **I want** que la révocation du certificat de la TSA soit jugée avec la même fenêtre de 24 h que celle du signataire sans preuve d'existence **so that** une vieille CRL « non révoqué » ajoutée au `/DSS` ne fasse pas passer une clé de TSA révoquée depuis.
+
+- **Complexity**: 2
+- **Depends on**: s41-validation-policy
+- **Surface**: `endpoint`
+- **Owns**: `crates/nacre-validate/`
+
+### Acceptance criteria
+- [ ] Sous `ValidationPolicy::strict()`, la révocation de la chaîne de chaque TSA (horodatage de signature et de document) n'accepte que des données émises au plus 24 h avant la date de contrôle ; une CRL plus ancienne qui dit « non révoqué » ne compte pas.
+- [ ] Sous `ValidationPolicy::dss()`, le verdict reste celui de DSS.
+- [ ] Un test avec une CRL de TSA périmée et une clé de TSA révoquée depuis montre le rejet sous `strict()`.
+
+### Notes for the agent
+Constat de sécurité majeur de la revue de s17 (fix loop 1), porté à la personne, qui a choisi une story à part. Il faut deux clés compromises (TSA et signataire) pour l'exploiter.
