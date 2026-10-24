@@ -1013,3 +1013,302 @@ fn unreadable_signature_value_policy() {
         assert_eq!(verdict(&strict[0]), FORMAT, "{name}");
     }
 }
+
+/// Switch "misplaced xref": pyHanko's `startxref` one byte before `xref`, then
+/// `xref-misplaced-startxref.pdf`, whose last `startxref` names the end of line before it.
+#[test]
+#[ignore = "conformance"]
+fn misplaced_xref_policy() {
+    let refused = |pdf: &[u8]| {
+        let error = judged(pdf, None, &ValidationPolicy::strict()).unwrap_err();
+        assert!(
+            matches!(error, Error::Pdf(nacre_pdf::Error::NotAnXrefSection { .. })),
+            "{error:?}"
+        );
+    };
+    let hostile = include_bytes!("../../nacre-pdf/tests/corpus/hostile/startxref-off-by-one.pdf");
+    confront_signatures(
+        "s45-startxref-off-by-one",
+        hostile,
+        None,
+        &[],
+        &ValidationPolicy::dss(),
+    );
+    refused(hostile);
+
+    let signed = include_bytes!("corpus/attacks/xref-misplaced-startxref.pdf");
+    confront_signatures(
+        "s45-xref-misplaced-startxref",
+        signed,
+        None,
+        &[NO_CHAIN],
+        &ValidationPolicy::dss(),
+    );
+    refused(signed);
+}
+
+/// p03, p04 and p04b: a bench B under `/SubFilter` removed, then `7`, then a string,
+/// signed again over the patched bytes, its CRLs in `/DSS`.
+#[test]
+#[ignore = "conformance"]
+fn missing_sub_filter_policy() {
+    let signer = BenchSigner::load();
+    let crls = chain_crls(SystemTime::now() - hours(1));
+    let signed = forge::custom_signed(&signer, b"ETSI.CAdES.detached", Some(b"D:20261022080000Z"));
+    for (name, to) in [
+        ("s45-p03-subfilter-missing", &b""[..]),
+        ("s45-p04-subfilter-integer", b"/SubFilter 7"),
+        ("s45-p04b-subfilter-string", b"/SubFilter (adbe)"),
+    ] {
+        let pdf = forge::with_dss(
+            &forge::resign(
+                &forge::patch(&signed, b"/SubFilter /ETSI.CAdES.detached", to),
+                &signer,
+            ),
+            &[],
+            &crls,
+        );
+
+        confront_signatures(name, &pdf, None, &[PASSED], &ValidationPolicy::dss());
+        let strict = nacre(&pdf, None, &ValidationPolicy::strict());
+        assert_eq!(verdict(&strict), FORMAT, "{name}");
+    }
+}
+
+/// The bench intermediate's CRL issued at `this_update`, revoking nothing, whose
+/// `expiredCertsOnCRL` is `from`.
+fn intermediate_crl_with_expired_certs(this_update: SystemTime, from: SystemTime) -> Vec<u8> {
+    let intermediate = Certificate::from_der(&bench_certificate("intermediate.cert.pem")).unwrap();
+    forge::crl_with_expired_certs_on_crl(
+        &intermediate,
+        &bench_key("intermediate"),
+        x509(this_update),
+        x509(this_update + hours(30 * 24)),
+        x509(from),
+    )
+}
+
+/// p09 and s1: a signer expired yesterday, the intermediate's CRL issued an hour ago with
+/// an `expiredCertsOnCRL` 60 days back; s1 is a B-T stamped five days ago.
+#[test]
+#[ignore = "conformance"]
+fn expired_certs_on_crl_policy() {
+    let now = SystemTime::now();
+    let crls = [
+        intermediate_crl_with_expired_certs(now - hours(1), now - hours(60 * 24)),
+        root_crl(),
+    ];
+    let expired = |subject: &str, secret: u8, offset: u64| {
+        forged_signer(
+            subject,
+            secret,
+            offset,
+            (forge::instant(2026, 1, 1, 0, 0, 0), now - hours(24)),
+            Extensions::Usual,
+        )
+    };
+
+    let signer = expired("CN=Nacre s45 p09 signer,O=Nacre tests,C=FR", 0x81, 61);
+    let basic = forge::with_dss(&forge::signed(&signer, Level::B), &[], &crls);
+    confront_signatures(
+        "s45-p09-expired-certs-on-crl",
+        &basic,
+        None,
+        &[(
+            Indication::Indeterminate,
+            Some(SubIndication::OutOfBoundsNotRevoked),
+        )],
+        &ValidationPolicy::dss(),
+    );
+    let strict = nacre(&basic, None, &ValidationPolicy::strict());
+    assert_eq!(
+        verdict(&strict),
+        (
+            Indication::Indeterminate,
+            Some(SubIndication::OutOfBoundsNoPoe)
+        )
+    );
+
+    let signer = expired("CN=Nacre s45 s1 signer,O=Nacre tests,C=FR", 0x82, 62);
+    let tsa = ForgedTsa {
+        key: bench_key("tsa"),
+        certificates: vec![
+            bench_certificate("tsa.cert.pem"),
+            bench_certificate("intermediate.cert.pem"),
+        ],
+        gen_time: DateTime::from_system_time(now - hours(5 * 24)).unwrap(),
+        imprint: None,
+    };
+    let stamped = forge::with_dss(&forge::signed(&signer, Level::T { tsa: &tsa }), &[], &crls);
+    let ours = confront_signatures(
+        "s45-s1-stamped-expired-certs-on-crl",
+        &stamped,
+        None,
+        &[PASSED],
+        &ValidationPolicy::dss(),
+    );
+    assert!(ours[0].best_signature_time.is_some());
+    let strict = nacre(&stamped, None, &ValidationPolicy::strict());
+    assert_eq!(verdict(&strict), GENERAL_FAILURE, "{:?}", strict.defect);
+}
+
+/// A CA of serial `offset` under the bench root, with `extensions`, valid until
+/// `not_after`, and a signer under it.
+fn forged_ca(
+    subject: &str,
+    secret: u8,
+    offset: u64,
+    not_after: SystemTime,
+    extensions: Extensions,
+) -> (Certificate, SigningKey, ChainSigner) {
+    let ca_key = forge::key(&[secret; 32]);
+    let root = Certificate::from_der(&bench_certificate("root.cert.pem")).unwrap();
+    let ca = forge::issue_with(
+        Role::Ca,
+        subject,
+        fresh_serial(offset),
+        &ca_key,
+        Some(&root),
+        &bench_key("root"),
+        (x509(usual_validity().0), x509(not_after)),
+        extensions,
+    );
+    let key = forge::key(&[secret + 1; 32]);
+    let signer = forge::issue(
+        Role::Signer,
+        "CN=Nacre s45 signer under a forged CA,O=Nacre tests,C=FR",
+        fresh_serial(offset + 1),
+        &key,
+        Some(&ca),
+        &ca_key,
+    );
+    let chain = ChainSigner {
+        key,
+        chain: vec![signer.to_der().unwrap(), ca.to_der().unwrap()],
+    };
+    (ca, ca_key, chain)
+}
+
+/// A CRL of `issuer` issued at `this_update`, revoking nothing.
+fn crl_at(issuer: &Certificate, key: &SigningKey, this_update: SystemTime) -> Vec<u8> {
+    forge::crl(
+        issuer,
+        key,
+        x509(this_update),
+        x509(this_update + hours(30 * 24)),
+        &[],
+    )
+}
+
+/// p06b and p06d: a CA under the bench root expired yesterday, its signer's CRL and the
+/// root's both issued two days ago; p06b is a B-T stamped three days ago, p06d a B.
+#[test]
+#[ignore = "conformance"]
+fn issuer_out_of_validity_policy() {
+    let now = SystemTime::now();
+    let (ca, ca_key, signer) = forged_ca(
+        "CN=Nacre s45 expired CA,O=Nacre tests,C=FR",
+        0x83,
+        63,
+        now - hours(24),
+        Extensions::Usual,
+    );
+    let root = Certificate::from_der(&bench_certificate("root.cert.pem")).unwrap();
+    let crls = [
+        crl_at(&ca, &ca_key, now - hours(48)),
+        crl_at(&root, &bench_key("root"), now - hours(48)),
+        intermediate_crl(now - hours(1)),
+    ];
+    let out_of_bounds = (
+        Indication::Indeterminate,
+        Some(SubIndication::RevocationOutOfBoundsNoPoe),
+    );
+    let tsa = ForgedTsa {
+        key: bench_key("tsa"),
+        certificates: vec![
+            bench_certificate("tsa.cert.pem"),
+            bench_certificate("intermediate.cert.pem"),
+        ],
+        gen_time: DateTime::from_system_time(now - hours(72)).unwrap(),
+        imprint: None,
+    };
+
+    let stamped = forge::with_dss(&forge::signed(&signer, Level::T { tsa: &tsa }), &[], &crls);
+    confront_signatures(
+        "s45-p06b-issuer-expired-t",
+        &stamped,
+        None,
+        &[out_of_bounds],
+        &ValidationPolicy::dss(),
+    );
+    let strict = nacre(&stamped, None, &ValidationPolicy::strict());
+    assert_eq!(verdict(&strict), out_of_bounds, "{:?}", strict.defect);
+    assert!(strict.best_signature_time.is_some());
+
+    let basic = forge::with_dss(&forge::signed(&signer, Level::B), &[], &crls);
+    confront_signatures(
+        "s45-p06d-issuer-expired-b",
+        &basic,
+        None,
+        &[out_of_bounds],
+        &ValidationPolicy::dss(),
+    );
+    let strict = nacre(&basic, None, &ValidationPolicy::strict());
+    assert_eq!(
+        verdict(&strict),
+        (
+            Indication::Indeterminate,
+            Some(SubIndication::OutOfBoundsNoPoe)
+        )
+    );
+}
+
+/// s4 with data: a B under a CA of the bench root without `subjectKeyIdentifier`, fresh
+/// CRLs of that CA and of the root in `/DSS`.
+#[test]
+#[ignore = "conformance"]
+fn ca_without_key_identifier_policy() {
+    let now = SystemTime::now();
+    let (ca, ca_key, signer) = forged_ca(
+        "CN=Nacre s45 CA without key identifier,O=Nacre tests,C=FR",
+        0x85,
+        65,
+        usual_validity().1,
+        Extensions::WithoutKeyIdentifier,
+    );
+    let root = Certificate::from_der(&bench_certificate("root.cert.pem")).unwrap();
+    let pdf = forge::with_dss(
+        &forge::signed(&signer, Level::B),
+        &[],
+        &[
+            crl_at(&ca, &ca_key, now - hours(1)),
+            crl_at(&root, &bench_key("root"), now - hours(1)),
+        ],
+    );
+
+    let ours = confront_signatures(
+        "s45-s4-ca-without-key-identifier",
+        &pdf,
+        None,
+        &[GENERAL_FAILURE],
+        &ValidationPolicy::dss(),
+    );
+    assert!(
+        matches!(
+            ours[0].defect,
+            Some(Defect::CaKeyIdentifierMissing { depth: 1 })
+        ),
+        "{:?}",
+        ours[0].defect
+    );
+    let strict = nacre(&pdf, None, &ValidationPolicy::strict());
+    assert_eq!(verdict(&strict), GENERAL_FAILURE, "{:?}", strict.defect);
+    assert!(
+        matches!(
+            strict.defect,
+            Some(Defect::CaKeyIdentifierMissing { depth: 1 })
+        ),
+        "{:?}",
+        strict.defect
+    );
+}

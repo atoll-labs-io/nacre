@@ -86,9 +86,10 @@ pub enum Defect {
     /// `/V` is neither absent, `null` nor a reference, or the object it names is no
     /// dictionary.
     NotASignatureDictionary,
-    /// `/SubFilter` is missing, not a name, or, under
+    /// Under
     /// [`ValidationPolicy::refuse_unsupported_sub_filters`](crate::ValidationPolicy::refuse_unsupported_sub_filters),
-    /// neither `/ETSI.CAdES.detached` nor `/adbe.pkcs7.detached`.
+    /// `/SubFilter` is missing, not a name, or neither `/ETSI.CAdES.detached` nor
+    /// `/adbe.pkcs7.detached`. Off, no `/SubFilter` gives this defect.
     UnsupportedSubFilter,
     /// `/Contents` is absent, `null`, empty or not a string.
     ContentsMissing,
@@ -127,6 +128,11 @@ pub enum Defect {
     /// best-signature-time while its revocation data says it is not revoked:
     /// `INDETERMINATE` / `OUT_OF_BOUNDS_NOT_REVOKED`, the path kept.
     OutOfRangeNotRevoked(ChainDefect),
+    /// The CA certificate at `depth` of the path, below the anchor, has no
+    /// `subjectKeyIdentifier`: `INDETERMINATE` / `CERTIFICATE_CHAIN_GENERAL_FAILURE`, the
+    /// path kept, as DSS 6.5.1 does. Judged under every policy, once the revocation and
+    /// the validity of the path passed, before the claimed signing time.
+    CaKeyIdentifierMissing { depth: usize },
     /// The signing time the signature dictionary claims (`/M`) is before the signer
     /// certificate's `notBefore`: `INDETERMINATE` / `SIG_CONSTRAINTS_FAILURE`, the path
     /// kept. Judged under every policy, once the chain and its revocation passed.
@@ -203,6 +209,14 @@ impl SignatureValidation {
             Defect::Revocation(revocation) => (revocation.report(), true, true),
             Defect::OutOfRangeNotRevoked(_) => (
                 ValidationReport::indeterminate(SubIndication::OutOfBoundsNotRevoked, None),
+                true,
+                true,
+            ),
+            Defect::CaKeyIdentifierMissing { .. } => (
+                ValidationReport::indeterminate(
+                    SubIndication::CertificateChainGeneralFailure,
+                    None,
+                ),
                 true,
                 true,
             ),

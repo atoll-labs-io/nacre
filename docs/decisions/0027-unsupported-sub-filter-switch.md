@@ -5,7 +5,7 @@ status: accepted
 date: 2026-10-24
 scope: story s43-dss-parity
 supersedes: [0026]
-superseded-by: []
+superseded-by: [0029]
 ---
 
 # ADR-0027 — A ninth switch, `refuse_unsupported_sub_filters`, on in `strict()` and off in `dss()`

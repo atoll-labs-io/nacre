@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use crate::document::ReadOptions;
 use crate::filter;
 use crate::limits::Limits;
 use crate::parse::{Parser, is_whitespace};
@@ -56,17 +57,19 @@ const TAIL: usize = 1024;
 pub(crate) fn read(
     input: &[u8],
     limits: &Limits,
+    options: &ReadOptions,
     budget: &mut usize,
 ) -> Result<CrossReference, Error> {
     if !input.starts_with(b"%PDF-") {
         return Err(Error::MissingHeader);
     }
-    let start = find_startxref(input)?;
+    let locate = |stated| section_start(input, stated, options);
+    let start = locate(find_startxref(input)?);
     let mut entries = HashMap::new();
     let mut visited = HashSet::new();
     let mut sections = Vec::new();
-    let mut next = Some(start);
-    while let Some(offset) = next {
+    let mut next = Some((start, start));
+    while let Some((stated, offset)) = next {
         if !visited.insert(offset) {
             return Err(Error::XrefLoop { offset });
         }
@@ -76,14 +79,26 @@ pub(crate) fn read(
                 offset,
             });
         }
-        let section = read_section(input, offset, limits, budget, &mut entries)?;
-        next = section.prev;
+        let section = read_section(input, stated, offset, limits, budget, &mut entries)?;
+        next = section.prev.map(|prev| (prev, locate(prev)));
         sections.push(section);
     }
     Ok(CrossReference {
-        revisions: group_revisions(input, start, sections, &visited),
+        revisions: group_revisions(input, start, sections, &visited, locate),
         entries,
     })
+}
+
+/// Where the section stated at `stated` starts: `stated` itself, or past the whitespace
+/// there when `options` tolerates a misplaced offset. `xref` and an object header both
+/// start with a non-whitespace byte, so a well-placed offset is never moved.
+fn section_start(input: &[u8], stated: usize, options: &ReadOptions) -> usize {
+    if !options.misplaced_xref {
+        return stated;
+    }
+    let mut p = Parser::new(input, stated, &Limits::DEFAULT);
+    p.skip_whitespace();
+    p.pos()
 }
 
 /// The revision rule: a `startxref Y %%EOF` right after a section closes a revision when
@@ -94,6 +109,7 @@ fn group_revisions(
     start: usize,
     sections: Vec<Section>,
     chain: &HashSet<usize>,
+    locate: impl Fn(usize) -> usize,
 ) -> Vec<Revision> {
     let mut named: HashMap<usize, usize> = HashMap::new();
     named.insert(start, input.len());
@@ -101,6 +117,7 @@ fn group_revisions(
         let mut p = Parser::new(input, section.end, &Limits::DEFAULT);
         p.skip_whitespace();
         if let Some(y) = statement(&mut p) {
+            let y = locate(y);
             p.eol();
             if chain.contains(&y) {
                 let end = named.entry(y).or_insert(p.pos());
@@ -164,8 +181,10 @@ fn find_startxref(input: &[u8]) -> Result<usize, Error> {
     Err(Error::MissingStartxref)
 }
 
+/// Reads the section found at `offset`; `stated` is the offset the file gave for it.
 fn read_section(
     input: &[u8],
+    stated: usize,
     offset: usize,
     limits: &Limits,
     budget: &mut usize,
@@ -176,7 +195,7 @@ fn read_section(
         return read_table(input, p, offset, limits, budget, entries);
     }
     let Some(id) = p.object_header() else {
-        return Err(Error::NotAnXrefSection { offset });
+        return Err(Error::NotAnXrefSection { offset: stated });
     };
     let (trailer, end) = read_stream(input, p, id, limits, budget, entries)?;
     let prev = match trailer.get(b"Prev") {

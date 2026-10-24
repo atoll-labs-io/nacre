@@ -36,7 +36,7 @@ A regenerated file has another hash and other offsets: update this table and
 | --- | --- | --- | --- | --- | --- |
 | `circular-xref-chain.pdf` | derived from pyHanko's `circular-xref-chain.pdf` (same folder as above): its 19-byte xref entries are padded to the 20 bytes ISO 32000-1 requires and the offsets recomputed, so the reader reaches the loop instead of refusing the first entry | MIT | `5d2000cd4e4fea9535c4daf55ea34c96cda5fb4efca900a069deb90bd073541e` | two tables whose `/Prev` point at each other (9 ↔ 66) | `XrefLoop` |
 | `xref-malformed-prev.pdf` | derived from pyHanko's `xref-malformed-prev.pdf` the same way | MIT | `5b0ea91e8136e2eb34d2c212e0b3489f39a52700b92a755b82635b11a4b2a7d1` | `/Prev (zzz)` | `XrefTable` "/Prev is not an offset" |
-| `startxref-off-by-one.pdf` | pyHanko's `minimal-startxref-obo1.pdf`, unchanged | MIT | `ba3415d754e4af196921df012c59784cbb508873cdf1288f757e7676aebaf30e` | `startxref` points one byte before `xref` | `NotAnXrefSection` |
+| `startxref-off-by-one.pdf` | pyHanko's `minimal-startxref-obo1.pdf`, unchanged | MIT | `ba3415d754e4af196921df012c59784cbb508873cdf1288f757e7676aebaf30e` | `startxref` points one byte before `xref` | `NotAnXrefSection`; read with `ReadOptions::misplaced_xref` |
 | `aes256.pdf` | pyHanko's `minimal-aes256.pdf`, unchanged | MIT | `eda8c19fae7b63e715f0936d0359b698bc81ab69107e159507842f08dce8b69a` | AES-256 encryption (`/Encrypt`) | `Encrypted` |
 
 ### Crafted cases
