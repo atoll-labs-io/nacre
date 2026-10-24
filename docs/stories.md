@@ -312,20 +312,20 @@ Risque principal : la logique de preuve d'existence (POE) d'EN 319 102-1, où DS
 **As** développeur Rust (Patelle d'abord) **I want** que la validation rende le niveau PAdES baseline atteint, et sous `ValidationPolicy::dss()` le verdict exact de DSS **so that** Patelle juge ses décisions sans DSS, et que la campagne du brief prouve l'identité avec DSS.
 
 - **Complexity**: 4
-- **Depends on**: s41-validation-policy
+- **Depends on**: s43-dss-parity
 - **Surface**: `endpoint`
-- **Owns**: `crates/nacre-validate/`, `conformance/campaign/`
+- **Owns**: `crates/nacre-validate/`, `crates/nacre-pdf/`, `conformance/campaign/`
 
 ### Acceptance criteria
 - [ ] Les PDF de s06, s08, s11 et s12 sont rendus `PAdES-BASELINE-B`, `-T`, `-LT` et `-LTA`, chacun avec `TOTAL_PASSED`, sous les deux politiques.
-- [ ] Le niveau est structurel, comme DSS 6.5.1 le calcule (ADR-0025) : forme lue sur `/SubFilter` ; `PAdES-BES` pour un attribut `signing-time` ou un `/M` absent ; aucun niveau sans `signingCertificateV2` ; T pour tout horodatage de signature ou de document postérieur ; LT quand le `/DSS` couvre d'une donnée de révocation valide chaque certificat non auto-signé des chaînes du signataire et des TSA ; LTA pour un horodatage de document qui suit ce `/DSS`. Des données de révocation dans le CMS laissent `PAdES-BASELINE-B`, comme DSS.
+- [ ] Le niveau est structurel, comme DSS 6.5.1 le calcule (ADR-0025) : forme lue sur `/SubFilter` ; `PAdES-BES` pour un attribut `signing-time` ou un `/M` absent ; aucun niveau sans attribut ESS `signingCertificate` ni `signingCertificateV2` ; T pour tout horodatage de signature ou de document postérieur ; LT quand le `/DSS` couvre d'une donnée de révocation valide chaque certificat non auto-signé des chaînes du signataire et des TSA ; LTA pour un horodatage de document qui suit ce `/DSS`. Des données de révocation dans le CMS laissent `PAdES-BASELINE-B`, comme DSS.
 - [ ] Un horodatage de document valide compte comme preuve d'existence pour `best_signature_time`, comme l'horodatage de signature ; un horodatage invalide ne prouve rien, mais ne change pas le niveau structurel.
-- [ ] `conformance/campaign/` lance la campagne du brief sous `ValidationPolicy::dss()` : sur tout le corpus, valide et invalide, attaques comprises, sans exclusion, le verdict de `validate` (indication, sous-indication, niveau, et nombre de signatures listées) est identique à celui de DSS dans 100 % des cas ; un seul écart fait échouer la campagne.
+- [ ] `conformance/campaign/` lance la campagne du brief sous `ValidationPolicy::dss()` : sur tout le corpus, valide et invalide, attaques comprises, sans exclusion (corpus de `nacre-validate`, corpus hostile et fichiers réels de `nacre-pdf`, `conformance/corpus/` une fois s19 livrée, cas forgés sur le banc), le verdict de `validate` (indication, sous-indication, niveau, et nombre de signatures listées) est identique à celui de DSS dans 100 % des cas ; un seul écart fait échouer la campagne.
 - [ ] La même campagne sous `ValidationPolicy::strict()` liste chaque cas où le verdict diffère de DSS avec la règle stricte qui l'explique ; un écart qu'aucune règle stricte n'explique fait échouer la campagne.
 - [ ] Les rapports XML de DSS de chaque campagne sont conservés comme preuve.
 
 ### Notes for the agent
-La recherche et le plan d'un premier passage (avant s41) ont montré que DSS calcule le niveau sur la seule structure du fichier : la personne a choisi de le suivre (ADR-0025, option A, 2026-10-23). Les divergences relevées alors (révisions refusées par s15 et s40, règles s16, fraîcheur s17, USF, `isa-no-xref`, `chain-malformed-extension`, `/M` hors validité, certificat hors période) sont prises en charge par s41 ; s18 ne les règle pas, elle les vérifie. Risque principal : une branche de la règle de niveau de DSS que le spike n'a pas vue (`signingCertificate` v1, EPES, répondeur OCSP, ancre non auto-signée).
+La recherche et le plan d'un premier passage (avant s41) ont montré que DSS calcule le niveau sur la seule structure du fichier : la personne a choisi de le suivre (ADR-0025, option A, 2026-10-23). Les divergences relevées alors (révisions refusées par s15 et s40, règles s16, fraîcheur s17, USF, `isa-no-xref`, `chain-malformed-extension`, `/M` hors validité, certificat hors période) sont prises en charge par s41 et s43 ; s18 ne les règle pas, elle les vérifie, sauf une divergence que la campagne révélerait encore. Risque principal : une branche de la règle de niveau de DSS que le spike n'a pas vue (`signingCertificate` v1, EPES, répondeur OCSP, ancre non auto-signée).
 
 ## s19-foreign-corpus — Confronter la validation à des signatures produites par d'autres outils
 **As** développeur de Nacre **I want** que le corpus de la campagne contienne des signatures produites par d'autres outils que Nacre **so that** l'accord avec DSS ne se limite pas aux angles morts de Nacre.
@@ -731,3 +731,22 @@ Décidé par la personne le 2026-10-23 : politique à l'exécution, sur le modè
 
 ### Notes for the agent
 Constat de sécurité majeur de la revue de s17 (fix loop 1), porté à la personne, qui a choisi une story à part. Il faut deux clés compromises (TSA et signataire) pour l'exploiter.
+
+## s43-dss-parity — Rendre sous `dss()` le verdict de DSS sur les six formes que s41 a laissées
+**As** développeur Rust qui confronte Nacre à DSS **I want** que `ValidationPolicy::dss()` rende le verdict de DSS 6.5.1 sur chaque forme relevée par le spike de s18, et que `strict()` reste au moins aussi strict **so that** la campagne de s18 n'ait plus qu'à calculer le niveau.
+
+- **Complexity**: 3
+- **Depends on**: s41-validation-policy
+- **Surface**: `endpoint`
+- **Owns**: `crates/nacre-validate/`, `crates/nacre-pdf/`, `docs/security/attacks/`
+
+### Acceptance criteria
+- [ ] Une signature sans `/M`, ou dont le `/M` est postérieur au `notAfter` du signataire, est rendue `INDETERMINATE` / `SIG_CONSTRAINTS_FAILURE` sous les deux préréglages, comme DSS.
+- [ ] Sous `dss()`, un signataire expiré dont les données de révocation du `/DSS` ont été émises après son `notAfter` est rendu `CERTIFICATE_CHAIN_GENERAL_FAILURE`, comme DSS ; des données émises avant `notAfter` gardent le verdict actuel.
+- [ ] Sous `dss()`, un certificat de jeton d'horodatage de signature qui répète une extension rend une erreur, comme pour le signataire (s41) ; sous `strict()`, il reste jugé comme un défaut.
+- [ ] Un neuvième interrupteur, `refuse_unsupported_sub_filters`, actif sous `strict()` et inactif sous `dss()` : inactif, une signature au `/SubFilter` non pris en charge dont le CMS est sain est vérifiée et rendue `TOTAL_PASSED` sans niveau ETSI (`PDF-NOT-ETSI` chez DSS) ; un ADR complète la table de l'ADR-0026.
+- [ ] `nacre-pdf` signale un champ de signature dont le `/V` n'est pas une référence à un dictionnaire au lieu de refuser le fichier ; sous `strict()` la signature est listée en échec, sous `dss()` elle n'est pas listée, comme DSS (interrupteur des signatures inutilisables de s41).
+- [ ] Un test de conformité par forme montre le verdict de DSS sous `dss()` et le verdict strict sous `strict()`.
+
+### Notes for the agent
+Découpée de s18 le 2026-10-24 sur décision de la personne. Les formes et les verdicts de DSS viennent du spike de s18 (cas n01 à n12) ; le changement de `SignatureField` dans `nacre-pdf` casse l'API publique, choisi par la personne. `strict()` ne devient jamais plus laxiste que DSS ni qu'aujourd'hui.
