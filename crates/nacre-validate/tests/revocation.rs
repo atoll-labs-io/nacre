@@ -13,7 +13,7 @@ mod support;
 use std::time::SystemTime;
 
 use der::{DateTime, Encode};
-use nacre_core::{Indication, RevocationSource, SubIndication};
+use nacre_core::{Indication, RevocationSource, SignatureForm, SignatureProfile, SubIndication};
 use nacre_pades::Level;
 use nacre_revocation::CrlReason;
 use nacre_validate::{
@@ -23,9 +23,9 @@ use nacre_validate::{
 use p256::ecdsa::SigningKey;
 use support::Stub;
 use support::forge::{
-    ChainSigner, Extensions, ForgedTsa, Role, crl, crl_with_expired_certs_on_crl, crl_with_reasons,
-    custom_signed, instant, issue, issue_valid, issue_with, key, ocsp, signed, time, with_dss,
-    with_dss_ocsps,
+    ChainSigner, Extensions, ForgedTsa, OcspExtension, OcspPlace, Role, Signature, UNSIGNED, crl,
+    crl_with_expired_certs_on_crl, crl_with_reasons, custom_signed, document_timestamp, instant,
+    issue, issue_valid, issue_with, key, ocsp, signed, signed_with, time, with_dss, with_dss_ocsps,
 };
 use x509_cert::Certificate;
 use x509_cert::time::Time;
@@ -206,7 +206,6 @@ fn passed(result: &SignatureValidation) {
     assert!(result.defect.is_none(), "{:?}", result.defect);
     assert_eq!(result.report.indication(), Indication::TotalPassed);
     assert_eq!(result.report.sub_indication(), None);
-    assert_eq!(result.report.level(), None);
     assert_eq!(result.chain.as_ref().unwrap().certificates.len(), 3);
 }
 
@@ -1147,7 +1146,7 @@ fn delegated_responder_out_of_validity() {
             Some(&delegate),
             time(2026, 10, 22, 11, 0, 0),
             None,
-            None,
+            &[],
         );
         with_dss_ocsps(
             &pki.stamped(),
@@ -1207,7 +1206,11 @@ fn archive_cutoff_switch() {
             None,
             time(2026, 10, 22, 10, 0, 0),
             None,
-            Some(cutoff),
+            &[OcspExtension::archive_cutoff(
+                cutoff,
+                false,
+                OcspPlace::Single,
+            )],
         );
         with_dss_ocsps(
             &stamped,
@@ -1231,4 +1234,180 @@ fn archive_cutoff_switch() {
     let result = pki.judge_under(&late, control_date(), &off);
     let defect = refused(&result, SubIndication::CertificateChainGeneralFailure);
     assert_eq!(defect, RevocationDefect::Missing { depth: 0 });
+}
+
+fn level_of(result: &SignatureValidation) -> Option<SignatureProfile> {
+    let level = result.report.level().unwrap();
+    assert_eq!(level.form, SignatureForm::PAdES);
+    Some(level.profile)
+}
+
+/// s18 (a): a B-T whose `/DSS` lacks the intermediate's CRL on the signer stays T; with it,
+/// the signer's and the TSA's chains are covered: LT.
+#[test]
+fn dss_covering_every_chain_gives_lt() {
+    let pki = Pki::new();
+    let at = |crls: &[Vec<u8>]| {
+        let result = pki.judge_under(
+            &with_dss(&pki.stamped(), &[], crls),
+            control_date(),
+            &ValidationPolicy::strict(),
+        );
+        level_of(&result)
+    };
+
+    assert_eq!(at(&[pki.root_crl(&[])]), Some(SignatureProfile::BaselineT));
+    assert_eq!(
+        at(&[pki.intermediate_crl(&[]), pki.root_crl(&[])]),
+        Some(SignatureProfile::BaselineLt)
+    );
+}
+
+/// s18 (b): the same CRLs in the CMS, with no `/DSS`, leave the signature T.
+#[test]
+fn cms_revocation_data_does_not_give_lt() {
+    let pki = Pki::new();
+    let tsa = pki.tsa(None);
+    let pdf = signed_with(
+        UNSIGNED,
+        &pki.signer(),
+        &Signature {
+            crls: vec![pki.intermediate_crl(&[]), pki.root_crl(&[])],
+            tsa: Some(&tsa),
+            ..Signature::default()
+        },
+    );
+
+    let result = pki.judge_under(&pdf, control_date(), &ValidationPolicy::strict());
+
+    passed(&result);
+    assert_eq!(level_of(&result), Some(SignatureProfile::BaselineT));
+}
+
+/// s18 (c), r1 and r2: a B whose `/DSS` covers the signer's chain, then a document
+/// timestamp by a TSA under another CA: T, since that TSA's chain is not covered; LTA once
+/// the `/DSS` also holds that CA's CRL.
+#[test]
+fn document_timestamp_over_a_covering_dss_gives_lta() {
+    let pki = Pki::new();
+    let ca_key = key(&[0x4a; 32]);
+    let ca = issue(
+        Role::Ca,
+        "CN=Nacre s18 document CA,O=Nacre tests,C=FR",
+        20,
+        &ca_key,
+        Some(&pki.root),
+        &pki.root_key,
+    );
+    let tsa = issue(
+        Role::Tsa,
+        "CN=Nacre s18 document TSA,O=Nacre tests,C=FR",
+        21,
+        &pki.tsa_key,
+        Some(&ca),
+        &ca_key,
+    );
+    let document_tsa = ForgedTsa {
+        certificates: vec![der(&tsa), der(&ca)],
+        gen_time: DateTime::new(2026, 10, 22, 12, 0, 0).unwrap(),
+        ..pki.tsa(None)
+    };
+    let ca_crl = crl(
+        &ca,
+        &ca_key,
+        time(2026, 10, 22, 10, 0, 0),
+        time(2026, 11, 22, 0, 0, 0),
+        &[],
+    );
+    let archived = |crls: &[Vec<u8>]| {
+        let pdf = document_timestamp(&with_dss(&pki.basic(), &[], crls), &document_tsa);
+        let result = pki.judge_under(&pdf, control_date(), &ValidationPolicy::dss());
+        level_of(&result)
+    };
+    let signer_chain = [pki.intermediate_crl(&[]), pki.root_crl(&[])];
+
+    assert_eq!(archived(&signer_chain), Some(SignatureProfile::BaselineT));
+    assert_eq!(
+        archived(&[signer_chain[0].clone(), signer_chain[1].clone(), ca_crl]),
+        Some(SignatureProfile::BaselineLta)
+    );
+}
+
+/// s18 AC3, n13 and k4: a B, then a document timestamp of 09:00 by the TSA, then a
+/// `/DSS` whose CRL revokes the signer at 09:30. The timestamp proves the signature existed
+/// before the revocation; over another imprint, it proves nothing.
+#[test]
+fn document_timestamp_is_a_proof_of_existence() {
+    let pki = Pki::new();
+    let nine = DateTime::new(2026, 10, 22, 9, 0, 0).unwrap();
+    let archived = |imprint: Option<Vec<u8>>| {
+        let tsa = ForgedTsa {
+            gen_time: nine,
+            ..pki.tsa(imprint)
+        };
+        let pdf = with_dss(
+            &document_timestamp(&pki.basic(), &tsa),
+            &[],
+            &[
+                pki.intermediate_crl(&[(&pki.signer, time(2026, 10, 22, 9, 30, 0))]),
+                pki.root_crl(&[]),
+            ],
+        );
+        pki.judge_under(&pdf, control_date(), &ValidationPolicy::strict())
+    };
+
+    let proven = archived(None);
+    passed(&proven);
+    assert_eq!(proven.best_signature_time, Some(nine.to_system_time()));
+
+    let unproven = archived(Some(vec![0; 32]));
+    let defect = refused(&unproven, SubIndication::RevokedNoPoe);
+    assert!(matches!(defect, RevocationDefect::Revoked { depth: 0, .. }));
+    assert_eq!(unproven.best_signature_time, None);
+}
+
+/// s18 H, h2 and h11b: a `certificateHold` at 07:00, before the stamp, on the signer, then
+/// on the intermediate, gives `TRY_LATER` under both presets.
+#[test]
+fn hold_before_the_stamp_is_try_later() {
+    let pki = Pki::new();
+    let seven = time(2026, 10, 22, 7, 0, 0);
+    let held = |certificate: &Certificate, issuer: &Certificate, issuer_key: &SigningKey| {
+        crl_with_reasons(
+            issuer,
+            issuer_key,
+            time(2026, 10, 22, 10, 0, 0),
+            time(2026, 11, 22, 0, 0, 0),
+            &[(certificate, seven, Some(CrlReason::CertificateHold))],
+        )
+    };
+    let on_signer = with_dss(
+        &pki.stamped(),
+        &[],
+        &[
+            held(&pki.signer, &pki.intermediate, &pki.intermediate_key),
+            pki.root_crl(&[]),
+        ],
+    );
+    let on_intermediate = with_dss(
+        &pki.stamped(),
+        &[],
+        &[
+            pki.intermediate_crl(&[]),
+            held(&pki.intermediate, &pki.root, &pki.root_key),
+        ],
+    );
+
+    for policy in [ValidationPolicy::strict(), ValidationPolicy::dss()] {
+        for (pdf, depth) in [(&on_signer, 0), (&on_intermediate, 1)] {
+            let result = pki.judge_under(pdf, control_date(), &policy);
+            assert_eq!(
+                refused(&result, SubIndication::TryLater),
+                RevocationDefect::OnHold {
+                    depth,
+                    date: seven.to_system_time()
+                }
+            );
+        }
+    }
 }

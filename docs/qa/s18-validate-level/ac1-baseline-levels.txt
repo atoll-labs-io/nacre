@@ -1,0 +1,105 @@
+# AC1 — the s06, s08, s11 and s12 shapes give PAdES-BASELINE-B, -T, -LT, -LTA with TOTAL_PASSED under both policies
+Tree: 943c490d323951617de8f1346550831a0e438773
+
+## 1. Campaign rows, run of this QA on a freshly started bench (full run: ac4-campaign-dss.txt)
+### campaign-dss.md, ValidationPolicy::dss()
+| `bench-l01-b` | `Signature1` | TOTAL_PASSED / PAdES BaselineB | TOTAL_PASSED / PAdES BaselineB | = |  |
+| `bench-l01-b` | (count) | 1 | 1 | = |  |
+| `bench-l02-t` | `Signature1` | TOTAL_PASSED / PAdES BaselineT | TOTAL_PASSED / PAdES BaselineT | = |  |
+| `bench-l02-t` | (count) | 1 | 1 | = |  |
+| `bench-l03-lt` | `Signature1` | TOTAL_PASSED / PAdES BaselineLt | TOTAL_PASSED / PAdES BaselineLt | = |  |
+| `bench-l03-lt` | (count) | 1 | 1 | = |  |
+| `bench-l04-lta` | `Signature1` | TOTAL_PASSED / PAdES BaselineLta | TOTAL_PASSED / PAdES BaselineLta | = |  |
+| `bench-l04-lta` | (count) | 1 | 1 | = |  |
+### campaign-strict.md, ValidationPolicy::strict()
+| `bench-l01-b` | `Signature1` | TOTAL_PASSED / PAdES BaselineB | TOTAL_PASSED / PAdES BaselineB | = |  |
+| `bench-l01-b` | (count) | 1 | 1 | = |  |
+| `bench-l02-t` | `Signature1` | TOTAL_PASSED / PAdES BaselineT | TOTAL_PASSED / PAdES BaselineT | = |  |
+| `bench-l02-t` | (count) | 1 | 1 | = |  |
+| `bench-l03-lt` | `Signature1` | TOTAL_PASSED / PAdES BaselineLt | TOTAL_PASSED / PAdES BaselineLt | = |  |
+| `bench-l03-lt` | (count) | 1 | 1 | = |  |
+| `bench-l04-lta` | `Signature1` | TOTAL_PASSED / PAdES BaselineLta | TOTAL_PASSED / PAdES BaselineLta | = |  |
+| `bench-l04-lta` | (count) | 1 | 1 | = |  |
+
+## 2. Public interface on the bench-signed reference files (conformance/reference/generate.sh), bench root as anchor
+Working directory: <tmp>/scenario, a cargo crate outside the worktree depending on the copy's nacre-validate, nacre-core, nacre-revocation. stdin: none.
+Script, quoted whole:
+--- Cargo.toml
+[package]
+name = "qa-s18"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+nacre-validate = { path = "../repo/crates/nacre-validate" }
+nacre-core = { path = "../repo/crates/nacre-core" }
+nacre-revocation = { path = "../repo/crates/nacre-revocation", features = ["http"] }
+
+[workspace]
+--- src/main.rs
+use std::time::SystemTime;
+use nacre_validate::{TrustAnchors, ValidationPolicy, validate, validate_with_policy};
+
+fn show(label: &str, pdf: &[u8], anchors: &TrustAnchors) {
+    let bench = nacre_revocation::Fallback::new(nacre_revocation::HttpOcspSource::allowing_loopback(), nacre_revocation::HttpCrlSource::allowing_loopback());
+    let source: Option<&dyn nacre_core::RevocationSource> = if std::env::var("QA_SOURCE").is_ok() { Some(&bench) } else { None };
+    for (name, policy) in [("dss()", ValidationPolicy::dss()), ("strict()", ValidationPolicy::strict())] {
+        match validate_with_policy(pdf, anchors, SystemTime::now(), source, &policy) {
+            Ok(sigs) => {
+                println!("{label} under {name}: {} signature(s)", sigs.len());
+                for s in &sigs {
+                    println!(
+                        "  {}: {:?} / {:?} / level {:?} / best_signature_time {:?}",
+                        s.field,
+                        s.report.indication(),
+                        s.report.sub_indication(),
+                        s.report.level(),
+                        s.best_signature_time
+                    );
+                }
+            }
+            Err(e) => println!("{label} under {name}: Err({e}) kind {:?}", e.kind()),
+        }
+    }
+}
+
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let root = std::fs::read(&args[1]).unwrap();
+    let anchors = TrustAnchors::from_certificates([root.as_slice()]).unwrap();
+    for path in &args[2..] {
+        let pdf = std::fs::read(path).unwrap();
+        show(path, &pdf, &anchors);
+    }
+    // Invalid inputs a user could plausibly give.
+    show("empty input", b"", &anchors);
+    show("not a PDF", b"hello, this is not a pdf", &anchors);
+    match validate(b"%PDF-1.7\n%%EOF\n") {
+        Ok(s) => println!("truncated PDF (validate): Ok, {} signature(s)", s.len()),
+        Err(e) => println!("truncated PDF (validate): Err({e}) kind {:?}", e.kind()),
+    }
+    let pem = std::fs::read_to_string(&args[1].replace("root.der", "root.pem")).unwrap_or_default();
+    match TrustAnchors::from_certificates([pem.as_bytes()]) {
+        Ok(_) => println!("PEM anchor: accepted"),
+        Err(e) => println!("PEM anchor: Err({e}) kind {:?}", e.kind()),
+    }
+    match TrustAnchors::from_certificates([b"garbage".as_slice()]) {
+        Ok(_) => println!("garbage anchor: accepted"),
+        Err(e) => println!("garbage anchor: Err({e}) kind {:?}", e.kind()),
+    }
+}
+--- end of script
+
+### 2a. With the bench HTTP revocation source (QA_SOURCE=1), bench running
+$ cd <tmp>/scenario && QA_SOURCE=1 <tmp>/target-scn/debug/qa-s18 root.der <copy>/conformance/reference/out/pades-baseline-b.pdf <copy>/conformance/reference/out/pades-baseline-b-revoked.pdf
+<copy>/conformance/reference/out/pades-baseline-b.pdf under dss(): 1 signature(s)
+  Signature1: TotalPassed / None / level Some(SignatureLevel { form: PAdES, profile: BaselineB }) / best_signature_time None
+<copy>/conformance/reference/out/pades-baseline-b.pdf under strict(): 1 signature(s)
+  Signature1: TotalPassed / None / level Some(SignatureLevel { form: PAdES, profile: BaselineB }) / best_signature_time None
+<copy>/conformance/reference/out/pades-baseline-b-revoked.pdf under dss(): 1 signature(s)
+  Signature1: Indeterminate / Some(RevokedNoPoe) / level Some(SignatureLevel { form: PAdES, profile: BaselineB }) / best_signature_time None
+<copy>/conformance/reference/out/pades-baseline-b-revoked.pdf under strict(): 1 signature(s)
+  Signature1: Indeterminate / Some(RevokedNoPoe) / level Some(SignatureLevel { form: PAdES, profile: BaselineB }) / best_signature_time None
+exit code: 0
+(the invalid-input lines are in ac1-baseline-levels-error.txt)

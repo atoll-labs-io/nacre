@@ -23,20 +23,20 @@
 //! from the CRLs and OCSP responses the document carries and an optional
 //! [`nacre_core::RevocationSource`], issued within that certificate's validity: data issued
 //! after its `notAfter` does not count, as DSS 6.5.1 drops it. Both are judged at the
-//! best-signature-time: the `genTime` of the earliest signature timestamp whose token
-//! verifies and whose authority's path and revocation pass at the control date the caller
-//! gives, else that control date ([`SignatureValidation::best_signature_time`]). A
-//! revocation dated after it does not count. Revocation data is judged at its own date, its
+//! best-signature-time: the `genTime` of the earliest timestamp whose token verifies and
+//! whose authority's path and revocation pass at the control date the caller gives, a
+//! signature timestamp or a document timestamp after the signature, else that control date
+//! ([`SignatureValidation::best_signature_time`]). A revocation dated after it does not
+//! count. Revocation data is judged at its own date, its
 //! freshness ignored, as DSS does, except for a signature no timestamp gives a proof of
 //! existence: there a "not revoked" counts only when issued within 24 hours before the
 //! control date, a deliberate departure from DSS 6.5.1 that keeps an old CRL appended to
 //! the `/DSS` from passing a key revoked since, while an old proof of revocation still
 //! counts unless it is a `certificateHold`. A revoked certificate gives `INDETERMINATE` /
-//! `REVOKED_NO_POE` (or `REVOKED_CA_NO_POE`), one with no usable revocation data
-//! `INDETERMINATE` / `CERTIFICATE_CHAIN_GENERAL_FAILURE` ([`Defect::Revocation`],
+//! `REVOKED_NO_POE` (or `REVOKED_CA_NO_POE`), one put on hold `TRY_LATER`, one with no
+//! usable revocation data `INDETERMINATE` / `CERTIFICATE_CHAIN_GENERAL_FAILURE` ([`Defect::Revocation`],
 //! [`RevocationDefect`]), the verdicts DSS 6.5.1 gives. A path that passes gives
-//! `TOTAL_PASSED`, with no level yet, unless the signing time the signature claims (`/M`)
-//! is missing or unreadable, before the signer's `notBefore` or after its `notAfter`:
+//! `TOTAL_PASSED` unless the signing time the signature claims (`/M`) is missing or unreadable, before the signer's `notBefore` or after its `notAfter`:
 //! `INDETERMINATE` / `SIG_CONSTRAINTS_FAILURE` ([`Defect::ClaimedTimeMissing`],
 //! [`Defect::ClaimedTimeBeforeCertificate`], [`Defect::ClaimedTimeAfterCertificate`]), as
 //! DSS does. Before that claimed time, a CA below the anchor without
@@ -46,19 +46,31 @@
 //! gives `INDETERMINATE` / `REVOCATION_OUT_OF_BOUNDS_NO_POE`
 //! ([`RevocationDefect::IssuerOutOfBounds`]), as DSS does. A timestamp token whose
 //! authority's path holds a CA below the anchor without `subjectKeyIdentifier` proves no
-//! time. These rules, DSS's own, apply under every policy. [`validate_with_anchors`]
+//! time. These rules, DSS's own, apply under every policy, except that DSS exempts the
+//! anchor's delegated OCSP responder, which only a switch judges. [`validate_with_anchors`]
 //! does the same with no source. [`build_chain`] builds and judges a path with no PDF, for
 //! any format. [`validate`] trusts no anchor, so a sound signature ends `INDETERMINATE` /
 //! `NO_CERTIFICATE_CHAIN_FOUND`. Document timestamps (`/SubFilter /ETSI.RFC3161`) are left
 //! out of the result.
 //!
+//! Every listed signature's report carries the level its structure reaches, whatever its
+//! verdict, as DSS 6.5.1 reads it (ADR-0025): the form from `/SubFilter` (PAdES or PKCS7),
+//! `PAdES-BES` for a `signingTime` attribute or no readable `/M`, then B, T with a
+//! signature or document timestamp valid or not, LT when the `/DSS` of the file, gathered
+//! over its revisions, holds data its issuer signed for each certificate of the chains that
+//! count, LTA when a document
+//! timestamp covers a `/DSS` that already gives LT. A PAdES signature without ESS
+//! `signingCertificate` nor `signingCertificateV2`, or under any other `/SubFilter`, has no
+//! level. The proof of time stays in [`SignatureValidation::best_signature_time`].
+//!
 //! Every rule above that DSS 6.5.1 does not apply is a switch of a [`ValidationPolicy`]
-//! (ADR-0026, ADR-0029, ADR-0030): later revisions, sneaky signatures, trailing data after
-//! the last `%%EOF`, unusable signatures listed, the signer's key usage, validity judged
+//! (ADR-0026, ADR-0029, ADR-0030, ADR-0031): later revisions, sneaky signatures, trailing
+//! data after the last `%%EOF`, unusable signatures listed, the signer's key usage, validity judged
 //! before revocation, malformed extensions judged, fresh revocation, unsupported
 //! `/SubFilter`s refused, a misplaced cross-reference offset refused, a CRL's
-//! `expiredCertsOnCRL` and an OCSP response's `archiveCutoff` ignored, and the issuer of
-//! data saying "revoked" judged. [`validate`],
+//! `expiredCertsOnCRL` and an OCSP response's `archiveCutoff` ignored, the issuer of
+//! data saying "revoked" judged, the anchor's delegated OCSP responder judged, and OCSP
+//! responses with a critical extension refused. [`validate`],
 //! [`validate_with_anchors`] and [`validate_with_revocation`] apply
 //! [`ValidationPolicy::strict`], every switch on. [`validate_with_policy`] takes the
 //! policy; [`ValidationPolicy::dss`] turns every switch off to give DSS's verdict, and
@@ -67,6 +79,7 @@
 mod chain;
 mod date;
 mod error;
+mod level;
 mod policy;
 mod report;
 mod revisions;

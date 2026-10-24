@@ -1,0 +1,35 @@
+# AC3 — a valid document timestamp is a proof of existence for best_signature_time; an invalid one proves nothing and leaves the level
+### campaign-dss.md
+| `bench-n13-docts-poe-revoked-after` | `Signature1` | TOTAL_PASSED / PAdES BaselineLt | TOTAL_PASSED / PAdES BaselineLt | = |  |
+| `bench-n13-docts-poe-revoked-after` | (count) | 1 | 1 | = |  |
+| `bench-k4-b-docts-ski-signer-revoked` | `Signature1` | TOTAL_PASSED / PAdES BaselineLt | TOTAL_PASSED / PAdES BaselineLt | = |  |
+| `bench-k4-b-docts-ski-signer-revoked` | (count) | 1 | 1 | = |  |
+| `bench-k3-b-docts-noski-signer-revoked` | `Signature1` | INDETERMINATE / REVOKED_NO_POE / PAdES BaselineLt | INDETERMINATE / REVOKED_NO_POE / PAdES BaselineLt | = |  |
+| `bench-k3-b-docts-noski-signer-revoked` | (count) | 1 | 1 | = |  |
+| `bench-n14-docts-bad-revoked-after` | `Signature1` | INDETERMINATE / REVOKED_NO_POE / PAdES BaselineLt | INDETERMINATE / REVOKED_NO_POE / PAdES BaselineLt | = |  |
+| `bench-n14-docts-bad-revoked-after` | (count) | 1 | 1 | = |  |
+| `bench-n15-revoked-before-docts` | `Signature1` | INDETERMINATE / REVOKED_NO_POE / PAdES BaselineLt | INDETERMINATE / REVOKED_NO_POE / PAdES BaselineLt | = |  |
+| `bench-n15-revoked-before-docts` | (count) | 1 | 1 | = |  |
+| `bench-l08-t-bad-imprint` | `Signature1` | TOTAL_PASSED / PAdES BaselineT | TOTAL_PASSED / PAdES BaselineT | = |  |
+| `bench-l08-t-bad-imprint` | (count) | 1 | 1 | = |  |
+| `bench-l10-lta-bad-doc-imprint` | `Signature1` | TOTAL_PASSED / PAdES BaselineLta | TOTAL_PASSED / PAdES BaselineLta | = |  |
+| `bench-l10-lta-bad-doc-imprint` | (count) | 1 | 1 | = |  |
+| `bench-l29-t-dss-docts-bad` | `Signature1` | TOTAL_PASSED / PAdES BaselineLta | TOTAL_PASSED / PAdES BaselineLta | = |  |
+| `bench-l29-t-dss-docts-bad` | (count) | 1 | 1 | = |  |
+### campaign-strict.md
+| `bench-n13-docts-poe-revoked-after` | `Signature1` | TOTAL_PASSED / PAdES BaselineLt | TOTAL_PASSED / PAdES BaselineLt | = |  |
+| `bench-n13-docts-poe-revoked-after` | (count) | 1 | 1 | = |  |
+| `bench-k4-b-docts-ski-signer-revoked` | `Signature1` | TOTAL_PASSED / PAdES BaselineLt | TOTAL_PASSED / PAdES BaselineLt | = |  |
+| `bench-k4-b-docts-ski-signer-revoked` | (count) | 1 | 1 | = |  |
+| `bench-k3-b-docts-noski-signer-revoked` | `Signature1` | INDETERMINATE / REVOKED_NO_POE / PAdES BaselineLt | INDETERMINATE / REVOKED_NO_POE / PAdES BaselineLt | = |  |
+| `bench-k3-b-docts-noski-signer-revoked` | (count) | 1 | 1 | = |  |
+| `bench-n14-docts-bad-revoked-after` | `Signature1` | INDETERMINATE / REVOKED_NO_POE / PAdES BaselineLt | INDETERMINATE / REVOKED_NO_POE / PAdES BaselineLt | = |  |
+| `bench-n14-docts-bad-revoked-after` | (count) | 1 | 1 | = |  |
+| `bench-n15-revoked-before-docts` | `Signature1` | INDETERMINATE / REVOKED_NO_POE / PAdES BaselineLt | INDETERMINATE / REVOKED_NO_POE / PAdES BaselineLt | = |  |
+| `bench-n15-revoked-before-docts` | (count) | 1 | 1 | = |  |
+| `bench-l08-t-bad-imprint` | `Signature1` | TOTAL_PASSED / PAdES BaselineT | TOTAL_PASSED / PAdES BaselineT | = |  |
+| `bench-l08-t-bad-imprint` | (count) | 1 | 1 | = |  |
+| `bench-l10-lta-bad-doc-imprint` | `Signature1` | TOTAL_PASSED / PAdES BaselineLta | TOTAL_PASSED / PAdES BaselineLta | = |  |
+| `bench-l10-lta-bad-doc-imprint` | (count) | 1 | 1 | = |  |
+| `bench-l29-t-dss-docts-bad` | `Signature1` | TOTAL_PASSED / PAdES BaselineLta | TOTAL_PASSED / PAdES BaselineLta | = |  |
+| `bench-l29-t-dss-docts-bad` | (count) | 1 | 1 | = |  |

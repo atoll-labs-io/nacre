@@ -20,8 +20,8 @@ use nacre_validate::{
     ChainDefect, Defect, Error, RevocationDefect, SignatureValidation, TrustAnchors,
     ValidationPolicy, validate_with_policy,
 };
-use support::Stub;
 use support::forge;
+use support::{SWITCHES, Stub};
 use x509_cert::Certificate;
 
 fn judge(file: &[u8], policy: &ValidationPolicy) -> Result<Vec<SignatureValidation>, Error> {
@@ -311,44 +311,6 @@ fn validity_before_revocation_switch() {
     revocation_missing(&lax);
 }
 
-/// A switch of `ValidationPolicy`: its name and what turns it off.
-type Switch = (&'static str, fn(&mut ValidationPolicy));
-
-const SWITCHES: [Switch; 12] = [
-    ("refuse_later_revisions", |p| {
-        p.refuse_later_revisions = false
-    }),
-    ("refuse_sneaky_signatures", |p| {
-        p.refuse_sneaky_signatures = false
-    }),
-    ("refuse_trailing_data", |p| p.refuse_trailing_data = false),
-    ("list_unusable_signatures", |p| {
-        p.list_unusable_signatures = false
-    }),
-    ("judge_signer_key_usage", |p| {
-        p.judge_signer_key_usage = false
-    }),
-    ("judge_validity_before_revocation", |p| {
-        p.judge_validity_before_revocation = false
-    }),
-    ("judge_malformed_extensions", |p| {
-        p.judge_malformed_extensions = false
-    }),
-    ("require_fresh_revocation", |p| {
-        p.require_fresh_revocation = false
-    }),
-    ("refuse_unsupported_sub_filters", |p| {
-        p.refuse_unsupported_sub_filters = false
-    }),
-    ("refuse_misplaced_xref", |p| p.refuse_misplaced_xref = false),
-    ("ignore_expired_certs_on_crl", |p| {
-        p.ignore_expired_certs_on_crl = false
-    }),
-    ("judge_issuer_of_revoked_data", |p| {
-        p.judge_issuer_of_revoked_data = false
-    }),
-];
-
 const DSS: &str = "dss()";
 
 fn manifest() -> &'static Path {
@@ -524,4 +486,193 @@ fn dss_opens_only_what_the_catalog_marks() {
         .map(|(name, _)| name.as_str())
         .collect();
     assert_eq!(opened, marked);
+}
+
+/// A root, a CA under it, and a signer and a TSA under that CA, with the TSA's B-T or a B
+/// by the signer; judged on 2026-10-23 with the root as anchor and no source.
+struct Forged {
+    root: Certificate,
+    root_key: p256::ecdsa::SigningKey,
+    ca: Certificate,
+    ca_key: p256::ecdsa::SigningKey,
+    signer: Certificate,
+    signer_key: p256::ecdsa::SigningKey,
+    tsa: Certificate,
+}
+
+impl Forged {
+    fn new() -> Self {
+        let root_key = forge::key(&[0x61; 32]);
+        let ca_key = forge::key(&[0x62; 32]);
+        let signer_key = forge::key(&[0x63; 32]);
+        let root = forge::issue(
+            forge::Role::Ca,
+            "CN=Nacre s18 policy root,O=Nacre tests,C=FR",
+            1,
+            &root_key,
+            None,
+            &root_key,
+        );
+        let ca = forge::issue(
+            forge::Role::Ca,
+            "CN=Nacre s18 policy CA,O=Nacre tests,C=FR",
+            2,
+            &ca_key,
+            Some(&root),
+            &root_key,
+        );
+        let signer = forge::issue(
+            forge::Role::Signer,
+            "CN=Nacre s18 policy signer,O=Nacre tests,C=FR",
+            3,
+            &signer_key,
+            Some(&ca),
+            &ca_key,
+        );
+        let tsa = forge::issue(
+            forge::Role::Tsa,
+            "CN=Nacre s18 policy TSA,O=Nacre tests,C=FR",
+            4,
+            &signer_key,
+            Some(&ca),
+            &ca_key,
+        );
+        Self {
+            root,
+            root_key,
+            ca,
+            ca_key,
+            signer,
+            signer_key,
+            tsa,
+        }
+    }
+
+    /// `unsigned.pdf` signed by the signer, stamped 2026-10-22T08:00Z by the TSA when
+    /// `stamped`.
+    fn signed(&self, stamped: bool) -> Vec<u8> {
+        let signer = forge::ChainSigner {
+            key: self.signer_key.clone(),
+            chain: vec![self.signer.to_der().unwrap(), self.ca.to_der().unwrap()],
+        };
+        let tsa = forge::ForgedTsa {
+            key: self.signer_key.clone(),
+            certificates: vec![self.tsa.to_der().unwrap()],
+            gen_time: der::DateTime::new(2026, 10, 22, 8, 0, 0).unwrap(),
+            imprint: None,
+        };
+        let options = forge::Signature {
+            tsa: stamped.then_some(&tsa as &dyn nacre_core::TimestampAuthority),
+            ..forge::Signature::default()
+        };
+        forge::signed_with(forge::UNSIGNED, &signer, &options)
+    }
+
+    /// The single signature of `pdf` under `policy`: its indication and sub-indication.
+    fn verdict(
+        &self,
+        pdf: &[u8],
+        policy: &ValidationPolicy,
+    ) -> (Indication, Option<SubIndication>) {
+        let root = self.root.to_der().unwrap();
+        let anchors = TrustAnchors::from_certificates([root.as_slice()]).unwrap();
+        let at = forge::instant(2026, 10, 23, 0, 0, 0);
+        let result = single(validate_with_policy(pdf, &anchors, at, None, policy).unwrap());
+        (result.report.indication(), result.report.sub_indication())
+    }
+}
+
+/// (m) The anchor's delegated responder, a7: the CA's only data is a "good" response of
+/// 11:00 by a delegate of the root expired at 12:00, before the control date.
+#[test]
+fn anchor_delegated_responder_switch() {
+    let pki = Forged::new();
+    let delegate_key = forge::key(&[0x64; 32]);
+    let delegate = forge::issue_with(
+        forge::Role::OcspResponder,
+        "CN=Nacre s18 root OCSP delegate,O=Nacre tests,C=FR",
+        5,
+        &delegate_key,
+        Some(&pki.root),
+        &pki.root_key,
+        (
+            forge::time(2026, 1, 1, 0, 0, 0),
+            forge::time(2026, 10, 22, 12, 0, 0),
+        ),
+        forge::Extensions::Usual,
+    );
+    let response = forge::ocsp(
+        &pki.ca,
+        &pki.root,
+        &delegate_key,
+        &delegate,
+        Some(&delegate),
+        forge::time(2026, 10, 22, 11, 0, 0),
+        None,
+        &[],
+    );
+    let ca_crl = forge::crl(
+        &pki.ca,
+        &pki.ca_key,
+        forge::time(2026, 10, 22, 10, 0, 0),
+        forge::time(2026, 11, 22, 0, 0, 0),
+        &[],
+    );
+    let pdf = forge::with_dss_ocsps(&pki.signed(true), &[], &[ca_crl], &[response]);
+
+    assert_eq!(
+        pki.verdict(&pdf, &ValidationPolicy::strict()),
+        (
+            Indication::Indeterminate,
+            Some(SubIndication::RevocationOutOfBoundsNoPoe)
+        )
+    );
+    assert_eq!(
+        pki.verdict(&pdf, &ValidationPolicy::dss()),
+        (Indication::TotalPassed, None)
+    );
+}
+
+/// (n) Critical OCSP extensions, u1: a B whose signer's only data is a "good" response of
+/// the CA, of 2026-10-22T12:00Z, holding a critical extension of an unknown OID in its
+/// single response.
+#[test]
+fn critical_ocsp_extensions_switch() {
+    let pki = Forged::new();
+    let unknown = forge::OcspExtension {
+        oid: der::oid::ObjectIdentifier::new_unwrap("1.3.6.1.4.1.32473.18"),
+        value: der::asn1::Null.to_der().unwrap(),
+        critical: true,
+        place: forge::OcspPlace::Single,
+    };
+    let response = forge::ocsp(
+        &pki.signer,
+        &pki.ca,
+        &pki.ca_key,
+        &pki.ca,
+        None,
+        forge::time(2026, 10, 22, 12, 0, 0),
+        None,
+        &[unknown],
+    );
+    let root_crl = forge::crl(
+        &pki.root,
+        &pki.root_key,
+        forge::time(2026, 10, 22, 12, 0, 0),
+        forge::time(2026, 11, 22, 0, 0, 0),
+        &[],
+    );
+    let pdf = forge::with_dss_ocsps(&pki.signed(false), &[], &[root_crl], &[response]);
+
+    assert_eq!(
+        pki.verdict(&pdf, &ValidationPolicy::strict()),
+        (
+            Indication::Indeterminate,
+            Some(SubIndication::CertificateChainGeneralFailure)
+        )
+    );
+    assert_eq!(
+        pki.verdict(&pdf, &ValidationPolicy::dss()),
+        (Indication::TotalPassed, None)
+    );
 }
