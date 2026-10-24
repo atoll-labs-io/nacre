@@ -723,12 +723,12 @@ Décidé par la personne le 2026-10-23 : politique à l'exécution, sur le modè
 - **Complexity**: 2
 - **Depends on**: s41-validation-policy
 - **Surface**: `endpoint`
-- **Owns**: `crates/nacre-validate/`
+- **Owns**: `crates/nacre-validate/`, `docs/security/attacks/revocation.md`
 
 ### Acceptance criteria
 - [ ] Sous `ValidationPolicy::strict()`, la révocation de la chaîne de chaque TSA (horodatage de signature et de document) n'accepte que des données émises au plus 24 h avant la date de contrôle ; une CRL plus ancienne qui dit « non révoqué » ne compte pas.
 - [ ] Sous `ValidationPolicy::dss()`, le verdict reste celui de DSS.
-- [ ] Un test avec une CRL de TSA périmée et une clé de TSA révoquée depuis montre le rejet sous `strict()`.
+- [ ] Un test avec pour seule donnée de révocation une CRL de TSA périmée qui dit « non révoqué » montre que l'horodatage ne prouve plus aucune date sous `strict()`, pour un horodatage de signature comme de document.
 
 ### Notes for the agent
 Constat de sécurité majeur de la revue de s17 (fix loop 1), porté à la personne, qui a choisi une story à part. Il faut deux clés compromises (TSA et signataire) pour l'exploiter.
