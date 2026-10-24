@@ -13,17 +13,18 @@ mod support;
 use std::time::SystemTime;
 
 use der::{DateTime, Encode};
-use nacre_core::{Indication, RevocationData, RevocationSource, SubIndication};
+use nacre_core::{Indication, RevocationSource, SubIndication};
 use nacre_pades::Level;
 use nacre_revocation::CrlReason;
 use nacre_validate::{
-    ChainDefect, Defect, RevocationDefect, SignatureValidation, TrustAnchors, ValidationPolicy,
-    validate_with_policy, validate_with_revocation,
+    ChainDefect, Defect, Error, RevocationDefect, SignatureValidation, TrustAnchors,
+    ValidationPolicy, validate_with_policy, validate_with_revocation,
 };
 use p256::ecdsa::SigningKey;
+use support::Stub;
 use support::forge::{
-    ChainSigner, ForgedTsa, Role, crl, crl_with_reasons, instant, issue, issue_valid, key, signed,
-    time, with_dss,
+    ChainSigner, Extensions, ForgedTsa, Role, crl, crl_with_reasons, custom_signed, instant, issue,
+    issue_valid, issue_with, key, signed, time, with_dss,
 };
 use x509_cert::Certificate;
 use x509_cert::time::Time;
@@ -317,31 +318,6 @@ fn no_revocation_data_is_a_general_failure() {
     assert_eq!(defect, RevocationDefect::Missing { depth: 0 });
 }
 
-/// Answers each certificate with the CRL of its issuer, or fails.
-struct Stub {
-    intermediate: Vec<u8>,
-    intermediate_crl: Vec<u8>,
-    root_crl: Vec<u8>,
-    failing: bool,
-}
-
-impl RevocationSource for Stub {
-    fn revocation(
-        &self,
-        _certificate: &[u8],
-        issuer: &[u8],
-    ) -> Result<RevocationData, nacre_core::Error> {
-        if self.failing {
-            return Err(nacre_core::Error::revocation("unreachable"));
-        }
-        Ok(RevocationData::Crl(if issuer == self.intermediate {
-            self.intermediate_crl.clone()
-        } else {
-            self.root_crl.clone()
-        }))
-    }
-}
-
 /// R6, AC3: the source fills in what the document lacks; its failure adds nothing.
 #[test]
 fn source_answers_what_the_document_lacks() {
@@ -526,16 +502,34 @@ fn strict_without(off: impl FnOnce(&mut ValidationPolicy)) -> ValidationPolicy {
     policy
 }
 
+/// The intermediate's CRL of 2026-10-22T08:00Z revoking nothing, issued before the
+/// `notAfter` of the signer `expiring` gives.
+fn crl_before_expiry(pki: &Pki) -> Vec<u8> {
+    crl(
+        &pki.intermediate,
+        &pki.intermediate_key,
+        time(2026, 10, 22, 8, 0, 0),
+        time(2026, 11, 22, 0, 0, 0),
+        &[],
+    )
+}
+
+/// A signer valid until 2026-10-22T09:00Z, before the control date.
+fn expiring() -> (Time, Time) {
+    (time(2026, 1, 1, 0, 0, 0), time(2026, 10, 22, 9, 0, 0))
+}
+
 /// (g) Validity after revocation: a signer expired before the control date with a "not
-/// revoked" CRL is out of bounds, not revoked, its path kept.
+/// revoked" CRL issued before its `notAfter` is out of bounds, not revoked, its path kept.
 #[test]
 fn expired_not_revoked_is_out_of_bounds_not_revoked() {
     let pki = Pki::new();
-    let (_, signature) = pki.basic_valid(time(2026, 1, 1, 0, 0, 0), time(2026, 10, 22, 9, 0, 0));
+    let (not_before, not_after) = expiring();
+    let (_, signature) = pki.basic_valid(not_before, not_after);
     let pdf = with_dss(
         &signature,
         &[],
-        &[pki.intermediate_crl(&[]), pki.root_crl(&[])],
+        &[crl_before_expiry(&pki), pki.root_crl(&[])],
     );
 
     let strict = pki.judge_under(&pdf, control_date(), &ValidationPolicy::strict());
@@ -642,4 +636,155 @@ fn claimed_time_before_not_before_is_a_constraints_failure() {
         );
         assert_eq!(result.chain.as_ref().unwrap().certificates.len(), 3);
     }
+}
+
+/// AC3: a signature-timestamp authority repeating `keyUsage` proves no time under
+/// `strict()`, the signature judged at the control date; with the switch off, the
+/// validation fails as DSS does.
+#[test]
+fn malformed_timestamp_certificate() {
+    let pki = Pki::new();
+    let tsa = issue_with(
+        Role::Tsa,
+        "CN=Nacre malformed TSA,O=Nacre tests,C=FR",
+        6,
+        &pki.tsa_key,
+        Some(&pki.intermediate),
+        &pki.intermediate_key,
+        (time(2026, 1, 1, 0, 0, 0), time(2036, 1, 1, 0, 0, 0)),
+        Extensions::RepeatedKeyUsage,
+    );
+    let authority = ForgedTsa {
+        certificates: vec![der(&tsa)],
+        ..pki.tsa(None)
+    };
+    let pdf = with_dss(
+        &signed(&pki.signer(), Level::T { tsa: &authority }),
+        &[],
+        &[pki.intermediate_crl(&[]), pki.root_crl(&[])],
+    );
+
+    let strict = pki.judge_under(&pdf, control_date(), &ValidationPolicy::strict());
+    passed(&strict);
+    assert_eq!(strict.best_signature_time, None);
+
+    let root = der(&pki.root);
+    let anchors = TrustAnchors::from_certificates([root.as_slice()]).unwrap();
+    let policy = strict_without(|p| p.judge_malformed_extensions = false);
+    let error = validate_with_policy(&pdf, &anchors, control_date(), None, &policy).unwrap_err();
+    assert!(matches!(error, Error::MalformedCertificate), "{error:?}");
+}
+
+/// `result` is `INDETERMINATE` / `SIG_CONSTRAINTS_FAILURE` for a claimed-time defect, its
+/// path kept.
+fn constraints_failure(result: &SignatureValidation) -> &Defect {
+    assert_eq!(result.report.indication(), Indication::Indeterminate);
+    assert_eq!(
+        result.report.sub_indication(),
+        Some(SubIndication::SigConstraintsFailure)
+    );
+    assert_eq!(result.chain.as_ref().unwrap().certificates.len(), 3);
+    result.defect.as_ref().unwrap()
+}
+
+/// AC1: no `/M`, or one no PDF date reads, fails under both presets, as DSS does.
+#[test]
+fn missing_claimed_time_is_a_constraints_failure() {
+    let pki = Pki::new();
+    for claimed in [None, Some(&b"garbage"[..])] {
+        let pdf = with_dss(
+            &custom_signed(&pki.signer(), b"ETSI.CAdES.detached", claimed),
+            &[],
+            &[pki.intermediate_crl(&[]), pki.root_crl(&[])],
+        );
+        for policy in [ValidationPolicy::strict(), ValidationPolicy::dss()] {
+            let result = pki.judge_under(&pdf, control_date(), &policy);
+            let defect = constraints_failure(&result);
+            assert!(
+                matches!(defect, Defect::ClaimedTimeMissing),
+                "{claimed:?}: {defect:?}"
+            );
+        }
+    }
+}
+
+/// AC1: a `/M` after the `notAfter` of a signer valid at the control date fails under both
+/// presets, as DSS does.
+#[test]
+fn claimed_time_after_not_after_is_a_constraints_failure() {
+    let pki = Pki::new();
+    let signer = issue_valid(
+        Role::Signer,
+        "CN=Nacre short-lived signer,O=Nacre tests,C=FR",
+        7,
+        &pki.signer_key,
+        Some(&pki.intermediate),
+        &pki.intermediate_key,
+        time(2026, 1, 1, 0, 0, 0),
+        time(2027, 1, 1, 0, 0, 0),
+    );
+    let chain = ChainSigner {
+        key: pki.signer_key.clone(),
+        chain: vec![der(&signer), der(&pki.intermediate)],
+    };
+    let pdf = with_dss(
+        &custom_signed(&chain, b"ETSI.CAdES.detached", Some(b"D:20270601000000Z")),
+        &[],
+        &[pki.intermediate_crl(&[]), pki.root_crl(&[])],
+    );
+
+    for policy in [ValidationPolicy::strict(), ValidationPolicy::dss()] {
+        let result = pki.judge_under(&pdf, control_date(), &policy);
+        let defect = constraints_failure(&result);
+        assert!(
+            matches!(defect, Defect::ClaimedTimeAfterCertificate),
+            "{defect:?}"
+        );
+    }
+}
+
+/// AC2: a "not revoked" issued after the signer's `notAfter` does not count, under every
+/// policy, as DSS does.
+#[test]
+fn data_issued_after_not_after_does_not_count() {
+    let pki = Pki::new();
+    let (not_before, not_after) = expiring();
+    let late = [pki.intermediate_crl(&[]), pki.root_crl(&[])];
+
+    // (a) A B, its signer expired, judged before its validity.
+    let (_, basic) = pki.basic_valid(not_before, not_after);
+    let policy = strict_without(|p| p.judge_validity_before_revocation = false);
+    let result = pki.judge_under(&with_dss(&basic, &[], &late), control_date(), &policy);
+    let defect = refused(&result, SubIndication::CertificateChainGeneralFailure);
+    assert_eq!(defect, RevocationDefect::Missing { depth: 0 });
+
+    // (b) A B-T whose signer was valid at the stamp, under `strict()`.
+    let signer = issue_valid(
+        Role::Signer,
+        "CN=Nacre policy signer,O=Nacre tests,C=FR",
+        5,
+        &pki.signer_key,
+        Some(&pki.intermediate),
+        &pki.intermediate_key,
+        not_before,
+        not_after,
+    );
+    let chain = ChainSigner {
+        key: pki.signer_key.clone(),
+        chain: vec![der(&signer), der(&pki.intermediate)],
+    };
+    let stamped = signed(
+        &chain,
+        Level::T {
+            tsa: &pki.tsa(None),
+        },
+    );
+    let result = pki.judge_under(
+        &with_dss(&stamped, &[], &late),
+        control_date(),
+        &ValidationPolicy::strict(),
+    );
+    assert_eq!(result.best_signature_time, Some(stamp_time()));
+    let defect = refused(&result, SubIndication::CertificateChainGeneralFailure);
+    assert_eq!(defect, RevocationDefect::Missing { depth: 0 });
 }

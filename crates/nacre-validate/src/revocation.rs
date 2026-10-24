@@ -193,11 +193,16 @@ impl RevocationPool {
 
 /// Judges the revocation of every certificate of `path` below its anchor at `time`, the
 /// best-signature-time. For each one, the usable items are the pool's and the one answer of
-/// `source` (a failure adds none), each issued at or after the certificate's `notBefore`
-/// and, when `issued_from` is given, at or after it, except a revocation dated at or before
-/// `time` other than a `certificateHold`, which stays true however old its proof; the
-/// latest one decides. A revocation dated at or before `time` refuses the path, a later one
-/// does not, and a certificate no usable item covers is [`RevocationDefect::Missing`].
+/// `source` (a failure adds none), each issued within the certificate's validity, from its
+/// `notBefore` to its `notAfter`, and, when `issued_from` is given, at or after it, except
+/// a revocation dated at or before `time` other than a `certificateHold`, which stays true
+/// however old its proof; the latest one decides. A revocation dated at or before `time`
+/// refuses the path, a later one does not, and a certificate no usable item covers is
+/// [`RevocationDefect::Missing`].
+///
+/// An item issued after the certificate's `notAfter` is dropped under every policy, for the
+/// signer, its CAs and a timestamp authority alike, as DSS 6.5.1 does: it is no switch
+/// (ADR-0026, ADR-0027).
 pub(crate) fn judge_path(
     path: &CertificatePath,
     pool: &RevocationPool,
@@ -209,12 +214,11 @@ pub(crate) fn judge_path(
         let [certificate, issuer] = pair else {
             continue;
         };
-        let not_before = Certificate::from_der(certificate)
-            .map_err(|_| RevocationDefect::Missing { depth })?
-            .tbs_certificate()
-            .validity()
-            .not_before
-            .to_system_time();
+        let parsed =
+            Certificate::from_der(certificate).map_err(|_| RevocationDefect::Missing { depth })?;
+        let validity = parsed.tbs_certificate().validity();
+        let not_before = validity.not_before.to_system_time();
+        let not_after = validity.not_after.to_system_time();
         // Freshness guards against a "not revoked" issued before a revocation; an old proof
         // of revocation stays true, unless it is a hold that may have been lifted since. A
         // stale item revoking only after `time` says "not revoked at `time`", so it is dropped.
@@ -230,7 +234,7 @@ pub(crate) fn judge_path(
         let fetched = source.and_then(|source| pool.answer(source, certificate, issuer));
         let latest = stored
             .chain(fetched)
-            .filter(|verdict| verdict.date >= not_before && fresh(verdict))
+            .filter(|verdict| (not_before..=not_after).contains(&verdict.date) && fresh(verdict))
             .reduce(|best, next| if next.outranks(&best) { next } else { best })
             .ok_or(RevocationDefect::Missing { depth })?;
         if let Some(date) = latest.revoked
