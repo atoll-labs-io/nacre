@@ -312,7 +312,7 @@ Risque principal : la logique de preuve d'existence (POE) d'EN 319 102-1, où DS
 **As** développeur Rust (Patelle d'abord) **I want** que la validation rende le niveau PAdES baseline atteint, et sous `ValidationPolicy::dss()` le verdict exact de DSS **so that** Patelle juge ses décisions sans DSS, et que la campagne du brief prouve l'identité avec DSS.
 
 - **Complexity**: 4
-- **Depends on**: s45-dss-parity-2
+- **Depends on**: s46-dss-parity-3
 - **Surface**: `endpoint`
 - **Owns**: `crates/nacre-validate/`, `crates/nacre-pdf/`, `conformance/campaign/`
 
@@ -325,7 +325,7 @@ Risque principal : la logique de preuve d'existence (POE) d'EN 319 102-1, où DS
 - [ ] Les rapports XML de DSS de chaque campagne sont conservés comme preuve.
 
 ### Notes for the agent
-La recherche et le plan d'un premier passage (avant s41) ont montré que DSS calcule le niveau sur la seule structure du fichier : la personne a choisi de le suivre (ADR-0025, option A, 2026-10-23). Les divergences relevées alors (révisions refusées par s15 et s40, règles s16, fraîcheur s17, USF, `isa-no-xref`, `chain-malformed-extension`, `/M` hors validité, certificat hors période) sont prises en charge par s41, s43 et s45 ; s18 ne les règle pas, elle les vérifie, sauf une divergence que la campagne révélerait encore. Risque principal : une branche de la règle de niveau de DSS que le spike n'a pas vue (`signingCertificate` v1, EPES, répondeur OCSP, ancre non auto-signée).
+La recherche et le plan d'un premier passage (avant s41) ont montré que DSS calcule le niveau sur la seule structure du fichier : la personne a choisi de le suivre (ADR-0025, option A, 2026-10-23). Les divergences relevées alors (révisions refusées par s15 et s40, règles s16, fraîcheur s17, USF, `isa-no-xref`, `chain-malformed-extension`, `/M` hors validité, certificat hors période) sont prises en charge par s41, s43, s45 et s46 ; un `startxref` décalé de plus qu'un blanc relève de s47 et la campagne n'en forge pas avant ; s18 ne les règle pas, elle les vérifie, sauf une divergence que la campagne révélerait encore. Risque principal : une branche de la règle de niveau de DSS que le spike n'a pas vue (`signingCertificate` v1, EPES, répondeur OCSP, ancre non auto-signée).
 
 ## s19-foreign-corpus — Confronter la validation à des signatures produites par d'autres outils
 **As** développeur de Nacre **I want** que le corpus de la campagne contienne des signatures produites par d'autres outils que Nacre **so that** l'accord avec DSS ne se limite pas aux angles morts de Nacre.
@@ -790,3 +790,39 @@ Demandé par la personne le 2026-10-24 : « bien tester que les activations de c
 
 ### Notes for the agent
 Découpée de s18 le 2026-10-24 sur décision de la personne, à partir du troisième spike de s18 (`startxref-off-by-one`, cas s1, r*, p06e). La personne a choisi un interrupteur pour le `startxref` décalé et un autre pour `expiredCertsOnCRL`, plutôt que d'assouplir `strict()`. Le `/SubFilter` absent avait été laissé refusé sous les deux préréglages par l'ADR-0027 faute d'observation ; DSS est maintenant observé.
+
+## s46-dss-parity-3 — Rendre sous `dss()` le verdict de DSS sur les quatre familles que s45 a laissées
+**As** développeur Rust qui confronte Nacre à DSS **I want** que `ValidationPolicy::dss()` rende le verdict de DSS 6.5.1 sur les familles trouvées par le quatrième spike de s18, et que `strict()` ne devienne jamais plus laxiste **so that** la campagne de s18 n'ait plus qu'à calculer le niveau.
+
+- **Complexity**: 4
+- **Depends on**: s45-dss-parity-2
+- **Surface**: `endpoint`
+- **Owns**: `crates/nacre-validate/`, `crates/nacre-revocation/`, `docs/security/attacks/`, `docs/decisions/0029-misplaced-xref-and-expired-certs-on-crl-switches.md`
+
+### Acceptance criteria
+- [ ] Sous les deux préréglages, un certificat d'AC sans `subjectKeyIdentifier` sur le chemin d'une autorité d'horodatage retire à son jeton toute preuve d'existence, comme chez DSS (cas k1).
+- [ ] Un douzième interrupteur, `judge_issuer_of_revoked_data`, actif sous `strict()` et inactif sous `dss()` : inactif, une donnée qui dit « révoqué » échappe à la règle de validité de son émetteur, comme chez DSS (cas v3, v5) ; actif, la règle s'applique comme aujourd'hui.
+- [ ] Sous les deux préréglages, une réponse OCSP signée par un répondeur délégué valide à `producedAt` mais hors validité à la date de contrôle est rendue `REVOCATION_OUT_OF_BOUNDS_NO_POE`, comme chez DSS (cas e2) ; `nacre-revocation` expose le certificat du répondeur délégué.
+- [ ] Le onzième interrupteur `ignore_expired_certs_on_crl` couvre aussi l'extension OCSP `archiveCutoff` : inactif, une réponse OCSP qui la porte compte pour un certificat expiré comme chez DSS (cas e4, e5) ; actif, elle est écartée.
+- [ ] Un ADR ajoute le douzième interrupteur et l'élargissement du onzième à la table de l'ADR-0029 ; les tests d'isolation couvrent les douze interrupteurs et le catalogue les nomme.
+- [ ] Un test de conformité par famille montre le verdict de DSS sous `dss()` et le verdict strict sous `strict()`.
+
+### Notes for the agent
+Découpée de s18 le 2026-10-24 sur décision de la personne, à partir du quatrième spike de s18 (cas k1, v3, v5, e2, e4, e5). Le `startxref` décalé de plus qu'un blanc (famille E) va à s47, pas ici.
+
+## s47-pdf-xref-recovery — Retrouver comme DSS une section xref mal désignée, quand `refuse_misplaced_xref` est coupé
+**As** développeur Rust qui confronte Nacre à DSS **I want** que `nacre-pdf`, sur demande, retrouve une section de références croisées que `startxref` ou `/Prev` désigne mal, comme le fait DSS (PDFBox) **so that** la campagne reste à 100 % sur ces fichiers sans que `strict()` répare quoi que ce soit.
+
+- **Complexity**: 4
+- **Depends on**: s18-validate-level
+- **Surface**: `endpoint`
+- **Owns**: `crates/nacre-pdf/`, `crates/nacre-validate/`, `conformance/campaign/`
+
+### Acceptance criteria
+- [ ] Un spike établit la règle de récupération de PDFBox 3 sur les cas x1 à x8c du quatrième spike de s18 (décalage de +1 à +3, −5, −40, 0, au-delà de la fin du fichier, `/Prev` dans les deux sens) ; la règle retenue est écrite dans un ADR.
+- [ ] Avec l'option de lecture de `refuse_misplaced_xref` coupée, `nacre-pdf` retrouve la section selon cette règle, bornée en taille et en nombre d'essais, sans panique ; sous `strict()` rien n'est réparé.
+- [ ] La cible de fuzz de `nacre-pdf` couvre la récupération, et chaque crash trouvé devient un cas de corpus avant son correctif.
+- [ ] Les cas x1 à x8c entrent dans la campagne de s18 sous `dss()`, identiques à DSS.
+
+### Notes for the agent
+Choisie par la personne le 2026-10-24 : une lecture qui répare est une surface d'attaque, d'où une story à part, après s18. En attendant, la campagne de s18 ne forge aucun de ces cas.
