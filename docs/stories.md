@@ -347,12 +347,13 @@ Brief, constat 5 du pré-mortem. Les signatures pyHanko et DSS se produisent ave
 **As** développeur Rust (Patelle d'abord) **I want** ajouter la seule dépendance `nacre-sig` et n'activer que les features dont j'ai besoin **so that** Patelle signe et valide jusqu'à B-LTA par une API unique, sans compiler le reste.
 
 - **Complexity**: 2
-- **Depends on**: s13-pkcs11-signer, s19-foreign-corpus
+- **Depends on**: s13-pkcs11-signer, s19-foreign-corpus, s44-feature-matrix
 - **Surface**: `endpoint`
 - **Owns**: `crates/nacre-sig/`, `README.md`, `CHANGELOG.md`
 
 ### Acceptance criteria
 - [ ] `nacre-sig` (importée sous `nacre`) expose les features `cms`, `pades`, `tsp`, `validate`, `pkcs11` et `http`, aucune par défaut ; avec seulement `pades`, `cargo tree` ne montre ni `nacre-validate`, ni `nacre-pkcs11`, ni une dépendance réseau.
+- [ ] La matrice de s44 couvre `nacre-sig` : chaque combinaison de ses features compile, passe ses tests et n'expose que les modules de ses features ; un test par feature vérifie qu'un module d'une feature inactive est absent.
 - [ ] Un exemple documenté (`examples/sign_blta.rs`) signe un PDF jusqu'à B-LTA avec un `Signer` PKCS#11 et la feature `http`, puis le valide ; il tourne dans la CI contre SoftHSM et le banc de s02.
 - [ ] `cargo publish --dry-run -p nacre-sig` passe ; la publication reste faite par un humain (brief, Operations).
 - [ ] Le `README.md` décrit les features, les licences MIT OR Apache-2.0, et avertit que `validate` n'a pas été relu par un tiers et ne doit pas servir de seule preuve hors d'atoll avant un audit externe (brief, constat 7).
@@ -746,7 +747,26 @@ Constat de sécurité majeur de la revue de s17 (fix loop 1), porté à la perso
 - [ ] Sous `dss()`, un certificat de jeton d'horodatage de signature qui répète une extension rend une erreur, comme pour le signataire (s41) ; sous `strict()`, il reste jugé comme un défaut.
 - [ ] Un neuvième interrupteur, `refuse_unsupported_sub_filters`, actif sous `strict()` et inactif sous `dss()` : inactif, une signature au `/SubFilter` non pris en charge dont le CMS est sain est vérifiée et rendue `TOTAL_PASSED` sans niveau ETSI (`PDF-NOT-ETSI` chez DSS) ; un ADR complète la table de l'ADR-0026.
 - [ ] `nacre-pdf` signale un champ de signature dont le `/V` n'est pas une référence à un dictionnaire au lieu de refuser le fichier ; sous `strict()` la signature est listée en échec, sous `dss()` elle n'est pas listée, comme DSS (interrupteur des signatures inutilisables de s41).
+- [ ] Les atténuations ne laissent rien passer : un test parcourt tout le corpus d'attaques sous `strict()`, puis sous `strict()` privée d'un seul interrupteur, pour chacun des neuf ; seuls changent les verdicts que la règle de cet interrupteur explique, et le catalogue `docs/security/attacks/` nomme chacun d'eux.
+- [ ] Sous `strict()`, chaque attaque du catalogue reste rejetée ; sous `dss()`, seules s'ouvrent les attaques que le catalogue marque « ouverte sous `dss()` ».
 - [ ] Un test de conformité par forme montre le verdict de DSS sous `dss()` et le verdict strict sous `strict()`.
 
 ### Notes for the agent
 Découpée de s18 le 2026-10-24 sur décision de la personne. Les formes et les verdicts de DSS viennent du spike de s18 (cas n01 à n12) ; le changement de `SignatureField` dans `nacre-pdf` casse l'API publique, choisi par la personne. `strict()` ne devient jamais plus laxiste que DSS ni qu'aujourd'hui.
+
+## s44-feature-matrix — Prouver que chaque combinaison de features compile, passe ses tests et n'embarque que ce qu'elle annonce
+**As** développeur Rust qui n'active que les features dont il a besoin **I want** que la CI construise et teste chaque crate sous chaque combinaison de ses features **so that** une activation partielle ne casse jamais la compilation, ne perde aucun test et n'ajoute aucune dépendance cachée.
+
+- **Complexity**: 2
+- **Depends on**: s18-validate-level
+- **Surface**: `endpoint`
+- **Owns**: `.github/workflows/ci.yml`, `crates/*/Cargo.toml`
+
+### Acceptance criteria
+- [ ] La CI construit, passe clippy et lance les tests de chaque crate du workspace sous chaque combinaison de ses features, sans feature, toutes, et chacune seule comprises ; une combinaison qui échoue fait échouer la CI.
+- [ ] Les tests d'une crate tournent aussi sans sa feature `http` : aucune dev-dépendance ne réactive en douce la feature qu'on teste absente.
+- [ ] Sans feature `http`, `cargo tree` ne montre aucune dépendance réseau (`ureq` ou autre) pour aucune crate ; un test de la CI le vérifie.
+- [ ] La matrice tient dans le temps de CI : elle dit sa durée, et les combinaisons sont partagées entre jobs si besoin.
+
+### Notes for the agent
+Demandé par la personne le 2026-10-24 : « bien tester que les activations de crate fonctionnent proprement ». Aujourd'hui `ci.yml` ne lance que `--all-features` (clippy) et le jeu par défaut (tests), et plusieurs crates réactivent `http` sur elles-mêmes en dev-dépendance. L'outil qui parcourt les combinaisons est un choix d'outillage à proposer à la personne s'il ajoute une dépendance.
