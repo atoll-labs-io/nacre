@@ -14,7 +14,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
-use der::Decode;
+use der::{Decode, Encode};
 use nacre_core::{Indication, SubIndication};
 use nacre_validate::{
     ChainDefect, Defect, Error, RevocationDefect, SignatureValidation, TrustAnchors,
@@ -166,6 +166,67 @@ fn unsupported_sub_filters_switch() {
     sound(&single(judge(file, &off).unwrap()));
 }
 
+/// (j) Misplaced xref: pyHanko's `startxref` one byte before `xref`, read with the switch
+/// off, where it holds no signature; then `xref-misplaced-startxref.pdf`, whose signature
+/// is then verified.
+#[test]
+fn misplaced_xref_switch() {
+    let file = include_bytes!("../../nacre-pdf/tests/corpus/hostile/startxref-off-by-one.pdf");
+    let error = judge(file, &ValidationPolicy::strict()).unwrap_err();
+    assert!(
+        matches!(
+            error,
+            Error::Pdf(nacre_pdf::Error::NotAnXrefSection { offset: 564 })
+        ),
+        "{error:?}"
+    );
+
+    let off = strict_without(|p| p.refuse_misplaced_xref = false);
+    assert!(judge(file, &off).unwrap().is_empty());
+
+    let signed = include_bytes!("corpus/attacks/xref-misplaced-startxref.pdf");
+    let error = judge(signed, &ValidationPolicy::strict()).unwrap_err();
+    assert!(
+        matches!(error, Error::Pdf(nacre_pdf::Error::NotAnXrefSection { .. })),
+        "{error:?}"
+    );
+    sound(&single(judge(signed, &off).unwrap()));
+}
+
+/// (i) Unsupported sub-filters, continued: a `/SubFilter` missing, then not a name, over a
+/// sound CMS, is verified with the switch off.
+#[test]
+fn missing_sub_filter_switch() {
+    let key = forge::key(&[0x41; 32]);
+    let certificate = forge::issue(
+        forge::Role::Signer,
+        "CN=Nacre s45 sub-filter signer,O=Nacre tests,C=FR",
+        0x45,
+        &key,
+        None,
+        &key,
+    );
+    let signer = forge::ChainSigner {
+        key,
+        chain: vec![certificate.to_der().unwrap()],
+    };
+    let signed = forge::custom_signed(&signer, b"ETSI.CAdES.detached", Some(b"D:20261022080000Z"));
+    let off = strict_without(|p| p.refuse_unsupported_sub_filters = false);
+    for to in [&b""[..], b"/SubFilter 7"] {
+        let file = forge::resign(
+            &forge::patch(&signed, b"/SubFilter /ETSI.CAdES.detached", to),
+            &signer,
+        );
+        let strict = single(judge(&file, &ValidationPolicy::strict()).unwrap());
+        assert!(
+            matches!(strict.defect, Some(Defect::UnsupportedSubFilter)),
+            "{:?}",
+            strict.defect
+        );
+        sound(&single(judge(&file, &off).unwrap()));
+    }
+}
+
 /// The single signature of `file`, judged under `policy` with the chain corpus root as
 /// anchor on 2026-10-22.
 fn with_chain_root(file: &[u8], policy: &ValidationPolicy) -> Result<SignatureValidation, Error> {
@@ -253,7 +314,7 @@ fn validity_before_revocation_switch() {
 /// A switch of `ValidationPolicy`: its name and what turns it off.
 type Switch = (&'static str, fn(&mut ValidationPolicy));
 
-const SWITCHES: [Switch; 9] = [
+const SWITCHES: [Switch; 11] = [
     ("refuse_later_revisions", |p| {
         p.refuse_later_revisions = false
     }),
@@ -278,6 +339,10 @@ const SWITCHES: [Switch; 9] = [
     }),
     ("refuse_unsupported_sub_filters", |p| {
         p.refuse_unsupported_sub_filters = false
+    }),
+    ("refuse_misplaced_xref", |p| p.refuse_misplaced_xref = false),
+    ("ignore_expired_certs_on_crl", |p| {
+        p.ignore_expired_certs_on_crl = false
     }),
 ];
 

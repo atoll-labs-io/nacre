@@ -6,11 +6,17 @@ use std::collections::{HashMap, HashSet};
 use std::time::{Duration, SystemTime};
 
 use der::Decode;
+use der::asn1::{GeneralizedTime, ObjectIdentifier};
 use nacre_core::{RevocationData, RevocationSource, SubIndication, ValidationReport};
 use nacre_revocation::{Crl, CrlReason, CrlStatus, OcspResponse, OcspStatus};
 use x509_cert::Certificate;
+use x509_cert::crl::CertificateList;
 
 use crate::CertificatePath;
+use crate::chain::in_validity;
+
+/// `id-ce-expiredCertsOnCRL` (RFC 5280, 5.2.7).
+const EXPIRED_CERTS_ON_CRL: ObjectIdentifier = ObjectIdentifier::new_unwrap("2.5.29.60");
 
 /// Distinct readable CRLs and OCSP responses one pool holds; later ones are ignored.
 const MAX_POOL_LEN: usize = 256;
@@ -35,6 +41,10 @@ pub enum RevocationDefect {
     Revoked { depth: usize, date: SystemTime },
     /// No usable CRL or OCSP response covers the certificate at `depth`.
     Missing { depth: usize },
+    /// The CA that issued the revocation data of the certificate at `depth`, below the
+    /// anchor, is out of its validity at the control date, as DSS 6.5.1 judges it under
+    /// every policy.
+    IssuerOutOfBounds { depth: usize },
 }
 
 impl RevocationDefect {
@@ -45,20 +55,24 @@ impl RevocationDefect {
             Self::Revoked { depth: 0, .. } => SubIndication::RevokedNoPoe,
             Self::Revoked { .. } => SubIndication::RevokedCaNoPoe,
             Self::Missing { .. } => SubIndication::CertificateChainGeneralFailure,
+            Self::IssuerOutOfBounds { .. } => SubIndication::RevocationOutOfBoundsNoPoe,
         };
         ValidationReport::indeterminate(sub, None)
     }
 }
 
 enum Item {
-    Crl(Crl),
+    /// A CRL and the date its `expiredCertsOnCRL` extension gives, when readable.
+    Crl(Crl, Option<SystemTime>),
     Ocsp(OcspResponse),
 }
 
 impl Item {
     fn read(data: &RevocationData) -> Option<Self> {
         match data {
-            RevocationData::Crl(der) => Crl::from_der(der).ok().map(Self::Crl),
+            RevocationData::Crl(der) => Crl::from_der(der)
+                .ok()
+                .map(|crl| Self::Crl(crl, expired_certs_on_crl(der))),
             RevocationData::Ocsp(der) => OcspResponse::from_der(der).ok().map(Self::Ocsp),
             _ => None,
         }
@@ -68,8 +82,12 @@ impl Item {
     /// or the response's `producedAt`. Judging there rather than at the control date makes
     /// an expired item usable, as DSS does; every other refusal of `status` drops it.
     fn verdict(&self, certificate: &[u8], issuer: &[u8]) -> Option<Verdict> {
+        let expired_from = match self {
+            Self::Crl(_, from) => *from,
+            Self::Ocsp(_) => None,
+        };
         let (date, revoked, reason) = match self {
-            Self::Crl(crl) => {
+            Self::Crl(crl, _) => {
                 let date = crl.this_update();
                 match crl.status(certificate, issuer, date).ok()? {
                     CrlStatus::NotRevoked => (date, None, None),
@@ -96,8 +114,23 @@ impl Item {
             date,
             revoked,
             hold: reason == Some(CrlReason::CertificateHold),
+            expired_from,
         })
     }
+}
+
+/// The `expiredCertsOnCRL` date of the CRL `der`; an unreadable one counts as absent.
+fn expired_certs_on_crl(der: &[u8]) -> Option<SystemTime> {
+    let list: CertificateList = CertificateList::from_der(der).ok()?;
+    let extension = list
+        .tbs_cert_list
+        .crl_extensions
+        .as_ref()?
+        .iter()
+        .find(|extension| extension.extn_id == EXPIRED_CERTS_ON_CRL)?;
+    GeneralizedTime::from_der(extension.extn_value.as_bytes())
+        .ok()
+        .map(|time| time.to_system_time())
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -106,6 +139,8 @@ struct Verdict {
     revoked: Option<SystemTime>,
     /// The revocation is a `certificateHold`, which a later CRL may lift.
     hold: bool,
+    /// A CRL's `expiredCertsOnCRL`: it keeps entries for certificates expired since then.
+    expired_from: Option<SystemTime>,
 }
 
 impl Verdict {
@@ -200,15 +235,26 @@ impl RevocationPool {
 /// refuses the path, a later one does not, and a certificate no usable item covers is
 /// [`RevocationDefect::Missing`].
 ///
-/// An item issued after the certificate's `notAfter` is dropped under every policy, for the
-/// signer, its CAs and a timestamp authority alike, as DSS 6.5.1 does: it is no switch
-/// (ADR-0026, ADR-0027).
+/// An item issued after the certificate's `notAfter` is dropped, for the signer, its CAs and
+/// a timestamp authority alike, as DSS 6.5.1 does, except a CRL whose `expiredCertsOnCRL` is
+/// at or before that `notAfter` when `expired_certs_on_crl` is set: DSS counts it, and
+/// [`ValidationPolicy::ignore_expired_certs_on_crl`] decides (ADR-0029).
+///
+/// Once every certificate passed, when `issuers_at` is given, each CA that issued the data
+/// of a certificate, the anchor aside, must be within its validity at `issuers_at`, the
+/// control date, or the path is [`RevocationDefect::IssuerOutOfBounds`], as DSS judges it
+/// under every policy. A timestamp authority's path passes `None`: it was built at the
+/// control date already, so its CAs are within their validity there.
+///
+/// [`ValidationPolicy::ignore_expired_certs_on_crl`]: crate::ValidationPolicy::ignore_expired_certs_on_crl
 pub(crate) fn judge_path(
     path: &CertificatePath,
     pool: &RevocationPool,
     source: Option<&dyn RevocationSource>,
     time: SystemTime,
     issued_from: Option<SystemTime>,
+    issuers_at: Option<SystemTime>,
+    expired_certs_on_crl: bool,
 ) -> Result<(), RevocationDefect> {
     for (depth, pair) in path.certificates.windows(2).enumerate() {
         let [certificate, issuer] = pair else {
@@ -232,15 +278,30 @@ pub(crate) fn judge_path(
             .enumerate()
             .filter_map(|(index, item)| pool.verdict(index, item, certificate, issuer));
         let fetched = source.and_then(|source| pool.answer(source, certificate, issuer));
+        let within = |verdict: &Verdict| {
+            verdict.date >= not_before
+                && (verdict.date <= not_after
+                    || (expired_certs_on_crl
+                        && verdict.expired_from.is_some_and(|from| from <= not_after)))
+        };
         let latest = stored
             .chain(fetched)
-            .filter(|verdict| (not_before..=not_after).contains(&verdict.date) && fresh(verdict))
+            .filter(|verdict| within(verdict) && fresh(verdict))
             .reduce(|best, next| if next.outranks(&best) { next } else { best })
             .ok_or(RevocationDefect::Missing { depth })?;
         if let Some(date) = latest.revoked
             && date <= time
         {
             return Err(RevocationDefect::Revoked { depth, date });
+        }
+    }
+    if let Some(at) = issuers_at {
+        let last = path.certificates.len().saturating_sub(1);
+        let cas = path.certificates.get(1..last).unwrap_or_default();
+        for (depth, ca) in cas.iter().enumerate() {
+            let out_of_bounds = RevocationDefect::IssuerOutOfBounds { depth };
+            let ca = Certificate::from_der(ca).map_err(|_| out_of_bounds.clone())?;
+            in_validity(&ca, at, depth + 1).map_err(|_| out_of_bounds)?;
         }
     }
     Ok(())
@@ -265,6 +326,10 @@ mod tests {
             (
                 RevocationDefect::Missing { depth: 2 },
                 CertificateChainGeneralFailure,
+            ),
+            (
+                RevocationDefect::IssuerOutOfBounds { depth: 0 },
+                RevocationOutOfBoundsNoPoe,
             ),
         ];
         for (defect, sub) in rows {

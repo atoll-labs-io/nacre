@@ -10,6 +10,18 @@ use crate::revision::Update;
 use crate::xref::{self, Entry, Revision};
 use crate::{Dictionary, Error, Object, ObjectId};
 
+/// Tolerances a reader may turn on, each one off by default. With every field `false`,
+/// [`Document::parse_with_options`] reads exactly as [`Document::parse`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct ReadOptions {
+    /// Read a cross-reference section whose offset, stated by `startxref` or `/Prev`, lands
+    /// on whitespace before its `xref` keyword or its object header. Only whitespace is
+    /// skipped, and only for section offsets: an object entry is never moved. The
+    /// [`Revision::startxref`] of such a section is where it was found.
+    pub misplaced_xref: bool,
+}
+
 /// A parsed PDF. It borrows the input and never modifies it.
 pub struct Document<'a> {
     input: &'a [u8],
@@ -35,10 +47,19 @@ impl fmt::Debug for Document<'_> {
 impl<'a> Document<'a> {
     /// Parses `bytes`, refusing any defect on the paths it follows.
     pub fn parse(bytes: &'a [u8]) -> Result<Self, Error> {
-        Self::parse_with(bytes, Limits::DEFAULT)
+        Self::parse_with_options(bytes, &ReadOptions::default())
     }
 
-    pub(crate) fn parse_with(input: &'a [u8], limits: Limits) -> Result<Self, Error> {
+    /// Parses `bytes` like [`parse`](Self::parse), with the tolerances `options` turns on.
+    pub fn parse_with_options(bytes: &'a [u8], options: &ReadOptions) -> Result<Self, Error> {
+        Self::parse_with(bytes, Limits::DEFAULT, options)
+    }
+
+    pub(crate) fn parse_with(
+        input: &'a [u8],
+        limits: Limits,
+        options: &ReadOptions,
+    ) -> Result<Self, Error> {
         if input.len() > MAX_INPUT_LEN {
             return Err(Error::TooLarge {
                 len: input.len(),
@@ -46,7 +67,7 @@ impl<'a> Document<'a> {
             });
         }
         let mut budget = limits.max_total_decoded;
-        let xref = xref::read(input, &limits, &mut budget)?;
+        let xref = xref::read(input, &limits, options, &mut budget)?;
         let newest = xref.revisions.last().ok_or(Error::MissingStartxref)?;
         if newest.trailer.get(b"Encrypt").is_some() {
             return Err(Error::Encrypted);

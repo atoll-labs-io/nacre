@@ -1,4 +1,4 @@
-/// The rules only Nacre applies, one switch each (ADR-0026, ADR-0027). Each switch on
+/// The rules only Nacre applies, one switch each (ADR-0026, ADR-0029). Each switch on
 /// keeps a protection DSS 6.5.1 lacks; each switch off gives DSS's verdict on that case.
 ///
 /// [`ValidationPolicy::strict`], the [`Default`], turns them all on and is what
@@ -6,7 +6,9 @@
 /// and [`validate_with_revocation`](crate::validate_with_revocation) apply.
 /// [`ValidationPolicy::dss`] turns them all off. A rule DSS applies and Nacre would
 /// otherwise lack, such as a signing time (`/M`) missing or out of the signer's validity,
-/// or revocation data issued after a certificate's `notAfter` not counting, is no switch:
+/// revocation data issued after a certificate's `notAfter` with no `expiredCertsOnCRL`
+/// not counting, revocation data from a CA out of its validity at the control date, or a
+/// CA without `subjectKeyIdentifier`, is no switch:
 /// both presets apply it, so no preset is laxer than DSS. Turning one switch off from
 /// `strict()` reopens that switch's attack only.
 #[non_exhaustive]
@@ -62,12 +64,23 @@ pub struct ValidationPolicy {
     pub require_fresh_revocation: bool,
     /// Refuse a signature whose `/SubFilter` is neither `/ETSI.CAdES.detached` nor
     /// `/adbe.pkcs7.detached` ([`Defect::UnsupportedSubFilter`]). Off, any other
-    /// `/SubFilter` name is verified as a detached CMS and gets no ETSI level, as DSS does
-    /// (ADR-0027); a missing `/SubFilter`, or one that is not a name, is refused either
-    /// way.
+    /// `/SubFilter`, a missing one or one that is not a name included, is verified as a
+    /// detached CMS and gets no ETSI level, as DSS does (ADR-0027, ADR-0029).
     ///
     /// [`Defect::UnsupportedSubFilter`]: crate::Defect::UnsupportedSubFilter
     pub refuse_unsupported_sub_filters: bool,
+    /// Refuse a file whose `startxref` or `/Prev` offset lands on whitespace before its
+    /// cross-reference section ([`Error::Pdf`] `NotAnXrefSection`). Off, that whitespace
+    /// is skipped through `nacre_pdf::ReadOptions::misplaced_xref`, as DSS reads such a
+    /// file; an offset landing anywhere else is refused either way.
+    ///
+    /// [`Error::Pdf`]: crate::Error::Pdf
+    pub refuse_misplaced_xref: bool,
+    /// Drop a CRL issued after the `notAfter` of the certificate it covers, even when its
+    /// `expiredCertsOnCRL` extension (RFC 5280, 5.2.7) is at or before that `notAfter`.
+    /// Off, such a CRL counts for that certificate, as DSS does; one whose
+    /// `expiredCertsOnCRL` is later, or absent, is dropped either way.
+    pub ignore_expired_certs_on_crl: bool,
 }
 
 impl ValidationPolicy {
@@ -83,6 +96,8 @@ impl ValidationPolicy {
             judge_malformed_extensions: true,
             require_fresh_revocation: true,
             refuse_unsupported_sub_filters: true,
+            refuse_misplaced_xref: true,
+            ignore_expired_certs_on_crl: true,
         }
     }
 
@@ -90,8 +105,10 @@ impl ValidationPolicy {
     /// that [`strict`](Self::strict) refuses — shadow attacks and incremental saving
     /// attacks (any later revision), sneaky signatures, data appended after the last
     /// `%%EOF`, a signer certificate whose key usage forbids signing, a signature under a
-    /// `/SubFilter` Nacre does not support, and, for a signature with no timestamp, a stale
-    /// "not revoked" CRL or OCSP response appended to the `/DSS`.
+    /// `/SubFilter` Nacre does not support, a cross-reference section found only by
+    /// skipping whitespace, a CRL issued after a certificate expired, trusted on its
+    /// `expiredCertsOnCRL`, and, for a signature with no timestamp, a stale "not revoked"
+    /// CRL or OCSP response appended to the `/DSS`.
     ///
     /// Every switch off: the verdict DSS 6.5.1 gives, for comparing Nacre with it. Only the
     /// rules DSS also applies remain.
@@ -106,6 +123,8 @@ impl ValidationPolicy {
             judge_malformed_extensions: false,
             require_fresh_revocation: false,
             refuse_unsupported_sub_filters: false,
+            refuse_misplaced_xref: false,
+            ignore_expired_certs_on_crl: false,
         }
     }
 }
