@@ -106,3 +106,6 @@ A decision the person took is not logged here: it is an ADR or a story.
 | 2026-10-24 | s45-dss-parity-2 | The person chose a tenth switch `refuse_misplaced_xref` and an eleventh for `expiredCertsOnCRL`, both on in `strict()` | `strict()` must not get laxer than today |
 | 2026-10-24 | s18-validate-level | LT criterion now names the document timestamps' TSA chains | Spike cases r1, r6, r7, p06e |
 | 2026-10-24 | s45-dss-parity-2 | AC4 narrowed to the planner's spike (p06b–p06e) and the eleventh switch named `ignore_expired_certs_on_crl`; lane re-forked | Without a timestamp `strict()` refuses the expired CA before reading revocation data |
+| 2026-10-24 | s46-dss-parity-3 | The person split s18 a third time: four more `dss()` divergence families become s46, before s18 | Same reason as s43 and s45 |
+| 2026-10-24 | s46-dss-parity-3 | The person chose a twelfth switch `judge_issuer_of_revoked_data` (on in `strict()`) and widened `ignore_expired_certs_on_crl` to OCSP `archiveCutoff` | `strict()` must not get laxer; both extensions answer the same question |
+| 2026-10-24 | s47-pdf-xref-recovery | The person put xref recovery beyond whitespace in its own story after s18; the s18 campaign forges no such case meanwhile | A repairing reader is an attack surface and PDFBox's rule is unknown |
