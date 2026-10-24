@@ -52,3 +52,16 @@ fn delegated_responder_is_accepted() {
     );
     assert_eq!(status, OcspStatus::Good);
 }
+
+#[test]
+fn delegate_and_archive_cutoff_are_exposed() {
+    let delegated =
+        OcspResponse::from_der(include_bytes!("corpus/ocsp-openssl/delegated-good.der")).unwrap();
+    assert_eq!(
+        delegated.delegated_responder(CA).unwrap().as_deref(),
+        Some(&include_bytes!("corpus/ocsp-openssl/responder.der")[..])
+    );
+    let good = OcspResponse::from_der(include_bytes!("corpus/ocsp-openssl/good.der")).unwrap();
+    assert_eq!(good.delegated_responder(CA).unwrap(), None);
+    assert_eq!(good.archive_cutoff(LEAF, CA).unwrap(), None);
+}

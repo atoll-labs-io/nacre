@@ -21,7 +21,11 @@
 //! `thisUpdate`, [`OcspResponse::check_this_update`], against a date and a tolerance the
 //! caller gives. A caller judging a response fetched now checks both (`HttpOcspSource`
 //! already checks the nonce); one judging a past signing time with a later response may
-//! skip the freshness check, as a CRL issued later is accepted.
+//! skip the freshness check, as a CRL issued later is accepted. Two accessors give a
+//! caller what it judges beyond one date: [`OcspResponse::delegated_responder`], the
+//! certificate of the delegate `status` accepts, checked at `producedAt` only, and
+//! [`OcspResponse::archive_cutoff`], the single response's `archiveCutoff` (RFC 6960
+//! §4.4.4).
 //!
 //! Judged here: one CRL or one OCSP response against one certificate at one date. Left to
 //! the caller (s17): the certificate chain, and comparing a revocation date with a signing

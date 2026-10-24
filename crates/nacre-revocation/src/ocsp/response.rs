@@ -1,6 +1,6 @@
 use std::time::{Duration, SystemTime};
 
-use der::asn1::{Any, OctetString};
+use der::asn1::{Any, GeneralizedTime, OctetString};
 use der::oid::ObjectIdentifier;
 use der::{Decode, Encode};
 use spki::SubjectPublicKeyInfoOwned;
@@ -17,6 +17,8 @@ use crate::crl::{critical, signed_tbs};
 use crate::verify::verify_signed;
 
 const ID_KP_OCSP_SIGNING: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.3.6.1.5.5.7.3.9");
+const ID_PKIX_OCSP_ARCHIVE_CUTOFF: ObjectIdentifier =
+    ObjectIdentifier::new_unwrap("1.3.6.1.5.5.7.48.1.6");
 
 /// A decoded `successful` OCSP response of type `id-pkix-ocsp-basic`, with the
 /// `tbsResponseData` bytes it arrived with.
@@ -185,6 +187,39 @@ impl OcspResponse {
         }
     }
 
+    /// The DER of the delegated responder [`OcspResponse::status`] would accept for a
+    /// response about a certificate of `issuer` (DER): `None` when the `ResponderID` names
+    /// the issuer itself, [`Error::UnauthorizedResponder`] when no certificate of `certs`
+    /// qualifies. Its validity is checked at `producedAt` only; judging it at another date
+    /// is the caller's.
+    pub fn delegated_responder(&self, issuer: &[u8]) -> Result<Option<Vec<u8>>, Error> {
+        let issuer = Certificate::from_der(issuer).map_err(Error::IssuerCertificate)?;
+        match self.responder(&issuer)? {
+            Responder::Issuer => Ok(None),
+            Responder::Delegate(der, _) => Ok(Some(der)),
+        }
+    }
+
+    /// The `archiveCutoff` (RFC 6960 §4.4.4) of the single response about `certificate`,
+    /// issued by `issuer` (both DER): the date from which the responder keeps the status of
+    /// certificates expired since. A missing or undecodable value is `None`.
+    pub fn archive_cutoff(
+        &self,
+        certificate: &[u8],
+        issuer: &[u8],
+    ) -> Result<Option<SystemTime>, Error> {
+        let certificate = Certificate::from_der(certificate).map_err(Error::Certificate)?;
+        let issuer = Certificate::from_der(issuer).map_err(Error::IssuerCertificate)?;
+        let single = self.single(&certificate, &issuer)?;
+        Ok(single
+            .single_extensions
+            .iter()
+            .flatten()
+            .find(|extension| extension.extn_id == ID_PKIX_OCSP_ARCHIVE_CUTOFF)
+            .and_then(|extension| GeneralizedTime::from_der(extension.extn_value.as_bytes()).ok())
+            .map(|time| time.to_system_time()))
+    }
+
     fn responses(&self) -> &[SingleResponse] {
         &self.basic.tbs_response_data.responses
     }
@@ -209,10 +244,16 @@ impl OcspResponse {
     /// names it, else that of a certificate of `certs` the issuer delegated with
     /// `id-kp-OCSPSigning` (RFC 6960 §4.2.2.2).
     fn responder_key(&self, issuer: &Certificate) -> Result<SubjectPublicKeyInfoOwned, Error> {
-        let issuer_tbs = issuer.tbs_certificate();
+        Ok(match self.responder(issuer)? {
+            Responder::Issuer => issuer.tbs_certificate().subject_public_key_info().clone(),
+            Responder::Delegate(_, key) => key,
+        })
+    }
+
+    fn responder(&self, issuer: &Certificate) -> Result<Responder, Error> {
         let responder = &self.basic.tbs_response_data.responder_id;
         if names(responder, issuer) {
-            return Ok(issuer_tbs.subject_public_key_info().clone());
+            return Ok(Responder::Issuer);
         }
         let produced_at = self.produced_at();
         self.basic
@@ -222,6 +263,12 @@ impl OcspResponse {
             .find_map(|candidate| delegate(candidate, responder, issuer, produced_at))
             .ok_or(Error::UnauthorizedResponder)
     }
+}
+
+/// Who signed a response: the issuer, or a delegate given by its DER and its key.
+enum Responder {
+    Issuer,
+    Delegate(Vec<u8>, SubjectPublicKeyInfoOwned),
 }
 
 fn same_cert_id(received: &CertId, expected: &CertId) -> bool {
@@ -239,7 +286,7 @@ fn names(responder: &ResponderId, certificate: &Certificate) -> bool {
     }
 }
 
-/// The key of `candidate` when it is a responder the issuer delegated: named by the
+/// `candidate`, with its key, when it is a responder the issuer delegated: named by the
 /// `ResponderID`, issued under the issuer's name, signed by the issuer's key, with
 /// `id-kp-OCSPSigning`, valid at `producedAt`. Any failure leaves it unauthorized.
 fn delegate(
@@ -247,7 +294,7 @@ fn delegate(
     responder: &ResponderId,
     issuer: &Certificate,
     produced_at: SystemTime,
-) -> Option<SubjectPublicKeyInfoOwned> {
+) -> Option<Responder> {
     let bytes = candidate.to_der().ok()?;
     let certificate = Certificate::from_der(&bytes).ok()?;
     let tbs = certificate.tbs_certificate();
@@ -277,5 +324,6 @@ fn delegate(
     {
         return None;
     }
-    Some(tbs.subject_public_key_info().clone())
+    let key = tbs.subject_public_key_info().clone();
+    Some(Responder::Delegate(bytes, key))
 }

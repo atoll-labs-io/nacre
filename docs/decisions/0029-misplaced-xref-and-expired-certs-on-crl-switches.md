@@ -5,7 +5,7 @@ status: accepted
 date: 2026-10-24
 scope: story s45-dss-parity-2
 supersedes: [0027]
-superseded-by: []
+superseded-by: [0030]
 ---
 
 # ADR-0029 — A tenth and an eleventh switch, `refuse_misplaced_xref` and `ignore_expired_certs_on_crl`, on in `strict()` and off in `dss()`

@@ -1312,3 +1312,320 @@ fn ca_without_key_identifier_policy() {
         strict.defect
     );
 }
+
+const REVOKED: Verdict = (Indication::Indeterminate, Some(SubIndication::RevokedNoPoe));
+const REVOCATION_OUT_OF_BOUNDS: Verdict = (
+    Indication::Indeterminate,
+    Some(SubIndication::RevocationOutOfBoundsNoPoe),
+);
+
+/// The bench TSA's token dated `gen_time`, carrying the TSA and the intermediate.
+fn bench_tsa_at(gen_time: SystemTime) -> ForgedTsa {
+    ForgedTsa {
+        key: bench_key("tsa"),
+        certificates: vec![
+            bench_certificate("tsa.cert.pem"),
+            bench_certificate("intermediate.cert.pem"),
+        ],
+        gen_time: DateTime::from_system_time(gen_time).unwrap(),
+        imprint: None,
+    }
+}
+
+/// k1: a B-T stamped five days ago by a TSA under a CA of the bench root without
+/// `subjectKeyIdentifier`, the signer revoked an hour ago. The token proves no time.
+#[test]
+#[ignore = "conformance"]
+fn tsa_ca_without_key_identifier_policy() {
+    let now = SystemTime::now();
+    let root = Certificate::from_der(&bench_certificate("root.cert.pem")).unwrap();
+    let intermediate = Certificate::from_der(&bench_certificate("intermediate.cert.pem")).unwrap();
+    let ca_key = forge::key(&[0x91; 32]);
+    let ca = forge::issue_with(
+        Role::Ca,
+        "CN=Nacre s46 TSA CA without key identifier,O=Nacre tests,C=FR",
+        fresh_serial(70),
+        &ca_key,
+        Some(&root),
+        &bench_key("root"),
+        (x509(now - hours(60 * 24)), x509(now + hours(60 * 24))),
+        Extensions::WithoutKeyIdentifier,
+    );
+    let tsa_key = forge::key(&[0x92; 32]);
+    let tsa = forge::issue_with(
+        Role::Tsa,
+        "CN=Nacre s46 TSA under a CA without key identifier,O=Nacre tests,C=FR",
+        fresh_serial(71),
+        &tsa_key,
+        Some(&ca),
+        &ca_key,
+        (x509(now - hours(50 * 24)), x509(now + hours(50 * 24))),
+        Extensions::Usual,
+    );
+    let authority = ForgedTsa {
+        key: tsa_key,
+        certificates: vec![tsa.to_der().unwrap(), ca.to_der().unwrap()],
+        ..bench_tsa_at(now - hours(5 * 24))
+    };
+    let signer = forged_signer(
+        "CN=Nacre s46 k1 signer,O=Nacre tests,C=FR",
+        0x93,
+        72,
+        usual_validity(),
+        Extensions::Usual,
+    );
+    let leaf = Certificate::from_der(&signer.chain[0]).unwrap();
+    let pdf = forge::with_dss(
+        &forge::signed(&signer, Level::T { tsa: &authority }),
+        &[],
+        &[
+            forge::crl(
+                &intermediate,
+                &bench_key("intermediate"),
+                x509(now),
+                x509(now + hours(30 * 24)),
+                &[(&leaf, x509(now - hours(1)))],
+            ),
+            crl_at(&root, &bench_key("root"), now - hours(1)),
+            crl_at(&ca, &ca_key, now - hours(1)),
+        ],
+    );
+
+    let ours = confront_signatures(
+        "s46-k1-tsa-ca-without-key-identifier",
+        &pdf,
+        None,
+        &[REVOKED],
+        &ValidationPolicy::dss(),
+    );
+    assert_eq!(ours[0].best_signature_time, None);
+    let strict = nacre(&pdf, None, &ValidationPolicy::strict());
+    assert_eq!(verdict(&strict), REVOKED, "{:?}", strict.defect);
+    assert_eq!(strict.best_signature_time, None);
+}
+
+/// v3 and v5: a B-T stamped five days ago under a CA of the bench root expired
+/// yesterday. In v3 the CA's CRL of three days ago revokes the signer four days ago; in v5
+/// the root's revokes the CA four days ago and the CA's says "good".
+#[test]
+#[ignore = "conformance"]
+fn issuer_of_revoked_data_policy() {
+    let now = SystemTime::now();
+    let root = Certificate::from_der(&bench_certificate("root.cert.pem")).unwrap();
+    let tsa = bench_tsa_at(now - hours(5 * 24));
+    let ca_crl = |ca: &Certificate, key: &SigningKey, revoked: &[(&Certificate, Time)]| {
+        forge::crl(
+            ca,
+            key,
+            x509(now - hours(3 * 24)),
+            x509(now + hours(30 * 24)),
+            revoked,
+        )
+    };
+    let four_days_ago = x509(now - hours(4 * 24));
+
+    let (ca, ca_key, signer) = forged_ca(
+        "CN=Nacre s46 v3 expired CA,O=Nacre tests,C=FR",
+        0x94,
+        73,
+        now - hours(24),
+        Extensions::Usual,
+    );
+    let leaf = Certificate::from_der(&signer.chain[0]).unwrap();
+    let v3 = forge::with_dss(
+        &forge::signed(&signer, Level::T { tsa: &tsa }),
+        &[],
+        &[
+            ca_crl(&ca, &ca_key, &[(&leaf, four_days_ago)]),
+            ca_crl(&root, &bench_key("root"), &[]),
+            intermediate_crl(now - hours(1)),
+            root_crl(),
+        ],
+    );
+    let ours = confront_signatures(
+        "s46-v3-revoked-by-expired-ca",
+        &v3,
+        None,
+        &[PASSED],
+        &ValidationPolicy::dss(),
+    );
+    assert!(ours[0].best_signature_time.is_some());
+    let strict = nacre(&v3, None, &ValidationPolicy::strict());
+    assert_eq!(
+        verdict(&strict),
+        REVOCATION_OUT_OF_BOUNDS,
+        "{:?}",
+        strict.defect
+    );
+
+    let (ca, ca_key, signer) = forged_ca(
+        "CN=Nacre s46 v5 expired CA,O=Nacre tests,C=FR",
+        0x96,
+        75,
+        now - hours(24),
+        Extensions::Usual,
+    );
+    let v5 = forge::with_dss(
+        &forge::signed(&signer, Level::T { tsa: &tsa }),
+        &[],
+        &[
+            ca_crl(&ca, &ca_key, &[]),
+            ca_crl(&root, &bench_key("root"), &[(&ca, four_days_ago)]),
+            intermediate_crl(now - hours(1)),
+            root_crl(),
+        ],
+    );
+    confront_signatures(
+        "s46-v5-expired-ca-revoked",
+        &v5,
+        None,
+        &[REVOCATION_OUT_OF_BOUNDS],
+        &ValidationPolicy::dss(),
+    );
+    let strict = nacre(&v5, None, &ValidationPolicy::strict());
+    assert_eq!(
+        verdict(&strict),
+        REVOCATION_OUT_OF_BOUNDS,
+        "{:?}",
+        strict.defect
+    );
+}
+
+/// e2 and e3: a bench B whose `/DSS` holds the root's CRL and a "good" OCSP response on
+/// the signer produced three days ago by a delegate of the intermediate, embedded, valid
+/// then and expired yesterday (e2) or still valid (e3).
+#[test]
+#[ignore = "conformance"]
+fn delegated_responder_policy() {
+    let now = SystemTime::now();
+    let intermediate = Certificate::from_der(&bench_certificate("intermediate.cert.pem")).unwrap();
+    let signer = forged_signer(
+        "CN=Nacre s46 e2 signer,O=Nacre tests,C=FR",
+        0x98,
+        77,
+        usual_validity(),
+        Extensions::Usual,
+    );
+    let leaf = Certificate::from_der(&signer.chain[0]).unwrap();
+    let basic = forge::signed(&signer, Level::B);
+    let with_delegate = |secret: u8, offset: u64, not_after: SystemTime| {
+        let key = forge::key(&[secret; 32]);
+        let delegate = forge::issue_with(
+            Role::OcspResponder,
+            &format!("CN=Nacre s46 OCSP delegate {offset},O=Nacre tests,C=FR"),
+            fresh_serial(offset),
+            &key,
+            Some(&intermediate),
+            &bench_key("intermediate"),
+            (x509(now - hours(30 * 24)), x509(not_after)),
+            Extensions::Usual,
+        );
+        let response = forge::ocsp(
+            &leaf,
+            &intermediate,
+            &key,
+            &delegate,
+            Some(&delegate),
+            x509(now - hours(3 * 24)),
+            None,
+            None,
+        );
+        forge::with_dss_ocsps(&basic, &[], &[root_crl()], &[response])
+    };
+
+    let e2 = with_delegate(0x99, 78, now - hours(24));
+    confront_signatures(
+        "s46-e2-ocsp-delegate-expired-since",
+        &e2,
+        None,
+        &[REVOCATION_OUT_OF_BOUNDS],
+        &ValidationPolicy::dss(),
+    );
+    let strict = nacre(&e2, None, &ValidationPolicy::strict());
+    assert_eq!(verdict(&strict), GENERAL_FAILURE, "{:?}", strict.defect);
+
+    let e3 = with_delegate(0x9a, 79, now + hours(30 * 24));
+    confront_signatures(
+        "s46-e3-ocsp-delegate-valid",
+        &e3,
+        None,
+        &[PASSED],
+        &ValidationPolicy::dss(),
+    );
+}
+
+/// e4 and e5: a signer expired yesterday, an intermediate-signed "good" OCSP response of
+/// an hour ago whose `archiveCutoff` is 60 days back; e4 is a B, e5 a B-T stamped five days
+/// ago.
+#[test]
+#[ignore = "conformance"]
+fn archive_cutoff_policy() {
+    let now = SystemTime::now();
+    let intermediate = Certificate::from_der(&bench_certificate("intermediate.cert.pem")).unwrap();
+    let expired = |subject: &str, secret: u8, offset: u64| {
+        forged_signer(
+            subject,
+            secret,
+            offset,
+            (forge::instant(2026, 1, 1, 0, 0, 0), now - hours(24)),
+            Extensions::Usual,
+        )
+    };
+    let response = |signer: &ChainSigner| {
+        forge::ocsp(
+            &Certificate::from_der(&signer.chain[0]).unwrap(),
+            &intermediate,
+            &bench_key("intermediate"),
+            &intermediate,
+            None,
+            x509(now - hours(1)),
+            None,
+            Some(x509(now - hours(60 * 24))),
+        )
+    };
+
+    let signer = expired("CN=Nacre s46 e4 signer,O=Nacre tests,C=FR", 0x9b, 80);
+    let e4 = forge::with_dss_ocsps(
+        &forge::signed(&signer, Level::B),
+        &[],
+        &[root_crl()],
+        &[response(&signer)],
+    );
+    confront_signatures(
+        "s46-e4-expired-ocsp-archive-cutoff",
+        &e4,
+        None,
+        &[(
+            Indication::Indeterminate,
+            Some(SubIndication::OutOfBoundsNotRevoked),
+        )],
+        &ValidationPolicy::dss(),
+    );
+    let strict = nacre(&e4, None, &ValidationPolicy::strict());
+    assert_eq!(
+        verdict(&strict),
+        (
+            Indication::Indeterminate,
+            Some(SubIndication::OutOfBoundsNoPoe)
+        )
+    );
+
+    let signer = expired("CN=Nacre s46 e5 signer,O=Nacre tests,C=FR", 0x9c, 81);
+    let tsa = bench_tsa_at(now - hours(5 * 24));
+    let e5 = forge::with_dss_ocsps(
+        &forge::signed(&signer, Level::T { tsa: &tsa }),
+        &[],
+        &[root_crl(), intermediate_crl(now - hours(1))],
+        &[response(&signer)],
+    );
+    let ours = confront_signatures(
+        "s46-e5-stamped-expired-ocsp-archive-cutoff",
+        &e5,
+        None,
+        &[PASSED],
+        &ValidationPolicy::dss(),
+    );
+    assert!(ours[0].best_signature_time.is_some());
+    let strict = nacre(&e5, None, &ValidationPolicy::strict());
+    assert_eq!(verdict(&strict), GENERAL_FAILURE, "{:?}", strict.defect);
+}
