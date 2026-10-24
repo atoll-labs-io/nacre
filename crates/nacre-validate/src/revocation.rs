@@ -7,7 +7,7 @@ use std::time::{Duration, SystemTime};
 
 use der::Decode;
 use nacre_core::{RevocationData, RevocationSource, SubIndication, ValidationReport};
-use nacre_revocation::{Crl, CrlStatus, OcspResponse, OcspStatus};
+use nacre_revocation::{Crl, CrlReason, CrlStatus, OcspResponse, OcspStatus};
 use x509_cert::Certificate;
 
 use crate::CertificatePath;
@@ -68,25 +68,35 @@ impl Item {
     /// or the response's `producedAt`. Judging there rather than at the control date makes
     /// an expired item usable, as DSS does; every other refusal of `status` drops it.
     fn verdict(&self, certificate: &[u8], issuer: &[u8]) -> Option<Verdict> {
-        let (date, revoked) = match self {
+        let (date, revoked, reason) = match self {
             Self::Crl(crl) => {
                 let date = crl.this_update();
                 match crl.status(certificate, issuer, date).ok()? {
-                    CrlStatus::NotRevoked => (date, None),
-                    CrlStatus::Revoked { date: revoked, .. } => (date, Some(revoked)),
+                    CrlStatus::NotRevoked => (date, None, None),
+                    CrlStatus::Revoked {
+                        date: revoked,
+                        reason,
+                    } => (date, Some(revoked), reason),
                     _ => return None,
                 }
             }
             Self::Ocsp(response) => {
                 let date = response.produced_at();
                 match response.status(certificate, issuer, date).ok()? {
-                    OcspStatus::Good => (date, None),
-                    OcspStatus::Revoked { date: revoked, .. } => (date, Some(revoked)),
+                    OcspStatus::Good => (date, None, None),
+                    OcspStatus::Revoked {
+                        date: revoked,
+                        reason,
+                    } => (date, Some(revoked), reason),
                     _ => return None,
                 }
             }
         };
-        Some(Verdict { date, revoked })
+        Some(Verdict {
+            date,
+            revoked,
+            hold: reason == Some(CrlReason::CertificateHold),
+        })
     }
 }
 
@@ -94,6 +104,8 @@ impl Item {
 struct Verdict {
     date: SystemTime,
     revoked: Option<SystemTime>,
+    /// The revocation is a `certificateHold`, which a later CRL may lift.
+    hold: bool,
 }
 
 impl Verdict {
@@ -182,9 +194,10 @@ impl RevocationPool {
 /// Judges the revocation of every certificate of `path` below its anchor at `time`, the
 /// best-signature-time. For each one, the usable items are the pool's and the one answer of
 /// `source` (a failure adds none), each issued at or after the certificate's `notBefore`
-/// and, when `issued_from` is given, at or after it; the latest one decides. A revocation
-/// dated at or before `time` refuses the path, a later one does not, and a certificate no
-/// usable item covers is [`RevocationDefect::Missing`].
+/// and, when `issued_from` is given, at or after it, except a revocation dated at or before
+/// `time` other than a `certificateHold`, which stays true however old its proof; the
+/// latest one decides. A revocation dated at or before `time` refuses the path, a later one
+/// does not, and a certificate no usable item covers is [`RevocationDefect::Missing`].
 pub(crate) fn judge_path(
     path: &CertificatePath,
     pool: &RevocationPool,
@@ -202,7 +215,13 @@ pub(crate) fn judge_path(
             .validity()
             .not_before
             .to_system_time();
-        let earliest = issued_from.map_or(not_before, |from| from.max(not_before));
+        // Freshness guards against a "not revoked" issued before a revocation; an old proof
+        // of revocation stays true, unless it is a hold that may have been lifted since. A
+        // stale item revoking only after `time` says "not revoked at `time`", so it is dropped.
+        let fresh = |verdict: &Verdict| {
+            issued_from.is_none_or(|from| verdict.date >= from)
+                || (verdict.revoked.is_some_and(|date| date <= time) && !verdict.hold)
+        };
         let stored = pool
             .items
             .iter()
@@ -211,7 +230,7 @@ pub(crate) fn judge_path(
         let fetched = source.and_then(|source| pool.answer(source, certificate, issuer));
         let latest = stored
             .chain(fetched)
-            .filter(|verdict| verdict.date >= earliest)
+            .filter(|verdict| verdict.date >= not_before && fresh(verdict))
             .reduce(|best, next| if next.outranks(&best) { next } else { best })
             .ok_or(RevocationDefect::Missing { depth })?;
         if let Some(date) = latest.revoked

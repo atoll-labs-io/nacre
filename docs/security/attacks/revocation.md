@@ -13,17 +13,19 @@ Chaque attaque du jugement a son cas dans le corpus `crates/nacre-revocation/tes
 5. `nextUpdate` absent (`Error::MissingNextUpdate`) ou antérieur à la date de contrôle (`Error::Expired`) ;
 6. recherche du numéro de série : `Revoked` avec date et motif, ou `NotRevoked`.
 
-| Attaque | Cas du corpus | Test de rejet | Erreur rendue |
-| --- | --- | --- | --- |
-| CRL d'un autre émetteur : correctement signée par une autre AC, qui est donnée comme émetteur ; la feuille, elle, a été émise par `ca.der` | `wrong-issuer.der` (avec `other-ca.der`) | `crl_from_another_issuer_is_rejected` | `Error::WrongIssuer` |
-| Émetteur renommé : un certificat qui porte la clé de l'AC sous un autre sujet, donné comme émetteur ; la signature de la CRL vérifie avec lui, seul le nom le trahit | `issuer-renamed.der` (avec `renamed-ca.der`) | `issuer_certificate_under_another_name_is_rejected` | `Error::WrongIssuer` |
-| Signature invalide : la date de révocation de l'entrée avancée d'une minute après signature | `bad-signature.der` | `changed_byte_after_signing_is_rejected` | `Error::SignatureInvalid` |
-| CRL périmée : `nextUpdate` au 1er juin 2026, rejouée après | `stale.der` | `stale_crl_is_rejected` | `Error::Expired { next_update }` |
-| CRL sans `nextUpdate` : sa fraîcheur ne peut pas être montrée (RFC 5280 §5.1.2.5 l'exige) | `no-next-update.der` | `crl_without_next_update_is_rejected` | `Error::MissingNextUpdate` |
-| CRL partitionnée : `issuingDistributionPoint` critique, qui restreint la portée de la liste | `critical-extension.der` | `critical_crl_extension_is_rejected` | `Error::UnsupportedCriticalExtension(2.5.29.28)` |
-| Substitution d'algorithme : `signatureAlgorithm` externe, non signé, remplacé par `sha256WithRSAEncryption` sur une CRL ECDSA | `algorithm-substitution.der` | `algorithm_substitution_is_rejected` | `Error::AlgorithmMismatch` |
-| Émetteur non habilité : même nom et même clé que l'AC, mais `keyUsage` réduit à `digitalSignature` (RFC 5280 §6.3.3 f) | `issuer-not-crl-signer.der` (avec `non-crl-signer-ca.der`) | `issuer_without_crl_sign_is_rejected` | `Error::IssuerNotCrlSigner` |
-| CRL indirecte : `certificateIssuer` critique sur l'entrée de la feuille | `critical-entry-extension.der` | `critical_entry_extension_is_rejected` | `Error::UnsupportedCriticalExtension(2.5.29.29)` |
+La colonne « Ouverte sous » nomme la politique de validation de `nacre-validate` (`ValidationPolicy`, ADR-0026) qui laisse passer l'attaque, et l'interrupteur qui la ferme. `strict()`, la politique par défaut, les ferme toutes ; `dss()`, qui rend le verdict de DSS 6.5.1 pour la comparaison, éteint chaque interrupteur. « aucune » : la règle s'applique sous toute politique. Les règles de `nacre-revocation` s'appliquent sous toute politique.
+
+| Attaque | Cas du corpus | Test de rejet | Erreur rendue | Ouverte sous |
+| --- | --- | --- | --- | --- |
+| CRL d'un autre émetteur : correctement signée par une autre AC, qui est donnée comme émetteur ; la feuille, elle, a été émise par `ca.der` | `wrong-issuer.der` (avec `other-ca.der`) | `crl_from_another_issuer_is_rejected` | `Error::WrongIssuer` | aucune |
+| Émetteur renommé : un certificat qui porte la clé de l'AC sous un autre sujet, donné comme émetteur ; la signature de la CRL vérifie avec lui, seul le nom le trahit | `issuer-renamed.der` (avec `renamed-ca.der`) | `issuer_certificate_under_another_name_is_rejected` | `Error::WrongIssuer` | aucune |
+| Signature invalide : la date de révocation de l'entrée avancée d'une minute après signature | `bad-signature.der` | `changed_byte_after_signing_is_rejected` | `Error::SignatureInvalid` | aucune |
+| CRL périmée : `nextUpdate` au 1er juin 2026, rejouée après | `stale.der` | `stale_crl_is_rejected` | `Error::Expired { next_update }` | aucune |
+| CRL sans `nextUpdate` : sa fraîcheur ne peut pas être montrée (RFC 5280 §5.1.2.5 l'exige) | `no-next-update.der` | `crl_without_next_update_is_rejected` | `Error::MissingNextUpdate` | aucune |
+| CRL partitionnée : `issuingDistributionPoint` critique, qui restreint la portée de la liste | `critical-extension.der` | `critical_crl_extension_is_rejected` | `Error::UnsupportedCriticalExtension(2.5.29.28)` | aucune |
+| Substitution d'algorithme : `signatureAlgorithm` externe, non signé, remplacé par `sha256WithRSAEncryption` sur une CRL ECDSA | `algorithm-substitution.der` | `algorithm_substitution_is_rejected` | `Error::AlgorithmMismatch` | aucune |
+| Émetteur non habilité : même nom et même clé que l'AC, mais `keyUsage` réduit à `digitalSignature` (RFC 5280 §6.3.3 f) | `issuer-not-crl-signer.der` (avec `non-crl-signer-ca.der`) | `issuer_without_crl_sign_is_rejected` | `Error::IssuerNotCrlSigner` | aucune |
+| CRL indirecte : `certificateIssuer` critique sur l'entrée de la feuille | `critical-entry-extension.der` | `critical_entry_extension_is_rejected` | `Error::UnsupportedCriticalExtension(2.5.29.29)` | aucune |
 
 ## Source HTTP : requêtes forcées (SSRF)
 
@@ -31,12 +33,12 @@ Chaque attaque du jugement a son cas dans le corpus `crates/nacre-revocation/tes
 
 L'adresse est contrôlée sur les adresses que le nom résout, et la connexion se fait vers ces adresses-là, sans seconde résolution : pas de fenêtre de rebinding DNS. Un nom dont une seule adresse est refusée est refusé en entier. Les réglages de proxy sont ignorés, car un proxy résoudrait le nom hors de ce contrôle. `HttpCrlSource::allowing_loopback()` admet en plus `127.0.0.0/8` et `::1`, pour le banc de conformité qui sert ses CRL sur `127.0.0.1` ; le test du banc l'emploie, jamais le code de production.
 
-| Attaque | Test de rejet | Erreur rendue |
-| --- | --- | --- |
-| Point de distribution sur la boucle locale (`http://127.0.0.1:<port>/…`), avec le constructeur par défaut ; le message ne cite pas l'URL | `loopback_point_is_refused_by_default` | `Error::NonPublicAddress` (genre `InvalidInput`) |
-| Point de distribution sur une adresse privée écrite en clair (`10.1.2.3`, `fd00::1`), avec les deux constructeurs | `private_addresses_are_refused_even_with_loopback_allowed` | `Error::NonPublicAddress` |
-| Redirection : un serveur répond `302` vers une URL qui sert une CRL valide ; aucune redirection n'est suivie | `redirect_is_not_followed` | `Error::Http(StatusCode(302))` |
-| Plages refusées, une adresse par plage : `0.0.0.0/8`, boucle locale, RFC 1918, lien local `169.254.0.0/16` et `fe80::/10`, `100.64.0.0/10`, `192.0.0.0/24`, `198.18.0.0/15`, multicast, `240.0.0.0/4` et diffusion, `::`, `fc00::/7`, documentation, IPv4 dans IPv6 (`::ffff:0:0/96`, 6to4) ; en IPv6, seul `2000::/3` est public | `only_public_addresses_are_allowed` (test unitaire de `src/http.rs`) | — |
+| Attaque | Test de rejet | Erreur rendue | Ouverte sous |
+| --- | --- | --- | --- |
+| Point de distribution sur la boucle locale (`http://127.0.0.1:<port>/…`), avec le constructeur par défaut ; le message ne cite pas l'URL | `loopback_point_is_refused_by_default` | `Error::NonPublicAddress` (genre `InvalidInput`) | aucune |
+| Point de distribution sur une adresse privée écrite en clair (`10.1.2.3`, `fd00::1`), avec les deux constructeurs | `private_addresses_are_refused_even_with_loopback_allowed` | `Error::NonPublicAddress` | aucune |
+| Redirection : un serveur répond `302` vers une URL qui sert une CRL valide ; aucune redirection n'est suivie | `redirect_is_not_followed` | `Error::Http(StatusCode(302))` | aucune |
+| Plages refusées, une adresse par plage : `0.0.0.0/8`, boucle locale, RFC 1918, lien local `169.254.0.0/16` et `fe80::/10`, `100.64.0.0/10`, `192.0.0.0/24`, `198.18.0.0/15`, multicast, `240.0.0.0/4` et diffusion, `::`, `fc00::/7`, documentation, IPv4 dans IPv6 (`::ffff:0:0/96`, 6to4) ; en IPv6, seul `2000::/3` est public | `only_public_addresses_are_allowed` (test unitaire de `src/http.rs`) | — | aucune |
 
 La source s'en tient à `http://` (pas d'`https`, pas de LDAP), borne la réponse à 16 Mio et l'appel à 30 s, et refuse ce qui n'est pas une CRL lisible ; un appelant qui veut plus de contrôle injecte sa propre `RevocationSource`. Il reste une requête GET aveugle vers une adresse publique qu'un certificat choisit.
 
@@ -56,28 +58,42 @@ Chaque attaque OCSP a son cas dans `crates/nacre-revocation/tests/corpus/ocsp-at
 
 Deux contrôles restent hors de `status`, chacun là où l'information existe : `OcspResponse::check_nonce`, contre la requête envoyée (appelé par `HttpOcspSource`), et `OcspResponse::check_this_update`, contre une date et une tolérance données par l'appelant.
 
-| Attaque | Cas du corpus | Test de rejet | Erreur rendue |
-| --- | --- | --- | --- |
-| Délégué d'une autre clé : certificat de répondeur avec `id-kp-OCSPSigning`, émis sous le nom de l'AC mais signé par une autre clé ; seule sa signature le trahit | `foreign-delegate-response.der` (avec `foreign-delegate.der`) | `delegate_issued_by_another_key_is_unauthorized` | `Error::UnauthorizedResponder` |
-| Délégué non habilité : certificat émis et signé par l'AC, mais dont l'`extendedKeyUsage` ne porte que `clientAuth` | `plain-delegate-response.der` (avec `plain-delegate.der`) | `delegate_without_ocsp_signing_is_unauthorized` | `Error::UnauthorizedResponder` |
-| Délégué périmé : certificat émis et signé par l'AC, avec `id-kp-OCSPSigning`, mais valide du 1er janvier 2025 au 1er janvier 2026, donc expiré à `producedAt` ; une clé de répondeur échue ne signe plus de « bon » | `expired-delegate-response.der` (avec `expired-delegate.der`) | `delegate_expired_at_produced_at_is_unauthorized` | `Error::UnauthorizedResponder` |
-| Rejeu ou réponse à une autre requête : nonce de la réponse différent de celui de la requête | `base.der`, contre une requête de nonce `0x6e` × 32 | `response_to_another_nonce_is_rejected` | `Error::NonceMismatch` |
-| Réponse ancienne présentée comme fraîche : `thisUpdate` à un jour de la date donnée, tolérance de 5 min | `base.der` | `this_update_out_of_tolerance_is_rejected` | `Error::ThisUpdateOutOfTolerance { this_update }` |
-| Signature invalide : la date de révocation avancée d'une minute après signature | `bad-signature.der` | `changed_byte_after_signing_is_rejected` | `Error::SignatureInvalid` |
-| Réponse périmée : `nextUpdate` au 1er juin 2026, rejouée après | `stale.der` | `stale_response_is_rejected` | `Error::Expired { next_update }` |
-| Extension critique inconnue : `id-pkix-ocsp-crl` critique dans la réponse simple | `critical-single-extension.der` | `critical_single_extension_is_rejected` | `Error::UnsupportedCriticalExtension(1.3.6.1.5.5.7.48.1.3)` |
-| Réponse sur un autre certificat : `CertID` d'un autre numéro de série, présentée pour la feuille | `other-serial.der` | `response_about_another_serial_is_rejected` | `Error::CertificateNotInResponse` |
-| Statut `unknown` : ne peut se lire ni « bon » ni « révoqué » | `unknown.der` | `unknown_status_is_rejected` | `Error::UnknownCertificate` |
-| Réponse non signée d'échec : `responseStatus` `tryLater`, sans `responseBytes` (RFC 6960 §2.3 : ces réponses ne sont pas signées) | `try-later.der` | `unsuccessful_response_status_is_rejected` | `Error::ResponseStatus(3)` |
+| Attaque | Cas du corpus | Test de rejet | Erreur rendue | Ouverte sous |
+| --- | --- | --- | --- | --- |
+| Délégué d'une autre clé : certificat de répondeur avec `id-kp-OCSPSigning`, émis sous le nom de l'AC mais signé par une autre clé ; seule sa signature le trahit | `foreign-delegate-response.der` (avec `foreign-delegate.der`) | `delegate_issued_by_another_key_is_unauthorized` | `Error::UnauthorizedResponder` | aucune |
+| Délégué non habilité : certificat émis et signé par l'AC, mais dont l'`extendedKeyUsage` ne porte que `clientAuth` | `plain-delegate-response.der` (avec `plain-delegate.der`) | `delegate_without_ocsp_signing_is_unauthorized` | `Error::UnauthorizedResponder` | aucune |
+| Délégué périmé : certificat émis et signé par l'AC, avec `id-kp-OCSPSigning`, mais valide du 1er janvier 2025 au 1er janvier 2026, donc expiré à `producedAt` ; une clé de répondeur échue ne signe plus de « bon » | `expired-delegate-response.der` (avec `expired-delegate.der`) | `delegate_expired_at_produced_at_is_unauthorized` | `Error::UnauthorizedResponder` | aucune |
+| Rejeu ou réponse à une autre requête : nonce de la réponse différent de celui de la requête | `base.der`, contre une requête de nonce `0x6e` × 32 | `response_to_another_nonce_is_rejected` | `Error::NonceMismatch` | aucune |
+| Réponse ancienne présentée comme fraîche : `thisUpdate` à un jour de la date donnée, tolérance de 5 min | `base.der` | `this_update_out_of_tolerance_is_rejected` | `Error::ThisUpdateOutOfTolerance { this_update }` | aucune |
+| Signature invalide : la date de révocation avancée d'une minute après signature | `bad-signature.der` | `changed_byte_after_signing_is_rejected` | `Error::SignatureInvalid` | aucune |
+| Réponse périmée : `nextUpdate` au 1er juin 2026, rejouée après | `stale.der` | `stale_response_is_rejected` | `Error::Expired { next_update }` | aucune |
+| Extension critique inconnue : `id-pkix-ocsp-crl` critique dans la réponse simple | `critical-single-extension.der` | `critical_single_extension_is_rejected` | `Error::UnsupportedCriticalExtension(1.3.6.1.5.5.7.48.1.3)` | aucune |
+| Réponse sur un autre certificat : `CertID` d'un autre numéro de série, présentée pour la feuille | `other-serial.der` | `response_about_another_serial_is_rejected` | `Error::CertificateNotInResponse` | aucune |
+| Statut `unknown` : ne peut se lire ni « bon » ni « révoqué » | `unknown.der` | `unknown_status_is_rejected` | `Error::UnknownCertificate` | aucune |
+| Réponse non signée d'échec : `responseStatus` `tryLater`, sans `responseBytes` (RFC 6960 §2.3 : ces réponses ne sont pas signées) | `try-later.der` | `unsuccessful_response_status_is_rejected` | `Error::ResponseStatus(3)` | aucune |
 
 ### Source HTTP OCSP
 
 `HttpOcspSource` envoie la requête en POST à l'URL `id-ad-ocsp` de l'`authorityInfoAccess` du certificat, qui peut venir de n'importe qui : même contrôle d'adresse, même refus des redirections et des proxys que `HttpCrlSource`, réponse bornée à 64 Kio. Ses tests, dans `crates/nacre-revocation/tests/http.rs`, forgent un certificat qui nomme l'URL voulue, et un serveur local sert une réponse OCSP valide à nonce fixe.
 
-| Attaque | Test de rejet | Erreur rendue |
-| --- | --- | --- |
-| Répondeur qui ne répond pas à la requête envoyée : nonce fixe, jamais égal au nonce aléatoire de 32 octets de la requête | `ocsp_nonce_mismatch_is_rejected` | `Error::NonceMismatch` (genre `InvalidSignature`) |
-| Répondeur sur la boucle locale, avec le constructeur par défaut ; le message ne cite pas l'URL | `ocsp_loopback_responder_is_refused_by_default` | `Error::NonPublicAddress` |
+| Attaque | Test de rejet | Erreur rendue | Ouverte sous |
+| --- | --- | --- | --- |
+| Répondeur qui ne répond pas à la requête envoyée : nonce fixe, jamais égal au nonce aléatoire de 32 octets de la requête | `ocsp_nonce_mismatch_is_rejected` | `Error::NonceMismatch` (genre `InvalidSignature`) | aucune |
+| Répondeur sur la boucle locale, avec le constructeur par défaut ; le message ne cite pas l'URL | `ocsp_loopback_responder_is_refused_by_default` | `Error::NonPublicAddress` | aucune |
+
+## Jugement de la révocation (s17, s41)
+
+`nacre-validate` (`crates/nacre-validate/src/revocation.rs`) juge chaque certificat du chemin sous l'ancre à la meilleure heure de signature, avec les CRL et réponses OCSP du CMS, des jetons d'horodatage, du `/DSS` et d'une source éventuelle : parmi les données qui se vérifient et sont émises après le `notBefore` du certificat, la plus récente décide. Sans preuve d'existence (aucun horodatage), un « non révoqué » ne compte que s'il est émis dans les 24 heures avant la date de contrôle ; une preuve de révocation plus ancienne, datée au plus tard de la meilleure heure de signature, compte toujours, sauf un `certificateHold`, qu'une CRL suivante a pu lever. Les cas sont forgés à l'exécution dans `crates/nacre-validate/tests/revocation.rs`, sous une PKI fictive.
+
+| Attaque | Test de rejet | Story | Résultat | Ouverte sous |
+| --- | --- | --- | --- | --- |
+| CRL signée par une clé forgée, au nom de l'intermédiaire, qui dit le signataire non révoqué | `crl_signed_by_another_key_is_ignored` | s17 | la CRL ne compte pas : `RevocationDefect::Missing`, `INDETERMINATE` / `CERTIFICATE_CHAIN_GENERAL_FAILURE` | aucune |
+| CRL émise avant le `notBefore` du signataire : elle ne peut rien dire de lui | `crl_before_not_before_is_ignored` | s17 | idem | aucune |
+| `/DSS` invalide : 300 flux illisibles ajoutés par une révision, pour noyer la chaîne et ses données | `chain_dss_junk_does_not_hide_the_chain` (`tests/attacks.rs`) | s16, s17 | la chaîne du CMS tient, sa révocation sans donnée : `CERTIFICATE_CHAIN_GENERAL_FAILURE` | aucune |
+| CRL dont le `nextUpdate` est passé | `expired_crl_still_counts` | s17 | jugée à sa propre date, comme DSS : elle compte | aucune |
+| Vieux « non révoqué » ajouté au `/DSS` d'une signature sans horodatage, pour passer une clé révoquée depuis | `old_crl_does_not_pass_a_signature_without_poe` ; `old_crl_passes_without_the_freshness_switch` | s17, s41 | ignoré au-delà de 24 heures : `RevocationDefect::Missing`, `CERTIFICATE_CHAIN_GENERAL_FAILURE` ; avec un horodatage, il compte, comme pour DSS | `dss()` (`require_fresh_revocation`) |
+| Vieille preuve de révocation que la fenêtre de 24 heures écarterait, laissant croire à une donnée manquante | `old_revocation_counts_unless_on_hold` | s41 | `keyCompromise` : `REVOKED_NO_POE` ; `certificateHold`, levable : ignorée, `CERTIFICATE_CHAIN_GENERAL_FAILURE` ; révocation datée après l'heure jugée : ignorée, `CERTIFICATE_CHAIN_GENERAL_FAILURE` | aucune |
+| Signataire expiré dont la CRL dit « non révoqué » | `expired_not_revoked_is_out_of_bounds_not_revoked` | s16, s41 | `OUT_OF_BOUNDS_NO_POE` avant la révocation ; sous `dss()`, `Defect::OutOfRangeNotRevoked`, `OUT_OF_BOUNDS_NOT_REVOKED`, comme DSS | aucune (`judge_validity_before_revocation` ne change que l'ordre) |
 
 ## Hors de ce fichier
 

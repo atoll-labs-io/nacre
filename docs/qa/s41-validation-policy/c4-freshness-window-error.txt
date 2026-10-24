@@ -1,0 +1,300 @@
+# QA s41-validation-policy — scenario c4-error (driver scenarios.md, surface endpoint, platform lib)
+# Tree under test: 19da54846d84a8a4bbdf860f8cfea2d36bf59f1a (copy of git ls-files in a mktemp -d directory; Install 'cargo fetch' and Build 'cargo build --workspace --all-features' exit 0)
+# Program: scratch binary crate qa-scen at crates/qa-scen of the copy, calling the public API of nacre-validate;
+#   input PDFs and CRLs are built with the test bench's fictitious PKI (crates/nacre-validate/tests/support/forge.rs, included by #[path]) or read from crates/nacre-validate/tests/corpus/.
+# Working directory: <copy>/crates/qa-scen   stdin: none
+# Command: qa-scen c4-error
+# Run twice; the two outputs are identical.
+
+## stdout+stderr
+old revoking CRL signed by another key (the root key posing as the intermediate)
+  [strict] signatures: 1
+    field=Signature1 indication=Indeterminate sub=Some(CertificateChainGeneralFailure) defect=Some(Revocation(Missing { depth: 0 })) digest=true sig=true later_revisions=1 chain=Some(3) bst=None
+old revoking CRL whose revocation date is after the control date (2026-10-23T05:00Z)
+  [strict] signatures: 1
+    field=Signature1 indication=Indeterminate sub=Some(CertificateChainGeneralFailure) defect=Some(Revocation(Missing { depth: 0 })) digest=true sig=true later_revisions=1 chain=Some(3) bst=None
+old revoking CRL whose revocation date equals the control date (2026-10-23T00:00Z)
+  [strict] signatures: 1
+    field=Signature1 indication=Indeterminate sub=Some(RevokedNoPoe) defect=Some(Revocation(Revoked { depth: 0, date: SystemTime { tv_sec: 1792713600, tv_nsec: 0 } })) digest=true sig=true later_revisions=1 chain=Some(3) bst=None
+old (25 h) CRL revoking another certificate (serial 77, keyCompromise), not the signer
+  [strict] signatures: 1
+    field=Signature1 indication=Indeterminate sub=Some(CertificateChainGeneralFailure) defect=Some(Revocation(Missing { depth: 0 })) digest=true sig=true later_revisions=1 chain=Some(3) bst=None
+same old (25 h) CRL with a future-dated entry, under strict() with require_fresh_revocation off and under dss(), for comparison
+  [strict, freshness off] signatures: 1
+    field=Signature1 indication=TotalPassed sub=None defect=None digest=true sig=true later_revisions=1 chain=Some(3) bst=None
+  [dss] signatures: 1
+    field=Signature1 indication=TotalPassed sub=None defect=None digest=true sig=true later_revisions=1 chain=Some(3) bst=None
+a CRL stream of garbage bytes in /DSS
+  [strict] signatures: 1
+    field=Signature1 indication=Indeterminate sub=Some(CertificateChainGeneralFailure) defect=Some(Revocation(Missing { depth: 0 })) digest=true sig=true later_revisions=1 chain=Some(3) bst=None
+## exit code: 0 (second run: 0)
+
+## The program, quoted whole: crates/qa-scen/Cargo.toml
+[package]
+name = "qa-scen"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+nacre-validate = { path = "../nacre-validate" }
+nacre-core = { path = "../nacre-core", features = ["test-signer"] }
+nacre-pades = { path = "../nacre-pades" }
+nacre-pdf = { path = "../nacre-pdf" }
+nacre-cms = { path = "../nacre-cms" }
+nacre-revocation = { path = "../nacre-revocation" }
+sha2 = "0.11"
+spki = "0.8"
+der = { version = "0.8", features = ["alloc", "oid", "pem"] }
+x509-cert = { version = "0.3", features = ["builder"] }
+p256 = { version = "0.14", features = ["ecdsa", "pkcs8", "pem"] }
+
+
+## crates/qa-scen/src/main.rs
+// QA scratch program for s41: calls the public interface of nacre-validate.
+// `forge` is the test bench's fictitious PKI, used here only to build input files.
+#![allow(clippy::all, dead_code)]
+#[path = "../../nacre-validate/tests/support/forge.rs"]
+mod forge;
+
+use std::time::SystemTime;
+use der::Encode;
+use forge::*;
+use nacre_pades::Level;
+use nacre_revocation::CrlReason;
+use nacre_validate::*;
+use x509_cert::Certificate;
+
+const CORPUS: &str = "../nacre-validate/tests/corpus/";
+
+fn show(label: &str, r: &Result<Vec<SignatureValidation>, Error>) {
+    match r {
+        Err(e) => println!("  [{label}] Err({e:?}) kind={:?} display=\"{e}\"", e.kind()),
+        Ok(v) => {
+            println!("  [{label}] signatures: {}", v.len());
+            for s in v {
+                println!(
+                    "    field={} indication={:?} sub={:?} defect={:?} digest={} sig={} later_revisions={} chain={:?} bst={:?}",
+                    s.field, s.report.indication(), s.report.sub_indication(), s.defect,
+                    s.digest_verified, s.signature_verified, s.later_revisions.len(),
+                    s.chain.as_ref().map(|c| c.certificates.len()), s.best_signature_time
+                );
+            }
+        }
+    }
+}
+
+fn file(name: &str) -> Vec<u8> {
+    std::fs::read(format!("{CORPUS}{name}")).unwrap_or_else(|e| panic!("{name}: {e}"))
+}
+
+fn chain_at() -> SystemTime { instant(2026, 10, 22, 0, 0, 0) }
+fn chain_anchors() -> TrustAnchors {
+    TrustAnchors::from_certificates([file("chain/root.der").as_slice()]).unwrap()
+}
+
+fn d(c: &Certificate) -> Vec<u8> { c.to_der().unwrap() }
+
+struct Pki { root: Certificate, rk: p256::ecdsa::SigningKey, int: Certificate, ik: p256::ecdsa::SigningKey, signer: Certificate, sk: p256::ecdsa::SigningKey }
+impl Pki {
+    fn new() -> Self {
+        let rk = key(&[0x51; 32]); let ik = key(&[0x52; 32]); let sk = key(&[0x53; 32]);
+        let root = issue(Role::Ca, "CN=QA root,O=QA,C=FR", 1, &rk, None, &rk);
+        let int = issue(Role::Ca, "CN=QA intermediate,O=QA,C=FR", 2, &ik, Some(&root), &rk);
+        let signer = issue(Role::Signer, "CN=QA signer,O=QA,C=FR", 3, &sk, Some(&int), &ik);
+        Pki { root, rk, int, ik, signer, sk }
+    }
+    fn signer_valid(&self, nb: x509_cert::time::Time, na: x509_cert::time::Time) -> Certificate {
+        issue_valid(Role::Signer, "CN=QA signer 2,O=QA,C=FR", 9, &self.sk, Some(&self.int), &self.ik, nb, na)
+    }
+    fn sign_with(&self, cert: &Certificate, m: der::DateTime) -> Vec<u8> {
+        let s = ChainSigner { key: self.sk.clone(), chain: vec![d(cert), d(&self.int)] };
+        nacre_pades::sign_at_level(UNSIGNED, &s, m, Level::B).unwrap()
+    }
+    fn crl_int(&self, at: x509_cert::time::Time, rev: &[(&Certificate, x509_cert::time::Time, Option<CrlReason>)]) -> Vec<u8> {
+        crl_with_reasons(&self.int, &self.ik, at, time(2026, 12, 1, 0, 0, 0), rev)
+    }
+    fn crl_root(&self, at: x509_cert::time::Time) -> Vec<u8> {
+        crl(&self.root, &self.rk, at, time(2026, 12, 1, 0, 0, 0), &[])
+    }
+    fn judge(&self, pdf: &[u8], at: SystemTime, p: &ValidationPolicy) -> Result<Vec<SignatureValidation>, Error> {
+        let a = TrustAnchors::from_certificates([d(&self.root).as_slice()]).unwrap();
+        validate_with_policy(pdf, &a, at, None, p)
+    }
+}
+
+fn off(f: impl FnOnce(&mut ValidationPolicy)) -> ValidationPolicy { let mut p = ValidationPolicy::strict(); f(&mut p); p }
+
+fn main() {
+    let arg = std::env::args().nth(1).unwrap_or_default();
+    let none = TrustAnchors::default();
+    let e = SystemTime::UNIX_EPOCH;
+    match arg.as_str() {
+        "c1" => {
+            println!("strict() = {:?}", ValidationPolicy::strict());
+            println!("dss()    = {:?}", ValidationPolicy::dss());
+            println!("default() == strict(): {}", ValidationPolicy::default() == ValidationPolicy::strict());
+            let switches: [(&str, fn(&mut ValidationPolicy)); 8] = [
+                ("refuse_later_revisions", |p| p.refuse_later_revisions = false),
+                ("refuse_sneaky_signatures", |p| p.refuse_sneaky_signatures = false),
+                ("refuse_trailing_data", |p| p.refuse_trailing_data = false),
+                ("list_unusable_signatures", |p| p.list_unusable_signatures = false),
+                ("judge_signer_key_usage", |p| p.judge_signer_key_usage = false),
+                ("judge_validity_before_revocation", |p| p.judge_validity_before_revocation = false),
+                ("judge_malformed_extensions", |p| p.judge_malformed_extensions = false),
+                ("require_fresh_revocation", |p| p.require_fresh_revocation = false),
+            ];
+            for (n, f) in &switches { let p = off(*f); println!("strict() with {n} off: differs from strict() in {} field(s)", { let s = format!("{:?}", ValidationPolicy::strict()); let q = format!("{p:?}"); s.split(", ").zip(q.split(", ")).filter(|(a,b)| a != b).count() }); }
+            println!("-- the three entry points without a policy vs validate_with_policy(strict()), anchors and date of the chain corpus where relevant");
+            for f in ["attacks/isa-appended-revision.pdf", "attacks/byterange-not-whole-file.pdf", "attacks/ssa-visible-signature.pdf", "attacks/isa-no-xref.pdf", "attacks/usf-contents-missing.pdf", "attacks/chain-key-usage.pdf", "attacks/chain-expired.pdf", "attacks/chain-malformed-extension.pdf"] {
+                let b = file(f);
+                println!("{f}");
+                let a = format!("{:?}", validate(&b));
+                let s = format!("{:?}", validate_with_policy(&b, &none, e, None, &ValidationPolicy::strict()));
+                let wa = format!("{:?}", validate_with_anchors(&b, &chain_anchors(), chain_at()));
+                let wr = format!("{:?}", validate_with_revocation(&b, &chain_anchors(), chain_at(), None));
+                let sa = format!("{:?}", validate_with_policy(&b, &chain_anchors(), chain_at(), None, &ValidationPolicy::strict()));
+                println!("  validate == policy(strict): {}; validate_with_anchors == policy(strict): {}; validate_with_revocation == policy(strict): {}", a == s, wa == sa, wr == sa);
+                show("validate_with_anchors (strict default)", &validate_with_anchors(&b, &chain_anchors(), chain_at()));
+                show("policy(dss)", &validate_with_policy(&b, &chain_anchors(), chain_at(), None, &ValidationPolicy::dss()));
+            }
+        }
+        "c1-error" => {
+            for (label, b) in [("empty input", Vec::new()), ("not a PDF", b"hello world".to_vec()), ("isa-no-xref truncated to 200 bytes", file("attacks/isa-no-xref.pdf")[..200].to_vec())] {
+                println!("{label}");
+                show("strict", &validate_with_policy(&b, &none, e, None, &ValidationPolicy::strict()));
+                show("dss", &validate_with_policy(&b, &none, e, None, &ValidationPolicy::dss()));
+            }
+            // isa-no-xref with only garbage after %%EOF, at many sizes
+            let mut b = file("unsigned.pdf"); b.extend_from_slice(b"\n%garbage after EOF\n");
+            println!("unsigned.pdf + trailing garbage");
+            show("strict", &validate_with_policy(&b, &none, e, None, &ValidationPolicy::strict()));
+            show("dss", &validate_with_policy(&b, &none, e, None, &ValidationPolicy::dss()));
+        }
+        "c2" => {
+            let dss = ValidationPolicy::dss();
+            let st = ValidationPolicy::strict();
+            for f in ["attacks/isa-appended-revision.pdf", "attacks/byterange-not-whole-file.pdf", "attacks/ssa-visible-signature.pdf", "attacks/isa-no-xref.pdf",
+                      "attacks/chain-key-usage.pdf", "attacks/chain-extended-key-usage.pdf", "attacks/chain-expired.pdf", "attacks/chain-not-yet-valid.pdf", "attacks/chain-malformed-extension.pdf",
+                      "attacks/usf-byterange-missing.pdf", "attacks/usf-byterange-null.pdf", "attacks/usf-byterange-short.pdf", "attacks/usf-contents-empty.pdf", "attacks/usf-contents-missing.pdf", "attacks/usf-contents-null.pdf", "attacks/usf-contents-zeros.pdf",
+                      "attacks/byterange-overlap.pdf", "chain/chain-cms.pdf"] {
+                let b = file(f);
+                println!("{f}");
+                show("strict", &validate_with_policy(&b, &chain_anchors(), chain_at(), None, &st));
+                show("dss", &validate_with_policy(&b, &chain_anchors(), chain_at(), None, &dss));
+            }
+            let pki = Pki::new();
+            let at = instant(2026, 10, 23, 0, 0, 0);
+            println!("forged: signer valid 2026-01-01..2026-10-22T09:00Z, /M 2026-10-22T08:00Z, \"not revoked\" CRLs of 2026-10-22T10:00Z, control date 2026-10-23T00:00Z");
+            let c = pki.signer_valid(time(2026,1,1,0,0,0), time(2026,10,22,9,0,0));
+            let pdf = with_dss(&pki.sign_with(&c, der::DateTime::new(2026,10,22,8,0,0).unwrap()), &[], &[pki.crl_int(time(2026,10,22,10,0,0), &[]), pki.crl_root(time(2026,10,22,10,0,0))]);
+            show("strict", &pki.judge(&pdf, at, &st));
+            show("dss", &pki.judge(&pdf, at, &dss));
+            println!("forged: same signer, no revocation data");
+            let pdf = pki.sign_with(&c, der::DateTime::new(2026,10,22,8,0,0).unwrap());
+            show("strict", &pki.judge(&pdf, at, &st));
+            show("dss", &pki.judge(&pdf, at, &dss));
+            println!("forged: same signer, revoked (keyCompromise) 2026-10-22T08:30Z in a CRL of 2026-10-22T10:00Z");
+            let pdf = with_dss(&pki.sign_with(&c, der::DateTime::new(2026,10,22,8,0,0).unwrap()), &[], &[pki.crl_int(time(2026,10,22,10,0,0), &[(&c, time(2026,10,22,8,30,0), Some(CrlReason::KeyCompromise))]), pki.crl_root(time(2026,10,22,10,0,0))]);
+            show("strict", &pki.judge(&pdf, at, &st));
+            show("dss", &pki.judge(&pdf, at, &dss));
+        }
+        "c2-error" => {
+            let dss = ValidationPolicy::dss();
+            for f in ["attacks/isa-no-xref.pdf", "attacks/chain-malformed-extension.pdf"] {
+                let mut b = file(f);
+                let n = b.len(); b.truncate(n * 2 / 3);
+                println!("{f} truncated to 2/3");
+                show("dss", &validate_with_policy(&b, &chain_anchors(), chain_at(), None, &dss));
+            }
+            println!("chain-cms.pdf, anchors = intermediate.der (not a root) under dss()");
+            let a = TrustAnchors::from_certificates([file("chain/intermediate.der").as_slice()]);
+            match a { Err(e) => println!("  from_certificates: Err({e:?})"), Ok(a) => show("dss", &validate_with_policy(&file("chain/chain-cms.pdf"), &a, chain_at(), None, &dss)) }
+            println!("TrustAnchors::from_certificates with a non-certificate");
+            match TrustAnchors::from_certificates([&b"not a cert"[..]]) { Err(e) => println!("  Err({e:?}) display=\"{e}\""), Ok(_) => println!("  Ok") }
+        }
+        "c3" => {
+            let pki = Pki::new();
+            let c = pki.signer_valid(time(2026,10,23,0,0,0), time(2036,1,1,0,0,0));
+            let crls = [pki.crl_int(time(2026,10,23,12,0,0), &[]), pki.crl_root(time(2026,10,23,12,0,0))];
+            let at = instant(2026,10,24,0,0,0);
+            for (label, m) in [("/M 2026-10-22T08:00Z (before notBefore 2026-10-23T00:00Z)", der::DateTime::new(2026,10,22,8,0,0).unwrap()),
+                               ("/M 2026-10-22T23:59:59Z (one second before notBefore)", der::DateTime::new(2026,10,22,23,59,59).unwrap()),
+                               ("/M 2026-10-23T00:00:00Z (equal to notBefore)", der::DateTime::new(2026,10,23,0,0,0).unwrap()),
+                               ("/M 2026-10-23T12:00Z (after notBefore)", der::DateTime::new(2026,10,23,12,0,0).unwrap())] {
+                let pdf = with_dss(&pki.sign_with(&c, m), &[], &crls);
+                println!("{label}; fresh \"not revoked\" CRLs of 2026-10-23T12:00Z; control date 2026-10-24T00:00Z");
+                let m_line = pdf.windows(4).position(|w| w == b"/M <").and_then(|i| { let h = &pdf[i+4..]; let end = h.iter().position(|&c| c == b'>')?; let hex = std::str::from_utf8(&h[..end]).ok()?; Some((0..hex.len()/2).map(|k| u8::from_str_radix(&hex[2*k..2*k+2], 16).unwrap() as char).collect::<String>()) });
+                println!("  /M in file: {m_line:?}");
+                show("strict", &pki.judge(&pdf, at, &ValidationPolicy::strict()));
+                show("dss", &pki.judge(&pdf, at, &ValidationPolicy::dss()));
+            }
+        }
+        "c3-error" => {
+            let pki = Pki::new();
+            let c = pki.signer_valid(time(2026,10,23,0,0,0), time(2036,1,1,0,0,0));
+            let pdf = pki.sign_with(&c, der::DateTime::new(2026,10,22,8,0,0).unwrap());
+            println!("/M before notBefore, no revocation data, control date 2026-10-24T00:00Z");
+            show("strict", &pki.judge(&pdf, instant(2026,10,24,0,0,0), &ValidationPolicy::strict()));
+            show("dss", &pki.judge(&pdf, instant(2026,10,24,0,0,0), &ValidationPolicy::dss()));
+            println!("/M before notBefore, control date 2026-10-22T12:00Z (before notBefore, signer not yet valid)");
+            let pdf = with_dss(&pdf, &[], &[pki.crl_int(time(2026,10,22,11,0,0), &[]), pki.crl_root(time(2026,10,22,11,0,0))]);
+            show("strict", &pki.judge(&pdf, instant(2026,10,22,12,0,0), &ValidationPolicy::strict()));
+            show("dss", &pki.judge(&pdf, instant(2026,10,22,12,0,0), &ValidationPolicy::dss()));
+        }
+        "c4" => {
+            let pki = Pki::new();
+            let at = instant(2026,10,23,0,0,0);
+            let base = pki.sign_with(&pki.signer, der::DateTime::new(2026,10,22,8,0,0).unwrap());
+            let old = time(2026,10,21,23,0,0); // 25 h before the control date
+            let fresh = time(2026,10,22,10,0,0);
+            let cases: Vec<(&str, Vec<u8>)> = vec![
+                ("old (25 h) CRL, signer revoked 2026-10-21T22:00Z, keyCompromise", pki.crl_int(old, &[(&pki.signer, time(2026,10,21,22,0,0), Some(CrlReason::KeyCompromise))])),
+                ("old (25 h) CRL, signer revoked 2026-10-21T22:00Z, no reasonCode", pki.crl_int(old, &[(&pki.signer, time(2026,10,21,22,0,0), None)])),
+                ("old (25 h) CRL, signer revoked 2026-10-21T22:00Z, superseded", pki.crl_int(old, &[(&pki.signer, time(2026,10,21,22,0,0), Some(CrlReason::Superseded))])),
+                ("old (25 h) CRL, signer revoked 2026-10-21T22:00Z, certificateHold", pki.crl_int(old, &[(&pki.signer, time(2026,10,21,22,0,0), Some(CrlReason::CertificateHold))])),
+                ("old (25 h) CRL, not revoked", pki.crl_int(old, &[])),
+                ("CRL issued 23 h before (2026-10-22T01:00Z), not revoked", pki.crl_int(time(2026,10,22,1,0,0), &[])),
+                ("CRL issued exactly 24 h before (2026-10-22T00:00Z), not revoked", pki.crl_int(time(2026,10,22,0,0,0), &[])),
+                ("fresh CRL 2026-10-22T10:00Z, not revoked", pki.crl_int(fresh, &[])),
+            ];
+            for (label, c) in cases {
+                let pdf = with_dss(&base, &[], &[c, pki.crl_root(fresh)]);
+                println!("B-B, /M 2026-10-22T08:00Z, control date 2026-10-23T00:00Z, root CRL fresh; intermediate CRL: {label}");
+                show("strict", &pki.judge(&pdf, at, &ValidationPolicy::strict()));
+                show("dss", &pki.judge(&pdf, at, &ValidationPolicy::dss()));
+            }
+        }
+        "c4-error" => {
+            let pki = Pki::new();
+            let at = instant(2026,10,23,0,0,0);
+            let base = pki.sign_with(&pki.signer, der::DateTime::new(2026,10,22,8,0,0).unwrap());
+            println!("old revoking CRL signed by another key (the root key posing as the intermediate)");
+            let forged = crl_with_reasons(&pki.int, &pki.rk, time(2026,10,21,23,0,0), time(2026,12,1,0,0,0), &[(&pki.signer, time(2026,10,21,22,0,0), Some(CrlReason::KeyCompromise))]);
+            let pdf = with_dss(&base, &[], &[forged, pki.crl_root(time(2026,10,22,10,0,0))]);
+            show("strict", &pki.judge(&pdf, at, &ValidationPolicy::strict()));
+            println!("old revoking CRL whose revocation date is after the control date (2026-10-23T05:00Z)");
+            let late = pki.crl_int(time(2026,10,21,23,0,0), &[(&pki.signer, time(2026,10,23,5,0,0), Some(CrlReason::KeyCompromise))]);
+            let pdf = with_dss(&base, &[], &[late, pki.crl_root(time(2026,10,22,10,0,0))]);
+            show("strict", &pki.judge(&pdf, at, &ValidationPolicy::strict()));
+            println!("old revoking CRL whose revocation date equals the control date (2026-10-23T00:00Z)");
+            let edge = pki.crl_int(time(2026,10,21,23,0,0), &[(&pki.signer, time(2026,10,23,0,0,0), Some(CrlReason::KeyCompromise))]);
+            let pdf = with_dss(&base, &[], &[edge, pki.crl_root(time(2026,10,22,10,0,0))]);
+            show("strict", &pki.judge(&pdf, at, &ValidationPolicy::strict()));
+            println!("old (25 h) CRL revoking another certificate (serial 77, keyCompromise), not the signer");
+            let other = issue(Role::Signer, "CN=QA other,O=QA,C=FR", 77, &pki.sk, Some(&pki.int), &pki.ik);
+            let o = pki.crl_int(time(2026,10,21,23,0,0), &[(&other, time(2026,10,21,22,0,0), Some(CrlReason::KeyCompromise))]);
+            let pdf = with_dss(&base, &[], &[o, pki.crl_root(time(2026,10,22,10,0,0))]);
+            show("strict", &pki.judge(&pdf, at, &ValidationPolicy::strict()));
+            println!("same old (25 h) CRL with a future-dated entry, under strict() with require_fresh_revocation off and under dss(), for comparison");
+            let late = pki.crl_int(time(2026,10,21,23,0,0), &[(&pki.signer, time(2026,10,23,5,0,0), Some(CrlReason::KeyCompromise))]);
+            let pdf = with_dss(&base, &[], &[late, pki.crl_root(time(2026,10,22,10,0,0))]);
+            show("strict, freshness off", &pki.judge(&pdf, at, &off(|p| p.require_fresh_revocation = false)));
+            show("dss", &pki.judge(&pdf, at, &ValidationPolicy::dss()));
+            println!("a CRL stream of garbage bytes in /DSS");
+            let pdf = with_dss(&base, &[], &[b"garbage".to_vec(), pki.crl_root(time(2026,10,22,10,0,0))]);
+            show("strict", &pki.judge(&pdf, at, &ValidationPolicy::strict()));
+        }
+        _ => { eprintln!("usage: qa-scen c1|c1-error|c2|c2-error|c3|c3-error|c4|c4-error"); std::process::exit(2); }
+    }
+}

@@ -15,12 +15,15 @@ use std::time::SystemTime;
 use der::{DateTime, Encode};
 use nacre_core::{Indication, RevocationData, RevocationSource, SubIndication};
 use nacre_pades::Level;
+use nacre_revocation::CrlReason;
 use nacre_validate::{
-    Defect, RevocationDefect, SignatureValidation, TrustAnchors, validate_with_revocation,
+    ChainDefect, Defect, RevocationDefect, SignatureValidation, TrustAnchors, ValidationPolicy,
+    validate_with_policy, validate_with_revocation,
 };
 use p256::ecdsa::SigningKey;
 use support::forge::{
-    ChainSigner, ForgedTsa, Role, crl, instant, issue, key, signed, time, with_dss,
+    ChainSigner, ForgedTsa, Role, crl, crl_with_reasons, instant, issue, issue_valid, key, signed,
+    time, with_dss,
 };
 use x509_cert::Certificate;
 use x509_cert::time::Time;
@@ -152,6 +155,40 @@ impl Pki {
                 .unwrap();
         assert_eq!(results.len(), 1);
         results.remove(0)
+    }
+
+    /// The single signature of `pdf`, judged on `at` under `policy`, with no source.
+    fn judge_under(
+        &self,
+        pdf: &[u8],
+        at: SystemTime,
+        policy: &ValidationPolicy,
+    ) -> SignatureValidation {
+        let root = der(&self.root);
+        let anchors = TrustAnchors::from_certificates([root.as_slice()]).unwrap();
+        let mut results = validate_with_policy(pdf, &anchors, at, None, policy).unwrap();
+        assert_eq!(results.len(), 1);
+        results.remove(0)
+    }
+
+    /// A B-B signature by a signer of serial 5, valid from `not_before` to `not_after`.
+    fn basic_valid(&self, not_before: Time, not_after: Time) -> (Certificate, Vec<u8>) {
+        let signer = issue_valid(
+            Role::Signer,
+            "CN=Nacre policy signer,O=Nacre tests,C=FR",
+            5,
+            &self.signer_key,
+            Some(&self.intermediate),
+            &self.intermediate_key,
+            not_before,
+            not_after,
+        );
+        let chain = ChainSigner {
+            key: self.signer_key.clone(),
+            chain: vec![der(&signer), der(&self.intermediate)],
+        };
+        let pdf = signed(&chain, Level::B);
+        (signer, pdf)
     }
 }
 
@@ -477,4 +514,132 @@ fn old_crl_does_not_pass_a_signature_without_poe() {
     let result = pki.judge(&with_dss(&pki.stamped(), &[], &crls), None);
     passed(&result);
     assert_eq!(result.best_signature_time, Some(stamp_time()));
+}
+
+fn control_date() -> SystemTime {
+    instant(2026, 10, 23, 0, 0, 0)
+}
+
+fn strict_without(off: impl FnOnce(&mut ValidationPolicy)) -> ValidationPolicy {
+    let mut policy = ValidationPolicy::strict();
+    off(&mut policy);
+    policy
+}
+
+/// (g) Validity after revocation: a signer expired before the control date with a "not
+/// revoked" CRL is out of bounds, not revoked, its path kept.
+#[test]
+fn expired_not_revoked_is_out_of_bounds_not_revoked() {
+    let pki = Pki::new();
+    let (_, signature) = pki.basic_valid(time(2026, 1, 1, 0, 0, 0), time(2026, 10, 22, 9, 0, 0));
+    let pdf = with_dss(
+        &signature,
+        &[],
+        &[pki.intermediate_crl(&[]), pki.root_crl(&[])],
+    );
+
+    let strict = pki.judge_under(&pdf, control_date(), &ValidationPolicy::strict());
+    assert_eq!(
+        strict.report.sub_indication(),
+        Some(SubIndication::OutOfBoundsNoPoe)
+    );
+
+    let policy = strict_without(|p| p.judge_validity_before_revocation = false);
+    let result = pki.judge_under(&pdf, control_date(), &policy);
+    assert_eq!(result.report.indication(), Indication::Indeterminate);
+    assert_eq!(
+        result.report.sub_indication(),
+        Some(SubIndication::OutOfBoundsNotRevoked)
+    );
+    assert!(
+        matches!(
+            result.defect,
+            Some(Defect::OutOfRangeNotRevoked(ChainDefect::Expired {
+                depth: 0
+            }))
+        ),
+        "{:?}",
+        result.defect
+    );
+    assert_eq!(result.chain.as_ref().unwrap().certificates.len(), 3);
+}
+
+/// (h) Freshness off: the stale CRL of R13 passes a signature with no proof of existence.
+#[test]
+fn old_crl_passes_without_the_freshness_switch() {
+    let pki = Pki::new();
+    let before_revocation = crl(
+        &pki.intermediate,
+        &pki.intermediate_key,
+        time(2026, 10, 21, 23, 0, 0),
+        time(2026, 11, 22, 0, 0, 0),
+        &[],
+    );
+    let pdf = with_dss(&pki.basic(), &[], &[before_revocation, pki.root_crl(&[])]);
+
+    let policy = strict_without(|p| p.require_fresh_revocation = false);
+    passed(&pki.judge_under(&pdf, control_date(), &policy));
+}
+
+/// (i) AC4: under `strict()`, an old proof of revocation still counts, unless it is a hold
+/// or its revocation is dated after the judged time.
+#[test]
+fn old_revocation_counts_unless_on_hold() {
+    let pki = Pki::new();
+    let judged = |revoked, reason| {
+        let old = crl_with_reasons(
+            &pki.intermediate,
+            &pki.intermediate_key,
+            time(2026, 10, 21, 23, 0, 0),
+            time(2026, 11, 22, 0, 0, 0),
+            &[(&pki.signer, revoked, Some(reason))],
+        );
+        let pdf = with_dss(&pki.basic(), &[], &[old, pki.root_crl(&[])]);
+        pki.judge_under(&pdf, control_date(), &ValidationPolicy::strict())
+    };
+    let before = time(2026, 10, 21, 22, 0, 0);
+
+    let compromised = judged(before, CrlReason::KeyCompromise);
+    let defect = refused(&compromised, SubIndication::RevokedNoPoe);
+    assert!(matches!(defect, RevocationDefect::Revoked { depth: 0, .. }));
+
+    let held = judged(before, CrlReason::CertificateHold);
+    let defect = refused(&held, SubIndication::CertificateChainGeneralFailure);
+    assert_eq!(defect, RevocationDefect::Missing { depth: 0 });
+
+    let later = judged(time(2026, 10, 23, 6, 0, 0), CrlReason::KeyCompromise);
+    let defect = refused(&later, SubIndication::CertificateChainGeneralFailure);
+    assert_eq!(defect, RevocationDefect::Missing { depth: 0 });
+}
+
+/// (j) AC3: a `/M` before the signer's `notBefore` fails under both presets.
+#[test]
+fn claimed_time_before_not_before_is_a_constraints_failure() {
+    let pki = Pki::new();
+    let (_, signature) = pki.basic_valid(time(2026, 10, 23, 0, 0, 0), time(2036, 1, 1, 0, 0, 0));
+    let issued = time(2026, 10, 23, 12, 0, 0);
+    let next = time(2026, 11, 23, 0, 0, 0);
+    let pdf = with_dss(
+        &signature,
+        &[],
+        &[
+            crl(&pki.intermediate, &pki.intermediate_key, issued, next, &[]),
+            crl(&pki.root, &pki.root_key, issued, next, &[]),
+        ],
+    );
+
+    for policy in [ValidationPolicy::strict(), ValidationPolicy::dss()] {
+        let result = pki.judge_under(&pdf, instant(2026, 10, 24, 0, 0, 0), &policy);
+        assert_eq!(result.report.indication(), Indication::Indeterminate);
+        assert_eq!(
+            result.report.sub_indication(),
+            Some(SubIndication::SigConstraintsFailure)
+        );
+        assert!(
+            matches!(result.defect, Some(Defect::ClaimedTimeBeforeCertificate)),
+            "{:?}",
+            result.defect
+        );
+        assert_eq!(result.chain.as_ref().unwrap().certificates.len(), 3);
+    }
 }

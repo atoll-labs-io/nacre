@@ -71,6 +71,22 @@ pub(crate) enum Purpose {
     Timestamping,
 }
 
+/// Which of a path's rules a policy may turn off; [`Rules::STRICT`] judges them all.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Rules {
+    /// Judge a signing leaf's `keyUsage` and `extendedKeyUsage`.
+    pub(crate) signer_key_usage: bool,
+    /// Judge every certificate's validity during the walk.
+    pub(crate) validity: bool,
+}
+
+impl Rules {
+    pub(crate) const STRICT: Self = Self {
+        signer_key_usage: true,
+        validity: true,
+    };
+}
+
 /// The certificates a caller trusts. A path ends at one of them; neither its validity nor
 /// its extensions are judged (RFC 5280 §6.1). [`TrustAnchors::default`] trusts none.
 #[derive(Debug, Clone, Default)]
@@ -183,16 +199,17 @@ pub fn build_chain(
     anchors: &TrustAnchors,
     at: SystemTime,
 ) -> Result<CertificatePath, ChainDefect> {
-    build_path(signer, pool, anchors, at, Purpose::Signing)
+    build_path(signer, pool, anchors, at, Purpose::Signing, Rules::STRICT)
 }
 
-/// [`build_chain`] with the leaf judged for `purpose`.
+/// [`build_chain`] with the leaf judged for `purpose`, under `rules`.
 pub(crate) fn build_path(
     signer: &[u8],
     pool: &[&[u8]],
     anchors: &TrustAnchors,
     at: SystemTime,
     purpose: Purpose,
+    rules: Rules,
 ) -> Result<CertificatePath, ChainDefect> {
     let leaf = Node::read(signer).map_err(|_| ChainDefect::SignerUnreadable)?;
     if anchors.anchors.iter().any(|anchor| anchor.der == leaf.der) {
@@ -229,6 +246,7 @@ pub(crate) fn build_path(
         anchors: &anchors.anchors,
         at,
         purpose,
+        rules,
         issued: HashMap::new(),
         certified: vec![false; nodes.len()],
         steps: 0,
@@ -309,6 +327,7 @@ struct Search<'n> {
     anchors: &'n [Node],
     at: SystemTime,
     purpose: Purpose,
+    rules: Rules,
     /// Whether the issuer (second) signed the child (first), once verified.
     issued: HashMap<(Id, Id), bool>,
     /// Pool certificates an anchor certifies, directly or through certified ones.
@@ -377,7 +396,7 @@ impl<'n> Search<'n> {
                 continue;
             }
             let nodes: Vec<&Node> = path.iter().map(|id| self.node(*id)).collect();
-            match judge(&nodes, self.at, self.purpose) {
+            match judge(&nodes, self.at, self.purpose, self.rules) {
                 Ok(()) => return self.anchors.get(a),
                 Err(defect) => {
                     self.first_defect.get_or_insert(defect);
@@ -416,16 +435,19 @@ impl<'n> Search<'n> {
 }
 
 /// Judges `path`, leaf first, its anchor left out, at `at` (RFC 5280 §6.1.3, §6.1.4), its
-/// leaf for `purpose`.
-fn judge(path: &[&Node], at: SystemTime, purpose: Purpose) -> Result<(), ChainDefect> {
+/// leaf for `purpose`, under `rules`.
+fn judge(
+    path: &[&Node],
+    at: SystemTime,
+    purpose: Purpose,
+    rules: Rules,
+) -> Result<(), ChainDefect> {
     for (depth, node) in path.iter().enumerate() {
         let tbs = node.certificate.tbs_certificate();
-        let validity = tbs.validity();
-        if at < validity.not_before.to_system_time() {
-            return Err(ChainDefect::NotYetValid { depth });
-        }
-        if at > validity.not_after.to_system_time() {
-            return Err(ChainDefect::Expired { depth });
+        if rules.validity
+            && let Err(defect) = in_validity(&node.certificate, at, depth)
+        {
+            return Err(defect);
         }
         if let Some(extension) = tbs
             .extensions()
@@ -441,6 +463,9 @@ fn judge(path: &[&Node], at: SystemTime, purpose: Purpose) -> Result<(), ChainDe
         let malformed = |_| ChainDefect::MalformedExtension { depth };
         let key_usage = tbs.get_extension::<KeyUsage>().map_err(malformed)?;
         let extended_key_usage = tbs.get_extension::<ExtendedKeyUsage>().map_err(malformed)?;
+        if depth == 0 && purpose == Purpose::Signing && !rules.signer_key_usage {
+            continue;
+        }
         if depth == 0 {
             // RFC 5280 §4.2.1.12: when present, critical or not, the signer may only be used
             // for the purposes it lists. An issuer's EKU is decoded but not judged: RFC 5280
@@ -483,6 +508,33 @@ fn judge(path: &[&Node], at: SystemTime, purpose: Purpose) -> Result<(), ChainDe
         }
     }
     Ok(())
+}
+
+/// Whether `certificate`, at `depth` of its path, is within its validity at `at`.
+pub(crate) fn in_validity(
+    certificate: &Certificate,
+    at: SystemTime,
+    depth: usize,
+) -> Result<(), ChainDefect> {
+    let validity = certificate.tbs_certificate().validity();
+    if at < validity.not_before.to_system_time() {
+        return Err(ChainDefect::NotYetValid { depth });
+    }
+    if at > validity.not_after.to_system_time() {
+        return Err(ChainDefect::Expired { depth });
+    }
+    Ok(())
+}
+
+/// Whether `certificate` lists one extension OID twice.
+pub(crate) fn repeats_extension(certificate: &Certificate) -> bool {
+    let mut seen = HashSet::new();
+    certificate
+        .tbs_certificate()
+        .extensions()
+        .into_iter()
+        .flatten()
+        .any(|extension| !seen.insert(extension.extn_id))
 }
 
 /// Whether `issuer`'s key verifies `child`'s signature over its TBS bytes as received.

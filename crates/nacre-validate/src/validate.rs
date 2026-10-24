@@ -7,11 +7,15 @@ use nacre_core::{DigestAlgorithm, RevocationData, RevocationSource};
 use nacre_pdf::{Dictionary, Document, Object};
 use sha2::{Digest, Sha256};
 
-use crate::chain::{Purpose, build_path};
+use x509_cert::Certificate;
+
+use crate::chain::{Purpose, Rules, build_path, in_validity, repeats_extension};
+use crate::date::pdf_date;
 use crate::revisions::{Qualified, qualify};
 use crate::revocation::{FRESHNESS_TOLERANCE, RevocationPool, judge_path};
 use crate::{
-    ChainDefect, Defect, Error, LaterRevision, RevisionVerdict, SignatureValidation, TrustAnchors,
+    CertificatePath, ChainDefect, Defect, Error, LaterRevision, RevisionVerdict,
+    SignatureValidation, TrustAnchors, ValidationPolicy,
 };
 
 /// Bounds the hashing one call may do to 64 times the largest accepted input (50 MB).
@@ -36,7 +40,8 @@ const MAX_TIMESTAMPS: usize = 16;
 /// [`SignatureValidation::defect`]. [`validate_with_anchors`] judges the chain.
 ///
 /// An unreadable PDF, one holding more than 64 signatures, or more than 64 revisions after
-/// its oldest signed one, is an [`Error`].
+/// its oldest signed one, is an [`Error`]. Every rule of [`ValidationPolicy::strict`]
+/// applies.
 pub fn validate(pdf: &[u8]) -> Result<Vec<SignatureValidation>, Error> {
     // With no anchor no path exists, so the control date is never read.
     validate_with_anchors(pdf, &TrustAnchors::default(), SystemTime::UNIX_EPOCH)
@@ -70,28 +75,52 @@ pub fn validate_with_anchors(
 /// CMS and of the timestamp tokens, the `/DSS` `/CRLs` and `/OCSPs`, and the one answer of
 /// `source` when given: of the data that verifies and was issued after the certificate's
 /// `notBefore`, the latest decides. With a best-signature-time from a timestamp,
-/// freshness is not judged, as DSS 6.5.1 does. Without one, only data issued within 24
-/// hours before `at` (the CRL's `thisUpdate`, the response's `producedAt`) counts, so an
-/// old "not revoked" in the `/DSS` cannot pass a key revoked since: a deliberate departure
-/// from DSS, which ignores freshness there too. A revocation at or before the
-/// best-signature-time gives [`Defect::Revocation`], `INDETERMINATE` / `REVOKED_NO_POE`
+/// freshness is not judged, as DSS 6.5.1 does. Without one, a "not revoked" counts only
+/// when issued within 24 hours before `at` (the CRL's `thisUpdate`, the response's
+/// `producedAt`), so an old "not revoked" in the `/DSS` cannot pass a key revoked since: a
+/// deliberate departure from DSS, which ignores freshness there too. An older proof of
+/// revocation dated at or before the best-signature-time still counts, unless its reason
+/// is `certificateHold`. A revocation at or before the best-signature-time gives [`Defect::Revocation`], `INDETERMINATE` / `REVOKED_NO_POE`
 /// (`REVOKED_CA_NO_POE` for a CA), and a certificate with no usable data gives
 /// `INDETERMINATE` / `CERTIFICATE_CHAIN_GENERAL_FAILURE`; both keep the path in
 /// [`SignatureValidation::chain`]. A path whose revocation passes gives `TOTAL_PASSED`,
-/// with no level.
+/// with no level, unless the signing time the signature dictionary claims (`/M`) is
+/// before the signer's `notBefore`: [`Defect::ClaimedTimeBeforeCertificate`],
+/// `INDETERMINATE` / `SIG_CONSTRAINTS_FAILURE`, the path kept.
 ///
 /// No path gives `INDETERMINATE` / `NO_CERTIFICATE_CHAIN_FOUND` with no defect; a path with
 /// a defect gives [`Defect::Chain`] and its report.
 ///
 /// `source` is reached only for certificates of a path an anchor certifies, and its
 /// failures count as no answer. Nothing else here opens a connection or reads the clock.
+///
+/// Every rule of [`ValidationPolicy::strict`] applies; [`validate_with_policy`] chooses.
 pub fn validate_with_revocation(
     pdf: &[u8],
     anchors: &TrustAnchors,
     at: SystemTime,
     source: Option<&dyn RevocationSource>,
 ) -> Result<Vec<SignatureValidation>, Error> {
-    validate_with(pdf, anchors, at, source, MAX_SIGNATURES)
+    validate_with_policy(pdf, anchors, at, source, &ValidationPolicy::strict())
+}
+
+/// Validates as [`validate_with_revocation`] does, applying only the rules `policy` keeps
+/// on. [`ValidationPolicy::strict`] is what the other entry points apply;
+/// [`ValidationPolicy::dss`] gives the verdict DSS 6.5.1 gives and reopens the attacks its
+/// documentation names.
+///
+/// With [`ValidationPolicy::refuse_trailing_data`] off, a file with data after its last
+/// `startxref … %%EOF` is judged as it stands before that data. With
+/// [`ValidationPolicy::judge_malformed_extensions`] off, a certificate of a verified
+/// signature's CMS that repeats an extension is an [`Error::MalformedCertificate`].
+pub fn validate_with_policy(
+    pdf: &[u8],
+    anchors: &TrustAnchors,
+    at: SystemTime,
+    source: Option<&dyn RevocationSource>,
+    policy: &ValidationPolicy,
+) -> Result<Vec<SignatureValidation>, Error> {
+    validate_with(pdf, anchors, at, source, policy, MAX_SIGNATURES)
 }
 
 fn validate_with(
@@ -99,9 +128,18 @@ fn validate_with(
     anchors: &TrustAnchors,
     at: SystemTime,
     source: Option<&dyn RevocationSource>,
+    policy: &ValidationPolicy,
     max_signatures: usize,
 ) -> Result<Vec<SignatureValidation>, Error> {
-    let doc = Document::parse(pdf)?;
+    let (pdf, doc) = match Document::parse(pdf) {
+        Err(nacre_pdf::Error::TrailingData { offset }) if !policy.refuse_trailing_data => {
+            let prefix = pdf
+                .get(..offset)
+                .ok_or(nacre_pdf::Error::TrailingData { offset })?;
+            (prefix, Document::parse(prefix)?)
+        }
+        parsed => (pdf, parsed?),
+    };
     let mut signatures = Vec::new();
     for field in doc.signature_fields() {
         let Some(value) = field.value else {
@@ -127,13 +165,28 @@ fn validate_with(
     let checked: Vec<_> = signatures
         .into_iter()
         .map(|(field, value, dict)| {
-            let (end, result) = check(&doc, pdf, dict);
+            let (end, result) = check(&doc, pdf, dict, policy.refuse_later_revisions);
             (field, value, end.and_then(revision_of), result)
         })
+        .filter(|(_, _, _, result)| policy.list_unusable_signatures || !unusable(result))
         .collect();
+    if !policy.judge_malformed_extensions
+        && checked.iter().any(|(_, _, _, result)| {
+            result.as_ref().is_ok_and(|signed| {
+                signed
+                    .certificates
+                    .iter()
+                    .chain([&signed.signer])
+                    .filter_map(|der| Certificate::from_der(der).ok())
+                    .any(|certificate| repeats_extension(&certificate))
+            })
+        })
+    {
+        return Err(Error::MalformedCertificate);
+    }
     let first = checked.iter().filter_map(|(_, _, at, _)| *at).min();
     let later = match first {
-        Some(first) => qualify(pdf, &doc, first)?,
+        Some(first) => qualify(pdf, &doc, first, policy.refuse_sneaky_signatures)?,
         None => Vec::new(),
     };
     let dss = if anchors.is_empty() {
@@ -160,10 +213,14 @@ fn validate_with(
             // otherwise read as sound, nothing being appended after it. One added beside a
             // change refused for another reason is judged on its own signed bytes.
             let added_by = own
-                .filter(|q| q.refused_signatures.contains(&value))
+                .filter(|q| {
+                    (policy.refuse_later_revisions && q.refused_signatures.contains(&value))
+                        || (policy.refuse_sneaky_signatures && q.sneaky_signatures.contains(&value))
+                })
                 .map(|q| q.revision.end);
             let refused = mine
                 .iter()
+                .filter(|_| policy.refuse_later_revisions)
                 .find(|r| !matches!(r.verdict, RevisionVerdict::Allowed(_)))
                 .map(|r| r.end);
             match (result, added_by, refused) {
@@ -182,6 +239,7 @@ fn validate_with(
                         at,
                         source,
                         dss: &dss,
+                        policy,
                     };
                     context.judge(field, mine, &signed)
                 }
@@ -203,6 +261,7 @@ struct Context<'a> {
     at: SystemTime,
     source: Option<&'a dyn RevocationSource>,
     dss: &'a Dss,
+    policy: &'a ValidationPolicy,
 }
 
 impl Context<'_> {
@@ -249,8 +308,7 @@ impl Context<'_> {
         let time = best_signature_time.unwrap_or(self.at);
         // With no proof of existence, data issued long before the control date could
         // predate a revocation the signer's key already suffered.
-        let issued_from = best_signature_time
-            .is_none()
+        let issued_from = (best_signature_time.is_none() && self.policy.require_fresh_revocation)
             .then(|| self.at.checked_sub(FRESHNESS_TOLERANCE).unwrap_or(self.at));
 
         let certificates: Vec<&[u8]> = signed
@@ -265,13 +323,28 @@ impl Context<'_> {
             self.anchors,
             time,
             Purpose::Signing,
-        ) {
-            Ok(path) => match judge_path(&path, &pool, self.source, time, issued_from) {
-                Ok(()) => SignatureValidation::sound(field, mine, Some(path), best_signature_time),
-                Err(defect) => {
-                    SignatureValidation::revoked(field, defect, mine, path, best_signature_time)
-                }
+            Rules {
+                signer_key_usage: self.policy.judge_signer_key_usage,
+                validity: self.policy.judge_validity_before_revocation,
             },
+        ) {
+            Ok(path) => {
+                let defect = judge_path(&path, &pool, self.source, time, issued_from)
+                    .map_err(Defect::Revocation)
+                    .and_then(|()| self.after_revocation(&path, signed, time));
+                match defect {
+                    Ok(()) => {
+                        SignatureValidation::sound(field, mine, Some(path), best_signature_time)
+                    }
+                    Err(defect) => SignatureValidation::after_chain(
+                        field,
+                        defect,
+                        mine,
+                        path,
+                        best_signature_time,
+                    ),
+                }
+            }
             Err(ChainDefect::NoPath) => {
                 SignatureValidation::sound(field, mine, None, best_signature_time)
             }
@@ -280,6 +353,41 @@ impl Context<'_> {
                 ..SignatureValidation::defective(field, Defect::Chain(defect), mine)
             },
         }
+    }
+
+    /// What is judged once `path`'s revocation passed at `time`: the validity of each
+    /// certificate below the anchor when the walk left it out, then the claimed signing
+    /// time against the signer's `notBefore`.
+    fn after_revocation(
+        &self,
+        path: &CertificatePath,
+        signed: &Signed,
+        time: SystemTime,
+    ) -> Result<(), Defect> {
+        let below_anchor = path
+            .certificates
+            .split_last()
+            .map_or(&[][..], |(_, below)| below);
+        let certificates: Vec<Certificate> = below_anchor
+            .iter()
+            .filter_map(|der| Certificate::from_der(der).ok())
+            .collect();
+        if !self.policy.judge_validity_before_revocation {
+            for (depth, certificate) in certificates.iter().enumerate() {
+                in_validity(certificate, time, depth).map_err(Defect::OutOfRangeNotRevoked)?;
+            }
+        }
+        if let (Some(claimed), Some(signer)) = (signed.claimed_time, certificates.first())
+            && claimed
+                < signer
+                    .tbs_certificate()
+                    .validity()
+                    .not_before
+                    .to_system_time()
+        {
+            return Err(Defect::ClaimedTimeBeforeCertificate);
+        }
+        Ok(())
     }
 
     /// The `genTime` `token` proves for `signed`, when it verifies over the signature value,
@@ -306,6 +414,7 @@ impl Context<'_> {
             self.anchors,
             self.at,
             Purpose::Timestamping,
+            Rules::STRICT,
         )
         .ok()?;
         judge_path(&path, pool, self.source, self.at, None).ok()?;
@@ -318,15 +427,37 @@ fn is_document_timestamp(dict: &Dictionary) -> bool {
     matches!(dict.get(b"SubFilter"), Some(Object::Name(n)) if n == b"ETSI.RFC3161")
 }
 
+/// The defects of a field whose `/Contents` or `/ByteRange` cannot be used at all.
+fn unusable(result: &Result<Signed, Defect>) -> bool {
+    matches!(
+        result,
+        Err(Defect::ContentsMissing | Defect::ContentsNotDer | Defect::ByteRangeMalformed)
+    )
+}
+
 /// Runs the checks on one signature: where its signed bytes end, once known, and the first
-/// defect. The revisions after it are judged by the caller, last.
+/// defect. The revisions after it are judged by the caller, last; `whole_file` refuses
+/// signed bytes that end at no revision.
 fn check(
     doc: &Document<'_>,
     pdf: &[u8],
     dict: Option<Dictionary>,
+    whole_file: bool,
 ) -> (Option<usize>, Result<Signed, Defect>) {
-    match signed_bytes(doc, pdf, dict) {
-        Ok((end, contents, [b, c])) => (Some(end), verify(pdf, &contents, [b, c, end])),
+    let claimed_time = dict
+        .as_ref()
+        .and_then(|dict| match follow_once(doc, dict.get(b"M")) {
+            Some(Object::String(bytes)) => pdf_date(&bytes),
+            _ => None,
+        });
+    match signed_bytes(doc, pdf, dict, whole_file) {
+        Ok((end, contents, [b, c])) => (
+            Some(end),
+            verify(pdf, &contents, [b, c, end]).map(|signed| Signed {
+                claimed_time,
+                ..signed
+            }),
+        ),
         Err(defect) => (None, Err(defect)),
     }
 }
@@ -337,6 +468,7 @@ fn signed_bytes(
     doc: &Document<'_>,
     pdf: &[u8],
     dict: Option<Dictionary>,
+    whole_file: bool,
 ) -> Result<(usize, Vec<u8>, [usize; 2]), Defect> {
     let dict = dict.ok_or(Defect::NotASignatureDictionary)?;
 
@@ -364,7 +496,7 @@ fn signed_bytes(
     if !gap_is_contents(pdf.get(b..c).unwrap_or_default(), &contents) {
         return Err(Defect::GapNotContents);
     }
-    if !doc.revisions().iter().any(|r| r.end == end) {
+    if whole_file && !doc.revisions().iter().any(|r| r.end == end) {
         return Err(Defect::ByteRangeNotWholeFile);
     }
     Ok((end, contents, [b, c]))
@@ -379,6 +511,8 @@ struct Signed {
     crls: Vec<Vec<u8>>,
     imprint: Vec<u8>,
     timestamps: Vec<Vec<u8>>,
+    /// The signing time the signature dictionary's `/M` claims, when readable.
+    claimed_time: Option<SystemTime>,
 }
 
 fn verify(pdf: &[u8], contents: &[u8], [b, c, end]: [usize; 3]) -> Result<Signed, Defect> {
@@ -409,6 +543,7 @@ fn verify(pdf: &[u8], contents: &[u8], [b, c, end]: [usize; 3]) -> Result<Signed
         crls: signed.crls.clone(),
         imprint,
         timestamps,
+        claimed_time: None,
     })
 }
 
@@ -529,6 +664,7 @@ mod tests {
             &TrustAnchors::default(),
             SystemTime::UNIX_EPOCH,
             None,
+            &ValidationPolicy::strict(),
             1,
         )
         .unwrap_err();
