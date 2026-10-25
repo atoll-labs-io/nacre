@@ -28,10 +28,10 @@
 //! signature timestamp or a document timestamp after the signature, else that control date
 //! ([`SignatureValidation::best_signature_time`]). A revocation dated after it does not
 //! count. Revocation data is judged at its own date, its
-//! freshness ignored, as DSS does, except for a signature no timestamp gives a proof of
-//! existence: there a "not revoked" counts only when issued within 24 hours before the
-//! control date, a deliberate departure from DSS 6.5.1 that keeps an old CRL appended to
-//! the `/DSS` from passing a key revoked since, while an old proof of revocation still
+//! freshness ignored, as DSS does, except for a timestamp authority's path and for a
+//! signature no timestamp gives a proof of existence: there a "not revoked" counts only
+//! when issued within 24 hours before the control date, a deliberate departure from DSS 6.5.1
+//! that keeps an old CRL appended to the `/DSS` from passing a key revoked since, while an old proof of revocation still
 //! counts unless it is a `certificateHold`. A revoked certificate gives `INDETERMINATE` /
 //! `REVOKED_NO_POE` (or `REVOKED_CA_NO_POE`), one put on hold `TRY_LATER`, one with no
 //! usable revocation data `INDETERMINATE` / `CERTIFICATE_CHAIN_GENERAL_FAILURE` ([`Defect::Revocation`],
