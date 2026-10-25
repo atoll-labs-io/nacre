@@ -1,0 +1,84 @@
+$ cd /tmp/qa-s50.QjQ9wB/copy && sh ac1.sh   (script quoted below)
+--- script ---
+set -u
+C=$1
+echo "== old file gone"; ls crates/nacre-pdf/tests/corpus/real/certified-dss.pdf crates/nacre-validate/tests/corpus/certified-dss.pdf; echo "ls exit: $?"
+echo "== new files"; ls -l crates/nacre-pdf/tests/corpus/real/certified-pyhanko.pdf crates/nacre-validate/tests/corpus/certified-pyhanko.pdf
+cmp crates/nacre-pdf/tests/corpus/real/certified-pyhanko.pdf crates/nacre-validate/tests/corpus/certified-pyhanko.pdf && echo "cmp: identical"
+sha256sum crates/nacre-pdf/tests/corpus/real/certified-pyhanko.pdf crates/nacre-validate/tests/corpus/certified-pyhanko.pdf
+echo "== README rows"; grep -n "certified-pyhanko" crates/nacre-pdf/tests/corpus/README.md crates/nacre-validate/tests/corpus/README.md | cut -c1-400
+F=crates/nacre-pdf/tests/corpus/real/certified-pyhanko.pdf
+echo "== pdfinfo"; pdfinfo $F
+echo "== pdfinfo -meta"; pdfinfo -meta $F
+echo "== pdfsig"; pdfsig $F
+echo "== DocMDP"; grep -a -o '/TransformMethod */DocMDP[^>]*' $F; grep -a -o '/P 3' $F
+echo "== Info dictionary and string literals in the file (any name-like text)"; grep -a -o '/\(Author\|Creator\|Producer\|Title\|Subject\|Name\|Reason\|Location\|ContactInfo\) *([^)]*)' $F
+echo "== certificates inside the CMS"; pdfsig -dump $F >/dev/null 2>&1; ls *.sig 2>/dev/null
+--- stdout+stderr ---
+== old file gone
+ls: impossible d'accéder à 'crates/nacre-pdf/tests/corpus/real/certified-dss.pdf': Aucun fichier ou dossier de ce nom
+ls: impossible d'accéder à 'crates/nacre-validate/tests/corpus/certified-dss.pdf': Aucun fichier ou dossier de ce nom
+ls exit: 2
+== new files
+-rw-r--r-- 1 lecrabe lecrabe 9700 25 oct.  21:03 crates/nacre-pdf/tests/corpus/real/certified-pyhanko.pdf
+-rw-r--r-- 1 lecrabe lecrabe 9700 25 oct.  21:03 crates/nacre-validate/tests/corpus/certified-pyhanko.pdf
+cmp: identical
+5bd9078558e2a1e6eb2ffbc565de000bd13f28bdb9acbecbf8b92bf3a018930e  crates/nacre-pdf/tests/corpus/real/certified-pyhanko.pdf
+5bd9078558e2a1e6eb2ffbc565de000bd13f28bdb9acbecbf8b92bf3a018930e  crates/nacre-validate/tests/corpus/certified-pyhanko.pdf
+== README rows
+crates/nacre-pdf/tests/corpus/README.md:20:| `certified-pyhanko.pdf` | written for this repository with pyHanko 0.38.0 from `conformance/reference/unsigned.pdf`, see below | as this repository | `5bd9078558e2a1e6eb2ffbc565de000bd13f28bdb9acbecbf8b92bf3a018930e` | pyHanko 0.38.0, certified (DocMDP `/P 3`), RSA, `CN=Nacre third-party signer` under `CN=Nacre third-party CA` (`O=Nacre tests,C=FR`), ke
+crates/nacre-pdf/tests/corpus/README.md:33:Regenerating `certified-pyhanko.pdf` (pyHanko 0.38.0 in a throwaway virtualenv; the CLI cannot
+crates/nacre-pdf/tests/corpus/README.md:42:python -I certify.py conformance/reference/unsigned.pdf certified-pyhanko.pdf .
+crates/nacre-validate/tests/corpus/README.md:17:| `certified-pyhanko.pdf` | a copy of `crates/nacre-pdf/tests/corpus/real/certified-pyhanko.pdf` (see its README): written with pyHanko 0.38.0, certified at DocMDP `/P 3`, signed by a fictitious RSA key; field `Certification` signed, `Approval` empty | as this repository | `5bd9078558e2a1e6eb2ffbc565de000bd13f28bdb9acbecbf8b92bf3a018930e` |
+== pdfinfo
+Producer:        pyHanko 0.38.0
+ModDate:         Sun Oct 25 20:55:10 2026 CET
+Custom Metadata: no
+Metadata Stream: no
+Tagged:          no
+UserProperties:  no
+Suspects:        no
+Form:            AcroForm
+JavaScript:      no
+Pages:           1
+Encrypted:       no
+Page size:       595 x 842 pts (A4)
+Page rot:        0
+File size:       9700 bytes
+Optimized:       no
+PDF version:     1.7
+== pdfinfo -meta
+== pdfsig
+Digital Signature Info of: crates/nacre-pdf/tests/corpus/real/certified-pyhanko.pdf
+Signature #1:
+  - Signature Field Name: Certification
+  - Signer Certificate Common Name: Nacre third-party signer
+  - Signer full Distinguished Name: CN=Nacre third-party signer,O=Nacre tests,C=FR
+  - Signing Time: Oct 25 2026 20:55:10
+  - Signing Hash Algorithm: SHA-256
+  - Signature Type: ETSI.CAdES.detached
+  - Signed Ranges: [0 - 1537], [8933 - 9700]
+  - Total document signed
+  - Signature Validation: Signature is Valid.
+  - Certificate Validation: Certificate issuer isn't Trusted.
+Signature #2:
+  - Signature Field Name: Approval
+  The signature form field is not signed.
+== DocMDP
+/TransformMethod /DocMDP
+/P 3
+/P 3
+/P 3
+== Info dictionary and string literals in the file (any name-like text)
+/Producer (pyHanko 0\05638\0560)
+== certificates inside the CMS
+--- exit code: 2 (the ls of the removed files is expected to fail) ---
+
+$ pdfsig -dump pdf-copy.pdf && openssl pkcs7 -inform DER -in pdf-copy.pdf.sig0 -print_certs -noout
+subject=C=FR, O=Nacre tests, CN=Nacre third-party signer
+issuer=C=FR, O=Nacre tests, CN=Nacre third-party CA
+
+subject=C=FR, O=Nacre tests, CN=Nacre third-party CA
+issuer=C=FR, O=Nacre tests, CN=Nacre third-party CA
+
+--- exit code: 0 ---

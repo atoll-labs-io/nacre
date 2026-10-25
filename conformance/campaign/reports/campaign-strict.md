@@ -112,8 +112,6 @@
 | `crates-nacre-validate-tests-corpus-attacks-usf-v-stream` | `Signature1` | — | TOTAL_FAILED / FORMAT_FAILURE / no level | ≠ | `list_unusable_signatures` |
 | `crates-nacre-validate-tests-corpus-attacks-usf-v-stream` | (count) | 0 | 1 | ≠ | `list_unusable_signatures` |
 | `crates-nacre-validate-tests-corpus-attacks-xref-misplaced-startxref` | (file) | 1 signature(s) | error | ≠ | `refuse_misplaced_xref` |
-| `crates-nacre-validate-tests-corpus-certified-dss` | `signature-test` | INDETERMINATE / NO_CERTIFICATE_CHAIN_FOUND / PAdES BaselineB | INDETERMINATE / NO_CERTIFICATE_CHAIN_FOUND / PAdES BaselineB | = |  |
-| `crates-nacre-validate-tests-corpus-certified-dss` | (count) | 1 | 1 | = |  |
 | `crates-nacre-validate-tests-corpus-certified-form-fill` | `Certification` | INDETERMINATE / NO_CERTIFICATE_CHAIN_FOUND / PAdES BaselineB | INDETERMINATE / NO_CERTIFICATE_CHAIN_FOUND / PAdES BaselineB | = |  |
 | `crates-nacre-validate-tests-corpus-certified-form-fill` | (count) | 1 | 1 | = |  |
 | `crates-nacre-validate-tests-corpus-certified-p1-form-fill` | `Certification` | INDETERMINATE / NO_CERTIFICATE_CHAIN_FOUND / PAdES BaselineB | TOTAL_FAILED / FORMAT_FAILURE / PAdES BaselineB | ≠ | `refuse_later_revisions` |
@@ -121,6 +119,8 @@
 | `crates-nacre-validate-tests-corpus-certified-p1-second-signature` | `Certification` | INDETERMINATE / NO_CERTIFICATE_CHAIN_FOUND / PAdES BaselineB | TOTAL_FAILED / FORMAT_FAILURE / PAdES BaselineB | ≠ | `refuse_later_revisions` |
 | `crates-nacre-validate-tests-corpus-certified-p1-second-signature` | `Late` | INDETERMINATE / NO_CERTIFICATE_CHAIN_FOUND / PAdES BaselineB | TOTAL_FAILED / FORMAT_FAILURE / PAdES BaselineB | ≠ | `refuse_later_revisions` |
 | `crates-nacre-validate-tests-corpus-certified-p1-second-signature` | (count) | 2 | 2 | = |  |
+| `crates-nacre-validate-tests-corpus-certified-pyhanko` | `Certification` | INDETERMINATE / NO_CERTIFICATE_CHAIN_FOUND / PAdES BaselineB | INDETERMINATE / NO_CERTIFICATE_CHAIN_FOUND / PAdES BaselineB | = |  |
+| `crates-nacre-validate-tests-corpus-certified-pyhanko` | (count) | 1 | 1 | = |  |
 | `crates-nacre-validate-tests-corpus-certified-visible-field-signed` | `Approver` | INDETERMINATE / NO_CERTIFICATE_CHAIN_FOUND / PAdES BaselineB | INDETERMINATE / NO_CERTIFICATE_CHAIN_FOUND / PAdES BaselineB | = |  |
 | `crates-nacre-validate-tests-corpus-certified-visible-field-signed` | `Certification` | INDETERMINATE / NO_CERTIFICATE_CHAIN_FOUND / PAdES BaselineB | INDETERMINATE / NO_CERTIFICATE_CHAIN_FOUND / PAdES BaselineB | = |  |
 | `crates-nacre-validate-tests-corpus-certified-visible-field-signed` | (count) | 2 | 2 | = |  |
@@ -149,8 +149,8 @@
 | `crates-nacre-pdf-tests-corpus-hostile-circular-xref-chain` | (file) | error | error | = |  |
 | `crates-nacre-pdf-tests-corpus-hostile-startxref-off-by-one` | (file) | 0 signature(s) | error | ≠ | `refuse_misplaced_xref` |
 | `crates-nacre-pdf-tests-corpus-hostile-xref-malformed-prev` | (file) | error | error | = |  |
-| `crates-nacre-pdf-tests-corpus-real-certified-dss` | `signature-test` | INDETERMINATE / NO_CERTIFICATE_CHAIN_FOUND / PAdES BaselineB | INDETERMINATE / NO_CERTIFICATE_CHAIN_FOUND / PAdES BaselineB | = |  |
-| `crates-nacre-pdf-tests-corpus-real-certified-dss` | (count) | 1 | 1 | = |  |
+| `crates-nacre-pdf-tests-corpus-real-certified-pyhanko` | `Certification` | INDETERMINATE / NO_CERTIFICATE_CHAIN_FOUND / PAdES BaselineB | INDETERMINATE / NO_CERTIFICATE_CHAIN_FOUND / PAdES BaselineB | = |  |
+| `crates-nacre-pdf-tests-corpus-real-certified-pyhanko` | (count) | 1 | 1 | = |  |
 | `crates-nacre-pdf-tests-corpus-real-chrome-print` | (count) | 0 | 0 | = |  |
 | `crates-nacre-pdf-tests-corpus-real-firefox-print` | (count) | 0 | 0 | = |  |
 | `crates-nacre-pdf-tests-corpus-real-form-xfa-irs-w9` | (count) | 0 | 0 | = |  |

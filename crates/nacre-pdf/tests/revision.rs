@@ -19,7 +19,7 @@ const FILES: [&str; 10] = [
     "form-xfa-irs-w9.pdf",
     "signed-twice-pyhanko.pdf",
     "signed-lta-pyhanko.pdf",
-    "certified-dss.pdf",
+    "certified-pyhanko.pdf",
 ];
 
 fn real(name: &str) -> Vec<u8> {
@@ -278,7 +278,7 @@ fn no_change_certification_refuses_a_signature() {
 
 #[test]
 fn doc_mdp_level_reads_the_certification() {
-    let certified = real("certified-dss.pdf");
+    let certified = real("certified-pyhanko.pdf");
     assert_eq!(
         Document::parse(&certified)
             .unwrap()
@@ -329,11 +329,11 @@ fn doc_mdp_references_over_the_cap_are_refused() {
 
 #[test]
 fn taken_field_name_is_refused() {
-    let original = real("certified-dss.pdf");
+    let original = real("certified-pyhanko.pdf");
     let doc = Document::parse(&original).unwrap();
-    let err = doc.update().sign(spec("signature-test2", 64)).unwrap_err();
+    let err = doc.update().sign(spec("Approval", 64)).unwrap_err();
     assert!(
-        matches!(&err, Error::DuplicateField { name } if name == "signature-test2"),
+        matches!(&err, Error::DuplicateField { name } if name == "Approval"),
         "{err:?}"
     );
 }

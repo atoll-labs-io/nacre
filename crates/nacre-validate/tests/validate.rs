@@ -20,7 +20,7 @@ use nacre_validate::{
 };
 
 const UNSIGNED: &[u8] = include_bytes!("corpus/unsigned.pdf");
-const CERTIFIED_DSS: &[u8] = include_bytes!("corpus/certified-dss.pdf");
+const CERTIFIED_PYHANKO: &[u8] = include_bytes!("corpus/certified-pyhanko.pdf");
 
 fn signer() -> TestSigner {
     TestSigner::from_secret(&[0x11; 32]).unwrap()
@@ -134,11 +134,11 @@ fn s06_signature_is_verified_but_indeterminate() {
 
 #[test]
 fn third_party_signature_is_verified() {
-    let results = validate(CERTIFIED_DSS).unwrap();
+    let results = validate(CERTIFIED_PYHANKO).unwrap();
 
     assert_eq!(results.len(), 1);
     let result = &results[0];
-    assert_eq!(result.field, "signature-test");
+    assert_eq!(result.field, "Certification");
     assert!(result.defect.is_none(), "{:?}", result.defect);
     assert!(result.digest_verified);
     assert!(result.signature_verified);
@@ -228,12 +228,12 @@ fn lta_dss_and_timestamp_are_allowed() {
 
 #[test]
 fn signing_a_certified_p3_document_is_allowed() {
-    let pdf = sign(CERTIFIED_DSS, &signer(), time()).unwrap();
+    let pdf = sign(CERTIFIED_PYHANKO, &signer(), time()).unwrap();
 
     let results = validate(&pdf).unwrap();
 
     allowed(
-        of(&results, "signature-test"),
+        of(&results, "Certification"),
         &[&[AllowedChange::Signature]],
     );
 }

@@ -14,7 +14,7 @@ Every subject, key and document here is fictitious or public test material.
 | `certified-p1-second-signature.pdf` | the same, certified at `/P 1`, then one revision adds the invisible signature `Late` | as this repository | `1406d21464074d94250a408279d037b361b60ef7346b59c69ec6b9a7f0b0380d` |
 | `docmdp-reference-cap.pdf` | `certified-form-fill.pdf`, then a revision whose catalog names a DocMDP signature dictionary holding 40 `/Reference` entries, over the reader's cap of 32, then a revision adding the invisible signature `Late` | as this repository | `09cff22277a0d9c0866a258cef42214d5dfc968a29b97dbc3c4d019c2f90e600` |
 | `certified-visible-field-signed.pdf` | the same, given an empty signature field `Approver` placed on the page with no appearance, certified at `/P 2`, then `Approver` signed: `/V`, an appearance and the Locked flag, nothing else | as this repository | `7bd716b3e00e272a8e81c9b8a7eb380ac212e7c170213ee8d49b3c46c02226fd` |
-| `certified-dss.pdf` | a copy of `crates/nacre-pdf/tests/corpus/real/certified-dss.pdf`, from esig/dss test data, <https://github.com/esig/dss>, `dss-pades/src/test/resources/validation/dss-2554/certified-changes-permitted.pdf`; written by LibreOffice 5.2, RSA, signed by the fictitious Nowina `PKI-TEST` CA; field `signature-test` signed, `signature-test2` empty | LGPL-2.1 | `17c74d6c6911cb8beed4430de172256bd5bed6bdccc4c5cc7c1be95aee0e1d2b` |
+| `certified-pyhanko.pdf` | a copy of `crates/nacre-pdf/tests/corpus/real/certified-pyhanko.pdf` (see its README): written with pyHanko 0.38.0, certified at DocMDP `/P 3`, signed by a fictitious RSA key; field `Certification` signed, `Approval` empty | as this repository | `5bd9078558e2a1e6eb2ffbc565de000bd13f28bdb9acbecbf8b92bf3a018930e` |
 
 ## `attacks/`
 

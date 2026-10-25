@@ -34,7 +34,7 @@ const FILES: &[(&str, &[usize], &[XrefKind])] = &[
         &[739, 1393, 25853, 46212, 46884],
         &[T, T, T, T, T],
     ),
-    ("certified-dss.pdf", &[127672, 152955], &[T, T]),
+    ("certified-pyhanko.pdf", &[744, 9700], &[T, T]),
 ];
 
 fn read(name: &str) -> Vec<u8> {
@@ -70,8 +70,8 @@ fn signature_fields_match_pdfsig() {
             ],
         ),
         (
-            "certified-dss.pdf",
-            &[("signature-test", true), ("signature-test2", false)],
+            "certified-pyhanko.pdf",
+            &[("Certification", true), ("Approval", false)],
         ),
     ];
     for (name, _, _) in FILES {

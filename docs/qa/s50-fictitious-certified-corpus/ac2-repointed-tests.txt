@@ -1,0 +1,74 @@
+$ cd /tmp/qa-s50.QjQ9wB/copy
+$ cargo test -p nacre-pdf --test corpus --test revision --test acroform
+stdin: (none)
+--- stdout+stderr ---
+   Compiling nacre-core v0.1.0 (/tmp/qa-s50.QjQ9wB/copy/crates/nacre-core)
+   Compiling nacre-pdf v0.1.0 (/tmp/qa-s50.QjQ9wB/copy/crates/nacre-pdf)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.25s
+     Running tests/acroform.rs (target/debug/deps/acroform-9cec09a717df4dec)
+
+running 1 test
+test signature_value_that_is_no_reference_is_reported ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/corpus.rs (target/debug/deps/corpus-4d03e7dd54887d82)
+
+running 4 tests
+test reachable_objects_follow_references_once ... ok
+test signature_fields_match_pdfsig ... ok
+test catalog_and_trailer_are_read ... ok
+test revisions_match_the_spike ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/revision.rs (target/debug/deps/revision-9db04e2228100722)
+
+running 12 tests
+test qpdf_check_is_clean ... ignored, conformance
+test doc_mdp_references_over_the_cap_are_refused ... ok
+test no_change_certification_refuses_a_signature ... ok
+test reserved_entry_is_refused ... ok
+test taken_field_name_is_refused ... ok
+test oversized_signature_is_refused_whole ... ok
+test field_joins_every_acroform_shape ... ok
+test page_tree_loop_is_refused ... ok
+test doc_mdp_level_reads_the_certification ... ok
+test signed_parts_are_the_file_minus_contents ... ok
+test every_corpus_file_takes_a_plain_revision ... ok
+test every_corpus_file_takes_a_signature_slot ... ok
+
+test result: ok. 11 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+--- exit code: 0 ---
+$ cd /tmp/qa-s50.QjQ9wB/copy
+$ cargo test -p nacre-validate --test validate
+stdin: (none)
+--- stdout+stderr ---
+   Compiling nacre-validate v0.1.0 (/tmp/qa-s50.QjQ9wB/copy/crates/nacre-validate)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.72s
+     Running tests/validate.rs (target/debug/deps/validate-6a51cd0011a90d11)
+
+running 18 tests
+test revision_defect_outranks_chain ... ok
+test certified_form_fill_is_allowed ... ok
+test form_fill_under_p1_is_not_allowed ... ok
+test third_party_signature_is_verified ... ok
+test changed_signed_byte_is_hash_failure ... ok
+test second_signer_beside_a_refused_fill_is_judged_alone ... ok
+test locked_field_fill_is_not_allowed ... ok
+test chain_from_dss_is_valid ... ok
+test altered_signature_value_is_sig_crypto_failure ... ok
+test certified_visible_field_signed_is_allowed ... ok
+test signature_added_under_p1_is_refused_with_its_revision ... ok
+test chain_from_cms_is_valid_but_revocation_missing ... ok
+test revision_over_the_docmdp_cap_lists_its_objects ... ok
+test s06_signature_is_verified_but_indeterminate ... ok
+test signing_a_certified_p3_document_is_allowed ... ok
+test pyhanko_twice_signed_is_allowed ... ok
+test twice_signed_first_signature_has_an_allowed_signature_revision ... ok
+test lta_dss_and_timestamp_are_allowed ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+--- exit code: 0 ---

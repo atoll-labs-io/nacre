@@ -1,568 +1,568 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<ValidationReport xmlns="http://uri.etsi.org/19102/v1.4.1#" xmlns:ns2="http://www.w3.org/2000/09/xmldsig#" xmlns:ns3="http://uri.etsi.org/01903/v1.3.2#" xmlns:ns4="http://uri.etsi.org/02231/v2#">
-    <SignatureValidationReport>
-        <SignatureIdentifier id="S-109444E8A5AEEF5244C0FED63D29A53BD35630850D1A6D2951BA4A6C1A8A8800">
-            <DigestAlgAndValue>
-                <ns2:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
-                <ns2:DigestValue>f4c/6tT4bM6uBZ2aN+huA3Uwg9lw6cYGMbuUZW7O+RE=</ns2:DigestValue>
-            </DigestAlgAndValue>
-            <ns2:SignatureValue>MEUCIDlv2SqFwmYBJV9xzfM1nngTTaVboY1DAYR+KSF4x+g6AiEAkr5/G4nztUWXuTIkkzN1KXYaJLzJV5wgthWCtsIfrHY=</ns2:SignatureValue>
-            <HashOnly>false</HashOnly>
-            <DocHashOnly>false</DocHashOnly>
-        </SignatureIdentifier>
-        <ValidationConstraintsEvaluationReport>
-            <ValidationConstraint>
-                <ValidationConstraintIdentifier>urn:cef:dss:bbb:formatChecking</ValidationConstraintIdentifier>
-                <ConstraintStatus>
-                    <Status>urn:etsi:019102:constraintStatus:applied</Status>
-                </ConstraintStatus>
-                <ValidationStatus>
-                    <MainIndication>urn:etsi:019102:mainindication:passed</MainIndication>
-                </ValidationStatus>
-            </ValidationConstraint>
-            <ValidationConstraint>
-                <ValidationConstraintIdentifier>urn:cef:dss:bbb:identificationOfTheSigningCertificate</ValidationConstraintIdentifier>
-                <ConstraintStatus>
-                    <Status>urn:etsi:019102:constraintStatus:applied</Status>
-                </ConstraintStatus>
-                <ValidationStatus>
-                    <MainIndication>urn:etsi:019102:mainindication:passed</MainIndication>
-                </ValidationStatus>
-            </ValidationConstraint>
-            <ValidationConstraint>
-                <ValidationConstraintIdentifier>urn:cef:dss:bbb:validationContextInitialization</ValidationConstraintIdentifier>
-                <ConstraintStatus>
-                    <Status>urn:etsi:019102:constraintStatus:applied</Status>
-                </ConstraintStatus>
-                <ValidationStatus>
-                    <MainIndication>urn:etsi:019102:mainindication:passed</MainIndication>
-                </ValidationStatus>
-            </ValidationConstraint>
-            <ValidationConstraint>
-                <ValidationConstraintIdentifier>urn:cef:dss:bbb:cryptographicVerification</ValidationConstraintIdentifier>
-                <ConstraintStatus>
-                    <Status>urn:etsi:019102:constraintStatus:applied</Status>
-                </ConstraintStatus>
-                <ValidationStatus>
-                    <MainIndication>urn:etsi:019102:mainindication:passed</MainIndication>
-                </ValidationStatus>
-            </ValidationConstraint>
-            <ValidationConstraint>
-                <ValidationConstraintIdentifier>urn:cef:dss:bbb:signatureAcceptanceValidation</ValidationConstraintIdentifier>
-                <ConstraintStatus>
-                    <Status>urn:etsi:019102:constraintStatus:applied</Status>
-                </ConstraintStatus>
-                <ValidationStatus>
-                    <MainIndication>urn:etsi:019102:mainindication:passed</MainIndication>
-                </ValidationStatus>
-            </ValidationConstraint>
-            <ValidationConstraint>
-                <ValidationConstraintIdentifier>urn:cef:dss:bbb:x509CertificateValidation</ValidationConstraintIdentifier>
-                <ConstraintStatus>
-                    <Status>urn:etsi:019102:constraintStatus:applied</Status>
-                </ConstraintStatus>
-                <ValidationStatus>
-                    <MainIndication>urn:etsi:019102:mainindication:indeterminate</MainIndication>
-                    <SubIndication>urn:etsi:019102:subindication:REVOKED_NO_POE</SubIndication>
-                    <AssociatedValidationReportData>
-                        <AdditionalValidationReportData>
-                            <ReportData>
-                                <Type>urn:cef:dss:message:error</Type>
-                                <Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The certificate validation is not conclusive!</Value>
-                            </ReportData>
-                            <ReportData>
-                                <Type>urn:cef:dss:message:error</Type>
-                                <Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The certificate is revoked!</Value>
-                            </ReportData>
-                            <ReportData>
-                                <Type>urn:cef:dss:message:warning</Type>
-                                <Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The authority info access is not present!</Value>
-                            </ReportData>
-                            <ReportData>
-                                <Type>urn:cef:dss:message:warning</Type>
-                                <Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The certificate does not contain the authority key identifier certificate extension!</Value>
-                            </ReportData>
-                            <ReportData>
-                                <Type>urn:cef:dss:message:warning</Type>
-                                <Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The revocation info access is not present!</Value>
-                            </ReportData>
-                            <ReportData>
-                                <Type>urn:cef:dss:message:warning</Type>
-                                <Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The certificate does not contain the authority key identifier certificate extension!</Value>
-                            </ReportData>
-                        </AdditionalValidationReportData>
-                    </AssociatedValidationReportData>
-                </ValidationStatus>
-            </ValidationConstraint>
-            <ValidationConstraint>
-                <ValidationConstraintIdentifier>urn:cef:dss:bbb:pastSignatureValidation</ValidationConstraintIdentifier>
-                <ConstraintStatus>
-                    <Status>urn:etsi:019102:constraintStatus:disabled</Status>
-                </ConstraintStatus>
-            </ValidationConstraint>
-            <ValidationConstraint>
-                <ValidationConstraintIdentifier>urn:cef:dss:bbb:pastCertificateValidation</ValidationConstraintIdentifier>
-                <ConstraintStatus>
-                    <Status>urn:etsi:019102:constraintStatus:disabled</Status>
-                </ConstraintStatus>
-            </ValidationConstraint>
-            <ValidationConstraint>
-                <ValidationConstraintIdentifier>urn:cef:dss:bbb:validationTimeSliding</ValidationConstraintIdentifier>
-                <ConstraintStatus>
-                    <Status>urn:etsi:019102:constraintStatus:disabled</Status>
-                </ConstraintStatus>
-            </ValidationConstraint>
-        </ValidationConstraintsEvaluationReport>
-        <ValidationTimeInfo>
-            <ValidationTime>2026-10-24T23:07:09Z</ValidationTime>
-            <BestSignatureTime>
-                <POETime>2026-10-24T23:07:09Z</POETime>
-                <TypeOfProof>urn:etsi:019102:poetype:validation</TypeOfProof>
-            </BestSignatureTime>
-        </ValidationTimeInfo>
-        <SignersDocument>
-            <DigestAlgAndValue>
-                <ns2:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
-                <ns2:DigestValue>4lGbxv7hOvvURw9Raz3kouZau9PaQ0k6QRzIH/Qw+G4=</ns2:DigestValue>
-            </DigestAlgAndValue>
-            <SignersDocumentRepresentation VOReference="D-79A8EF2357344C2A2E5C04BD2F78F14B16A63C93A6A99F078548749D6C5B6F2B"/>
-        </SignersDocument>
-        <SignatureAttributes>
-            <SigningTime Signed="true">
-                <Time>2026-10-17T23:06:08Z</Time>
-            </SigningTime>
-            <SigningCertificate Signed="true">
-                <AttributeObject VOReference="C-9C622675530CE8F71BF48A21E12CBB031E08892E685E57C9BF2AC9C42E8F8CFA"/>
-            </SigningCertificate>
-            <DataObjectFormat Signed="true">
-                <ContentType>1.2.840.113549.1.7.1</ContentType>
-            </DataObjectFormat>
-            <MessageDigest Signed="true">
-                <Digest>CX2R/UWbwte2ZkoELY3cXNIsIb58gpQzmhIVdIcA9Xg=</Digest>
-            </MessageDigest>
-            <DSS>
-                <CRLs VOReference="R-EF0130D0C80B26E9F39DD8CDA126E9471A29B302D7AD48D16504DF3C5815E648 R-0F71230FF6D2F4AEFACE1C8453F1C9FCCA7C20E8467AC069D5AE4684A54EF436 R-FD6EE8501CC8BEC9ECE3F6298DB33197CF9E88CF3001085A3CFB6E60F8AC8E48 R-E0BC3176543F979207E01211F64C85EEAB30D448669E13C2604FB1EB5B4F484A"/>
-            </DSS>
-            <SubFilter>
-                <SubFilterElement>ETSI.CAdES.detached</SubFilterElement>
-            </SubFilter>
-            <ByteRange>0 919 80921 577</ByteRange>
-            <Filter>
-                <Filter>Adobe.PPKLite</Filter>
-            </Filter>
-        </SignatureAttributes>
-        <SignerInformation Pseudonym="false">
-            <SignerCertificate VOReference="C-9C622675530CE8F71BF48A21E12CBB031E08892E685E57C9BF2AC9C42E8F8CFA"/>
-            <Signer>Nacre s18 campaign 88</Signer>
-        </SignerInformation>
-        <SignatureQuality>
-            <SignatureQualityInformation>urn:cef:dss:signatureQualification:notApplicable</SignatureQualityInformation>
-        </SignatureQuality>
-        <SignatureValidationProcess>
-            <SignatureValidationProcessID>urn:etsi:019102:validationprocess:LTA</SignatureValidationProcessID>
-        </SignatureValidationProcess>
-        <SignatureValidationStatus>
-            <MainIndication>urn:etsi:019102:mainindication:indeterminate</MainIndication>
-            <SubIndication>urn:etsi:019102:subindication:REVOKED_NO_POE</SubIndication>
-            <AssociatedValidationReportData>
-                <TrustAnchor VOReference="C-9C0DEAB6613FAEE4EFC923CA84295188751B78C1DE85EE11853FD4EE606193FA"/>
-                <CertificateChain>
-                    <SigningCertificate VOReference="C-9C622675530CE8F71BF48A21E12CBB031E08892E685E57C9BF2AC9C42E8F8CFA"/>
-                    <IntermediateCertificate VOReference="C-42F8B17D39C94718BAE190CE4F0D7F0CCAAD4894F069D6BFC5AEF709CF33878B"/>
-                    <TrustAnchor VOReference="C-9C0DEAB6613FAEE4EFC923CA84295188751B78C1DE85EE11853FD4EE606193FA"/>
-                </CertificateChain>
-                <RevocationStatusInformation>
-                    <ValidationObjectId VOReference="C-9C622675530CE8F71BF48A21E12CBB031E08892E685E57C9BF2AC9C42E8F8CFA"/>
-                    <RevocationTime>2026-10-18T23:06:08Z</RevocationTime>
-                    <RevocationObject VOReference="R-EF0130D0C80B26E9F39DD8CDA126E9471A29B302D7AD48D16504DF3C5815E648"/>
-                </RevocationStatusInformation>
-                <CryptoInformation>
-                    <ValidationObjectId VOReference="S-109444E8A5AEEF5244C0FED63D29A53BD35630850D1A6D2951BA4A6C1A8A8800"/>
-                    <Algorithm>http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256</Algorithm>
-                    <SecureAlgorithm>true</SecureAlgorithm>
-                </CryptoInformation>
-                <AdditionalValidationReportData>
-                    <ReportData>
-                        <Type>urn:cef:dss:message:error</Type>
-                        <Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The certificate validation is not conclusive!</Value>
-                    </ReportData>
-                    <ReportData>
-                        <Type>urn:cef:dss:message:error</Type>
-                        <Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The certificate is revoked!</Value>
-                    </ReportData>
-                    <ReportData>
-                        <Type>urn:cef:dss:message:error</Type>
-                        <Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The revocation time is not after best-signature-time!</Value>
-                    </ReportData>
-                    <ReportData>
-                        <Type>urn:cef:dss:message:error</Type>
-                        <Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">No long term availability and integrity of validation material is present!</Value>
-                    </ReportData>
-                    <ReportData>
-                        <Type>urn:cef:dss:message:warning</Type>
-                        <Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The authority info access is not present!</Value>
-                    </ReportData>
-                    <ReportData>
-                        <Type>urn:cef:dss:message:warning</Type>
-                        <Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The certificate does not contain the authority key identifier certificate extension!</Value>
-                    </ReportData>
-                    <ReportData>
-                        <Type>urn:cef:dss:message:warning</Type>
-                        <Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The revocation info access is not present!</Value>
-                    </ReportData>
-                </AdditionalValidationReportData>
-            </AssociatedValidationReportData>
-        </SignatureValidationStatus>
-    </SignatureValidationReport>
-    <SignatureValidationObjects>
-        <ValidationObject id="C-42F8B17D39C94718BAE190CE4F0D7F0CCAAD4894F069D6BFC5AEF709CF33878B">
-            <ObjectType>urn:etsi:019102:validationObject:certificate</ObjectType>
-            <ValidationObjectRepresentation>
-                <DigestAlgAndValue>
-                    <ns2:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
-                    <ns2:DigestValue>QvixfTnJRxi64ZDOTw1/DMqtSJTwada/xa73Cc8zh4s=</ns2:DigestValue>
-                </DigestAlgAndValue>
-            </ValidationObjectRepresentation>
-            <POE>
-                <POETime>2026-10-24T23:07:09Z</POETime>
-                <TypeOfProof>urn:etsi:019102:poetype:validation</TypeOfProof>
-            </POE>
-        </ValidationObject>
-        <ValidationObject id="C-9C0DEAB6613FAEE4EFC923CA84295188751B78C1DE85EE11853FD4EE606193FA">
-            <ObjectType>urn:etsi:019102:validationObject:certificate</ObjectType>
-            <ValidationObjectRepresentation>
-                <DigestAlgAndValue>
-                    <ns2:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
-                    <ns2:DigestValue>nA3qtmE/ruTvySPKhClRiHUbeMHehe4RhT/U7mBhk/o=</ns2:DigestValue>
-                </DigestAlgAndValue>
-            </ValidationObjectRepresentation>
-            <POE>
-                <POETime>2026-10-24T23:07:09Z</POETime>
-                <TypeOfProof>urn:etsi:019102:poetype:validation</TypeOfProof>
-            </POE>
-        </ValidationObject>
-        <ValidationObject id="C-9C622675530CE8F71BF48A21E12CBB031E08892E685E57C9BF2AC9C42E8F8CFA">
-            <ObjectType>urn:etsi:019102:validationObject:certificate</ObjectType>
-            <ValidationObjectRepresentation>
-                <DigestAlgAndValue>
-                    <ns2:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
-                    <ns2:DigestValue>nGImdVMM6Pcb9Ioh4Sy7Ax4IiS5oXlfJvyrJxC6PjPo=</ns2:DigestValue>
-                </DigestAlgAndValue>
-            </ValidationObjectRepresentation>
-            <POE>
-                <POETime>2026-10-24T23:07:09Z</POETime>
-                <TypeOfProof>urn:etsi:019102:poetype:validation</TypeOfProof>
-            </POE>
-        </ValidationObject>
-        <ValidationObject id="R-FD6EE8501CC8BEC9ECE3F6298DB33197CF9E88CF3001085A3CFB6E60F8AC8E48">
-            <ObjectType>urn:etsi:019102:validationObject:CRL</ObjectType>
-            <ValidationObjectRepresentation>
-                <DigestAlgAndValue>
-                    <ns2:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
-                    <ns2:DigestValue>/W7oUBzIvsns4/YpjbMxl8+eiM8wAQhaPPtuYPisjkg=</ns2:DigestValue>
-                </DigestAlgAndValue>
-            </ValidationObjectRepresentation>
-            <POE>
-                <POETime>2026-10-24T23:07:09Z</POETime>
-                <TypeOfProof>urn:etsi:019102:poetype:validation</TypeOfProof>
-            </POE>
-            <ValidationReport>
-                <ValidationConstraintsEvaluationReport>
-                    <ValidationConstraint>
-                        <ValidationConstraintIdentifier>urn:cef:dss:bbb:formatChecking</ValidationConstraintIdentifier>
-                        <ConstraintStatus>
-                            <Status>urn:etsi:019102:constraintStatus:disabled</Status>
-                        </ConstraintStatus>
-                    </ValidationConstraint>
-                    <ValidationConstraint>
-                        <ValidationConstraintIdentifier>urn:cef:dss:bbb:identificationOfTheSigningCertificate</ValidationConstraintIdentifier>
-                        <ConstraintStatus>
-                            <Status>urn:etsi:019102:constraintStatus:applied</Status>
-                        </ConstraintStatus>
-                        <ValidationStatus>
-                            <MainIndication>urn:etsi:019102:mainindication:passed</MainIndication>
-                        </ValidationStatus>
-                    </ValidationConstraint>
-                    <ValidationConstraint>
-                        <ValidationConstraintIdentifier>urn:cef:dss:bbb:validationContextInitialization</ValidationConstraintIdentifier>
-                        <ConstraintStatus>
-                            <Status>urn:etsi:019102:constraintStatus:disabled</Status>
-                        </ConstraintStatus>
-                    </ValidationConstraint>
-                    <ValidationConstraint>
-                        <ValidationConstraintIdentifier>urn:cef:dss:bbb:cryptographicVerification</ValidationConstraintIdentifier>
-                        <ConstraintStatus>
-                            <Status>urn:etsi:019102:constraintStatus:applied</Status>
-                        </ConstraintStatus>
-                        <ValidationStatus>
-                            <MainIndication>urn:etsi:019102:mainindication:passed</MainIndication>
-                        </ValidationStatus>
-                    </ValidationConstraint>
-                    <ValidationConstraint>
-                        <ValidationConstraintIdentifier>urn:cef:dss:bbb:signatureAcceptanceValidation</ValidationConstraintIdentifier>
-                        <ConstraintStatus>
-                            <Status>urn:etsi:019102:constraintStatus:applied</Status>
-                        </ConstraintStatus>
-                        <ValidationStatus>
-                            <MainIndication>urn:etsi:019102:mainindication:passed</MainIndication>
-                        </ValidationStatus>
-                    </ValidationConstraint>
-                    <ValidationConstraint>
-                        <ValidationConstraintIdentifier>urn:cef:dss:bbb:x509CertificateValidation</ValidationConstraintIdentifier>
-                        <ConstraintStatus>
-                            <Status>urn:etsi:019102:constraintStatus:applied</Status>
-                        </ConstraintStatus>
-                        <ValidationStatus>
-                            <MainIndication>urn:etsi:019102:mainindication:passed</MainIndication>
-                        </ValidationStatus>
-                    </ValidationConstraint>
-                </ValidationConstraintsEvaluationReport>
-                <SignerInformation>
-                    <SignerCertificate VOReference="C-9C0DEAB6613FAEE4EFC923CA84295188751B78C1DE85EE11853FD4EE606193FA"/>
-                    <Signer>Nacre Test Root CA</Signer>
-                </SignerInformation>
-                <SignatureValidationStatus>
-                    <MainIndication>urn:etsi:019102:mainindication:passed</MainIndication>
-                    <AssociatedValidationReportData>
-                        <TrustAnchor VOReference="C-9C0DEAB6613FAEE4EFC923CA84295188751B78C1DE85EE11853FD4EE606193FA"/>
-                        <CertificateChain>
-                            <SigningCertificate VOReference="C-9C0DEAB6613FAEE4EFC923CA84295188751B78C1DE85EE11853FD4EE606193FA"/>
-                            <TrustAnchor VOReference="C-9C0DEAB6613FAEE4EFC923CA84295188751B78C1DE85EE11853FD4EE606193FA"/>
-                        </CertificateChain>
-                        <CryptoInformation>
-                            <ValidationObjectId VOReference="R-FD6EE8501CC8BEC9ECE3F6298DB33197CF9E88CF3001085A3CFB6E60F8AC8E48"/>
-                            <Algorithm>http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256</Algorithm>
-                            <SecureAlgorithm>true</SecureAlgorithm>
-                        </CryptoInformation>
-                    </AssociatedValidationReportData>
-                </SignatureValidationStatus>
-            </ValidationReport>
-        </ValidationObject>
-        <ValidationObject id="R-EF0130D0C80B26E9F39DD8CDA126E9471A29B302D7AD48D16504DF3C5815E648">
-            <ObjectType>urn:etsi:019102:validationObject:CRL</ObjectType>
-            <ValidationObjectRepresentation>
-                <DigestAlgAndValue>
-                    <ns2:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
-                    <ns2:DigestValue>7wEw0MgLJunzndjNoSbpRxopswLXrUjRZQTfPFgV5kg=</ns2:DigestValue>
-                </DigestAlgAndValue>
-            </ValidationObjectRepresentation>
-            <POE>
-                <POETime>2026-10-24T23:07:09Z</POETime>
-                <TypeOfProof>urn:etsi:019102:poetype:validation</TypeOfProof>
-            </POE>
-            <ValidationReport>
-                <ValidationConstraintsEvaluationReport>
-                    <ValidationConstraint>
-                        <ValidationConstraintIdentifier>urn:cef:dss:bbb:formatChecking</ValidationConstraintIdentifier>
-                        <ConstraintStatus>
-                            <Status>urn:etsi:019102:constraintStatus:disabled</Status>
-                        </ConstraintStatus>
-                    </ValidationConstraint>
-                    <ValidationConstraint>
-                        <ValidationConstraintIdentifier>urn:cef:dss:bbb:identificationOfTheSigningCertificate</ValidationConstraintIdentifier>
-                        <ConstraintStatus>
-                            <Status>urn:etsi:019102:constraintStatus:applied</Status>
-                        </ConstraintStatus>
-                        <ValidationStatus>
-                            <MainIndication>urn:etsi:019102:mainindication:passed</MainIndication>
-                        </ValidationStatus>
-                    </ValidationConstraint>
-                    <ValidationConstraint>
-                        <ValidationConstraintIdentifier>urn:cef:dss:bbb:validationContextInitialization</ValidationConstraintIdentifier>
-                        <ConstraintStatus>
-                            <Status>urn:etsi:019102:constraintStatus:disabled</Status>
-                        </ConstraintStatus>
-                    </ValidationConstraint>
-                    <ValidationConstraint>
-                        <ValidationConstraintIdentifier>urn:cef:dss:bbb:cryptographicVerification</ValidationConstraintIdentifier>
-                        <ConstraintStatus>
-                            <Status>urn:etsi:019102:constraintStatus:applied</Status>
-                        </ConstraintStatus>
-                        <ValidationStatus>
-                            <MainIndication>urn:etsi:019102:mainindication:passed</MainIndication>
-                        </ValidationStatus>
-                    </ValidationConstraint>
-                    <ValidationConstraint>
-                        <ValidationConstraintIdentifier>urn:cef:dss:bbb:signatureAcceptanceValidation</ValidationConstraintIdentifier>
-                        <ConstraintStatus>
-                            <Status>urn:etsi:019102:constraintStatus:applied</Status>
-                        </ConstraintStatus>
-                        <ValidationStatus>
-                            <MainIndication>urn:etsi:019102:mainindication:passed</MainIndication>
-                        </ValidationStatus>
-                    </ValidationConstraint>
-                    <ValidationConstraint>
-                        <ValidationConstraintIdentifier>urn:cef:dss:bbb:x509CertificateValidation</ValidationConstraintIdentifier>
-                        <ConstraintStatus>
-                            <Status>urn:etsi:019102:constraintStatus:applied</Status>
-                        </ConstraintStatus>
-                        <ValidationStatus>
-                            <MainIndication>urn:etsi:019102:mainindication:indeterminate</MainIndication>
-                            <SubIndication>urn:etsi:019102:subindication:OUT_OF_BOUNDS_NOT_REVOKED</SubIndication>
-                            <AssociatedValidationReportData>
-                                <AdditionalValidationReportData>
-                                    <ReportData>
-                                        <Type>urn:cef:dss:message:error</Type>
-                                        <Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The certificate validation is not conclusive!</Value>
-                                    </ReportData>
-                                    <ReportData>
-                                        <Type>urn:cef:dss:message:error</Type>
-                                        <Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The current time is not in the validity range of the signer's certificate!</Value>
-                                    </ReportData>
-                                    <ReportData>
-                                        <Type>urn:cef:dss:message:warning</Type>
-                                        <Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The certificate does not contain the authority key identifier certificate extension!</Value>
-                                    </ReportData>
-                                </AdditionalValidationReportData>
-                            </AssociatedValidationReportData>
-                        </ValidationStatus>
-                    </ValidationConstraint>
-                </ValidationConstraintsEvaluationReport>
-                <SignerInformation>
-                    <SignerCertificate VOReference="C-42F8B17D39C94718BAE190CE4F0D7F0CCAAD4894F069D6BFC5AEF709CF33878B"/>
-                    <Signer>Nacre s18 campaign 87</Signer>
-                </SignerInformation>
-                <SignatureValidationStatus>
-                    <MainIndication>urn:etsi:019102:mainindication:indeterminate</MainIndication>
-                    <SubIndication>urn:etsi:019102:subindication:OUT_OF_BOUNDS_NOT_REVOKED</SubIndication>
-                    <AssociatedValidationReportData>
-                        <TrustAnchor VOReference="C-9C0DEAB6613FAEE4EFC923CA84295188751B78C1DE85EE11853FD4EE606193FA"/>
-                        <CertificateChain>
-                            <SigningCertificate VOReference="C-42F8B17D39C94718BAE190CE4F0D7F0CCAAD4894F069D6BFC5AEF709CF33878B"/>
-                            <TrustAnchor VOReference="C-9C0DEAB6613FAEE4EFC923CA84295188751B78C1DE85EE11853FD4EE606193FA"/>
-                        </CertificateChain>
-                        <CryptoInformation>
-                            <ValidationObjectId VOReference="R-EF0130D0C80B26E9F39DD8CDA126E9471A29B302D7AD48D16504DF3C5815E648"/>
-                            <Algorithm>http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256</Algorithm>
-                            <SecureAlgorithm>true</SecureAlgorithm>
-                        </CryptoInformation>
-                        <AdditionalValidationReportData>
-                            <ReportData>
-                                <Type>urn:cef:dss:message:error</Type>
-                                <Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The certificate validation is not conclusive!</Value>
-                            </ReportData>
-                            <ReportData>
-                                <Type>urn:cef:dss:message:error</Type>
-                                <Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The current time is not in the validity range of the signer's certificate!</Value>
-                            </ReportData>
-                            <ReportData>
-                                <Type>urn:cef:dss:message:warning</Type>
-                                <Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The certificate does not contain the authority key identifier certificate extension!</Value>
-                            </ReportData>
-                        </AdditionalValidationReportData>
-                    </AssociatedValidationReportData>
-                </SignatureValidationStatus>
-            </ValidationReport>
-        </ValidationObject>
-        <ValidationObject id="R-0F71230FF6D2F4AEFACE1C8453F1C9FCCA7C20E8467AC069D5AE4684A54EF436">
-            <ObjectType>urn:etsi:019102:validationObject:CRL</ObjectType>
-            <ValidationObjectRepresentation>
-                <DigestAlgAndValue>
-                    <ns2:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
-                    <ns2:DigestValue>D3EjD/bS9K76zhyEU/HJ/Mp8IOhGesBp1a5GhKVO9DY=</ns2:DigestValue>
-                </DigestAlgAndValue>
-            </ValidationObjectRepresentation>
-            <POE>
-                <POETime>2026-10-24T23:07:09Z</POETime>
-                <TypeOfProof>urn:etsi:019102:poetype:validation</TypeOfProof>
-            </POE>
-            <ValidationReport>
-                <ValidationConstraintsEvaluationReport>
-                    <ValidationConstraint>
-                        <ValidationConstraintIdentifier>urn:cef:dss:bbb:formatChecking</ValidationConstraintIdentifier>
-                        <ConstraintStatus>
-                            <Status>urn:etsi:019102:constraintStatus:disabled</Status>
-                        </ConstraintStatus>
-                    </ValidationConstraint>
-                    <ValidationConstraint>
-                        <ValidationConstraintIdentifier>urn:cef:dss:bbb:identificationOfTheSigningCertificate</ValidationConstraintIdentifier>
-                        <ConstraintStatus>
-                            <Status>urn:etsi:019102:constraintStatus:applied</Status>
-                        </ConstraintStatus>
-                        <ValidationStatus>
-                            <MainIndication>urn:etsi:019102:mainindication:passed</MainIndication>
-                        </ValidationStatus>
-                    </ValidationConstraint>
-                    <ValidationConstraint>
-                        <ValidationConstraintIdentifier>urn:cef:dss:bbb:validationContextInitialization</ValidationConstraintIdentifier>
-                        <ConstraintStatus>
-                            <Status>urn:etsi:019102:constraintStatus:disabled</Status>
-                        </ConstraintStatus>
-                    </ValidationConstraint>
-                    <ValidationConstraint>
-                        <ValidationConstraintIdentifier>urn:cef:dss:bbb:cryptographicVerification</ValidationConstraintIdentifier>
-                        <ConstraintStatus>
-                            <Status>urn:etsi:019102:constraintStatus:applied</Status>
-                        </ConstraintStatus>
-                        <ValidationStatus>
-                            <MainIndication>urn:etsi:019102:mainindication:passed</MainIndication>
-                        </ValidationStatus>
-                    </ValidationConstraint>
-                    <ValidationConstraint>
-                        <ValidationConstraintIdentifier>urn:cef:dss:bbb:signatureAcceptanceValidation</ValidationConstraintIdentifier>
-                        <ConstraintStatus>
-                            <Status>urn:etsi:019102:constraintStatus:applied</Status>
-                        </ConstraintStatus>
-                        <ValidationStatus>
-                            <MainIndication>urn:etsi:019102:mainindication:passed</MainIndication>
-                        </ValidationStatus>
-                    </ValidationConstraint>
-                    <ValidationConstraint>
-                        <ValidationConstraintIdentifier>urn:cef:dss:bbb:x509CertificateValidation</ValidationConstraintIdentifier>
-                        <ConstraintStatus>
-                            <Status>urn:etsi:019102:constraintStatus:applied</Status>
-                        </ConstraintStatus>
-                        <ValidationStatus>
-                            <MainIndication>urn:etsi:019102:mainindication:passed</MainIndication>
-                        </ValidationStatus>
-                    </ValidationConstraint>
-                </ValidationConstraintsEvaluationReport>
-                <SignerInformation>
-                    <SignerCertificate VOReference="C-9C0DEAB6613FAEE4EFC923CA84295188751B78C1DE85EE11853FD4EE606193FA"/>
-                    <Signer>Nacre Test Root CA</Signer>
-                </SignerInformation>
-                <SignatureValidationStatus>
-                    <MainIndication>urn:etsi:019102:mainindication:passed</MainIndication>
-                    <AssociatedValidationReportData>
-                        <TrustAnchor VOReference="C-9C0DEAB6613FAEE4EFC923CA84295188751B78C1DE85EE11853FD4EE606193FA"/>
-                        <CertificateChain>
-                            <SigningCertificate VOReference="C-9C0DEAB6613FAEE4EFC923CA84295188751B78C1DE85EE11853FD4EE606193FA"/>
-                            <TrustAnchor VOReference="C-9C0DEAB6613FAEE4EFC923CA84295188751B78C1DE85EE11853FD4EE606193FA"/>
-                        </CertificateChain>
-                        <CryptoInformation>
-                            <ValidationObjectId VOReference="R-0F71230FF6D2F4AEFACE1C8453F1C9FCCA7C20E8467AC069D5AE4684A54EF436"/>
-                            <Algorithm>http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256</Algorithm>
-                            <SecureAlgorithm>true</SecureAlgorithm>
-                        </CryptoInformation>
-                    </AssociatedValidationReportData>
-                </SignatureValidationStatus>
-            </ValidationReport>
-        </ValidationObject>
-        <ValidationObject id="R-E0BC3176543F979207E01211F64C85EEAB30D448669E13C2604FB1EB5B4F484A">
-            <ObjectType>urn:etsi:019102:validationObject:CRL</ObjectType>
-            <ValidationObjectRepresentation>
-                <DigestAlgAndValue>
-                    <ns2:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
-                    <ns2:DigestValue>4LwxdlQ/l5IH4BIR9kyF7qsw1EhmnhPCYE+x61tPSEo=</ns2:DigestValue>
-                </DigestAlgAndValue>
-            </ValidationObjectRepresentation>
-            <POE>
-                <POETime>2026-10-24T23:07:09Z</POETime>
-                <TypeOfProof>urn:etsi:019102:poetype:validation</TypeOfProof>
-            </POE>
-        </ValidationObject>
-        <ValidationObject id="D-79A8EF2357344C2A2E5C04BD2F78F14B16A63C93A6A99F078548749D6C5B6F2B">
-            <ObjectType>urn:etsi:019102:validationObject:signedData</ObjectType>
-            <ValidationObjectRepresentation>
-                <DigestAlgAndValue>
-                    <ns2:DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
-                    <ns2:DigestValue>4lGbxv7hOvvURw9Raz3kouZau9PaQ0k6QRzIH/Qw+G4=</ns2:DigestValue>
-                </DigestAlgAndValue>
-            </ValidationObjectRepresentation>
-            <POE>
-                <POETime>2026-10-24T23:07:09Z</POETime>
-                <TypeOfProof>urn:etsi:019102:poetype:validation</TypeOfProof>
-            </POE>
-        </ValidationObject>
-    </SignatureValidationObjects>
-</ValidationReport>
+<ns2:ValidationReport xmlns="http://www.w3.org/2000/09/xmldsig#" xmlns:ns2="http://uri.etsi.org/19102/v1.4.1#" xmlns:ns3="http://uri.etsi.org/01903/v1.3.2#" xmlns:ns4="http://uri.etsi.org/02231/v2#">
+    <ns2:SignatureValidationReport>
+        <ns2:SignatureIdentifier id="S-45B673CCD9DEA167054F00150DAE6B0A1B7A831F653CC8864DE00C35830714DC">
+            <ns2:DigestAlgAndValue>
+                <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
+                <DigestValue>F6/fdvuWpnkTRV9tySiCpZJ72R3KZUplhK7QMcfqpik=</DigestValue>
+            </ns2:DigestAlgAndValue>
+            <SignatureValue>MEUCIFJThNzfLuzkCBycuo43ojXIckp34w7rKQDreG+nOfNDAiEA2yuF1dZTJOwxqJor16fREAco4ItmkQY9scASk7yqh8o=</SignatureValue>
+            <ns2:HashOnly>false</ns2:HashOnly>
+            <ns2:DocHashOnly>false</ns2:DocHashOnly>
+        </ns2:SignatureIdentifier>
+        <ns2:ValidationConstraintsEvaluationReport>
+            <ns2:ValidationConstraint>
+                <ns2:ValidationConstraintIdentifier>urn:cef:dss:bbb:formatChecking</ns2:ValidationConstraintIdentifier>
+                <ns2:ConstraintStatus>
+                    <ns2:Status>urn:etsi:019102:constraintStatus:applied</ns2:Status>
+                </ns2:ConstraintStatus>
+                <ns2:ValidationStatus>
+                    <ns2:MainIndication>urn:etsi:019102:mainindication:passed</ns2:MainIndication>
+                </ns2:ValidationStatus>
+            </ns2:ValidationConstraint>
+            <ns2:ValidationConstraint>
+                <ns2:ValidationConstraintIdentifier>urn:cef:dss:bbb:identificationOfTheSigningCertificate</ns2:ValidationConstraintIdentifier>
+                <ns2:ConstraintStatus>
+                    <ns2:Status>urn:etsi:019102:constraintStatus:applied</ns2:Status>
+                </ns2:ConstraintStatus>
+                <ns2:ValidationStatus>
+                    <ns2:MainIndication>urn:etsi:019102:mainindication:passed</ns2:MainIndication>
+                </ns2:ValidationStatus>
+            </ns2:ValidationConstraint>
+            <ns2:ValidationConstraint>
+                <ns2:ValidationConstraintIdentifier>urn:cef:dss:bbb:validationContextInitialization</ns2:ValidationConstraintIdentifier>
+                <ns2:ConstraintStatus>
+                    <ns2:Status>urn:etsi:019102:constraintStatus:applied</ns2:Status>
+                </ns2:ConstraintStatus>
+                <ns2:ValidationStatus>
+                    <ns2:MainIndication>urn:etsi:019102:mainindication:passed</ns2:MainIndication>
+                </ns2:ValidationStatus>
+            </ns2:ValidationConstraint>
+            <ns2:ValidationConstraint>
+                <ns2:ValidationConstraintIdentifier>urn:cef:dss:bbb:cryptographicVerification</ns2:ValidationConstraintIdentifier>
+                <ns2:ConstraintStatus>
+                    <ns2:Status>urn:etsi:019102:constraintStatus:applied</ns2:Status>
+                </ns2:ConstraintStatus>
+                <ns2:ValidationStatus>
+                    <ns2:MainIndication>urn:etsi:019102:mainindication:passed</ns2:MainIndication>
+                </ns2:ValidationStatus>
+            </ns2:ValidationConstraint>
+            <ns2:ValidationConstraint>
+                <ns2:ValidationConstraintIdentifier>urn:cef:dss:bbb:signatureAcceptanceValidation</ns2:ValidationConstraintIdentifier>
+                <ns2:ConstraintStatus>
+                    <ns2:Status>urn:etsi:019102:constraintStatus:applied</ns2:Status>
+                </ns2:ConstraintStatus>
+                <ns2:ValidationStatus>
+                    <ns2:MainIndication>urn:etsi:019102:mainindication:passed</ns2:MainIndication>
+                </ns2:ValidationStatus>
+            </ns2:ValidationConstraint>
+            <ns2:ValidationConstraint>
+                <ns2:ValidationConstraintIdentifier>urn:cef:dss:bbb:x509CertificateValidation</ns2:ValidationConstraintIdentifier>
+                <ns2:ConstraintStatus>
+                    <ns2:Status>urn:etsi:019102:constraintStatus:applied</ns2:Status>
+                </ns2:ConstraintStatus>
+                <ns2:ValidationStatus>
+                    <ns2:MainIndication>urn:etsi:019102:mainindication:indeterminate</ns2:MainIndication>
+                    <ns2:SubIndication>urn:etsi:019102:subindication:REVOKED_NO_POE</ns2:SubIndication>
+                    <ns2:AssociatedValidationReportData>
+                        <ns2:AdditionalValidationReportData>
+                            <ns2:ReportData>
+                                <ns2:Type>urn:cef:dss:message:error</ns2:Type>
+                                <ns2:Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The certificate validation is not conclusive!</ns2:Value>
+                            </ns2:ReportData>
+                            <ns2:ReportData>
+                                <ns2:Type>urn:cef:dss:message:error</ns2:Type>
+                                <ns2:Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The certificate is revoked!</ns2:Value>
+                            </ns2:ReportData>
+                            <ns2:ReportData>
+                                <ns2:Type>urn:cef:dss:message:warning</ns2:Type>
+                                <ns2:Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The authority info access is not present!</ns2:Value>
+                            </ns2:ReportData>
+                            <ns2:ReportData>
+                                <ns2:Type>urn:cef:dss:message:warning</ns2:Type>
+                                <ns2:Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The certificate does not contain the authority key identifier certificate extension!</ns2:Value>
+                            </ns2:ReportData>
+                            <ns2:ReportData>
+                                <ns2:Type>urn:cef:dss:message:warning</ns2:Type>
+                                <ns2:Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The revocation info access is not present!</ns2:Value>
+                            </ns2:ReportData>
+                            <ns2:ReportData>
+                                <ns2:Type>urn:cef:dss:message:warning</ns2:Type>
+                                <ns2:Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The certificate does not contain the authority key identifier certificate extension!</ns2:Value>
+                            </ns2:ReportData>
+                        </ns2:AdditionalValidationReportData>
+                    </ns2:AssociatedValidationReportData>
+                </ns2:ValidationStatus>
+            </ns2:ValidationConstraint>
+            <ns2:ValidationConstraint>
+                <ns2:ValidationConstraintIdentifier>urn:cef:dss:bbb:pastSignatureValidation</ns2:ValidationConstraintIdentifier>
+                <ns2:ConstraintStatus>
+                    <ns2:Status>urn:etsi:019102:constraintStatus:disabled</ns2:Status>
+                </ns2:ConstraintStatus>
+            </ns2:ValidationConstraint>
+            <ns2:ValidationConstraint>
+                <ns2:ValidationConstraintIdentifier>urn:cef:dss:bbb:pastCertificateValidation</ns2:ValidationConstraintIdentifier>
+                <ns2:ConstraintStatus>
+                    <ns2:Status>urn:etsi:019102:constraintStatus:disabled</ns2:Status>
+                </ns2:ConstraintStatus>
+            </ns2:ValidationConstraint>
+            <ns2:ValidationConstraint>
+                <ns2:ValidationConstraintIdentifier>urn:cef:dss:bbb:validationTimeSliding</ns2:ValidationConstraintIdentifier>
+                <ns2:ConstraintStatus>
+                    <ns2:Status>urn:etsi:019102:constraintStatus:disabled</ns2:Status>
+                </ns2:ConstraintStatus>
+            </ns2:ValidationConstraint>
+        </ns2:ValidationConstraintsEvaluationReport>
+        <ns2:ValidationTimeInfo>
+            <ns2:ValidationTime>2026-10-25T19:58:17Z</ns2:ValidationTime>
+            <ns2:BestSignatureTime>
+                <ns2:POETime>2026-10-25T19:58:17Z</ns2:POETime>
+                <ns2:TypeOfProof>urn:etsi:019102:poetype:validation</ns2:TypeOfProof>
+            </ns2:BestSignatureTime>
+        </ns2:ValidationTimeInfo>
+        <ns2:SignersDocument>
+            <ns2:DigestAlgAndValue>
+                <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
+                <DigestValue>4lGbxv7hOvvURw9Raz3kouZau9PaQ0k6QRzIH/Qw+G4=</DigestValue>
+            </ns2:DigestAlgAndValue>
+            <ns2:SignersDocumentRepresentation VOReference="D-79A8EF2357344C2A2E5C04BD2F78F14B16A63C93A6A99F078548749D6C5B6F2B"/>
+        </ns2:SignersDocument>
+        <ns2:SignatureAttributes>
+            <ns2:SigningTime Signed="true">
+                <ns2:Time>2026-10-18T19:57:06Z</ns2:Time>
+            </ns2:SigningTime>
+            <ns2:SigningCertificate Signed="true">
+                <ns2:AttributeObject VOReference="C-DCD18B5C7C51224D32F2510BFEAC3184F1C2574772B02016B429EAE734197CF4"/>
+            </ns2:SigningCertificate>
+            <ns2:DataObjectFormat Signed="true">
+                <ns2:ContentType>1.2.840.113549.1.7.1</ns2:ContentType>
+            </ns2:DataObjectFormat>
+            <ns2:MessageDigest Signed="true">
+                <ns2:Digest>oe8Yeyu38RDWC2/aFjlLbKcCIKXwI7ZjyeNLwloxVHg=</ns2:Digest>
+            </ns2:MessageDigest>
+            <ns2:DSS>
+                <ns2:CRLs VOReference="R-9649DA4CFCCF9380ECB639A6EF8A868C780786073929DBACD4625BA102680163 R-CAA0D1CE7287886762EEC15FAC116A087228113D42E33E6FCCFF89EE1F6E2EEF R-722855F9417C236268CDA82141E6E308E5006F5509560DD05682EB930F73C779 R-D69E0B72992EC73124B3234FA26F6F279CAADBC237531B1AE28D2887587256BC"/>
+            </ns2:DSS>
+            <ns2:SubFilter>
+                <ns2:SubFilterElement>ETSI.CAdES.detached</ns2:SubFilterElement>
+            </ns2:SubFilter>
+            <ns2:ByteRange>0 919 80921 577</ns2:ByteRange>
+            <ns2:Filter>
+                <ns2:Filter>Adobe.PPKLite</ns2:Filter>
+            </ns2:Filter>
+        </ns2:SignatureAttributes>
+        <ns2:SignerInformation Pseudonym="false">
+            <ns2:SignerCertificate VOReference="C-DCD18B5C7C51224D32F2510BFEAC3184F1C2574772B02016B429EAE734197CF4"/>
+            <ns2:Signer>Nacre s18 campaign 88</ns2:Signer>
+        </ns2:SignerInformation>
+        <ns2:SignatureQuality>
+            <ns2:SignatureQualityInformation>urn:cef:dss:signatureQualification:notApplicable</ns2:SignatureQualityInformation>
+        </ns2:SignatureQuality>
+        <ns2:SignatureValidationProcess>
+            <ns2:SignatureValidationProcessID>urn:etsi:019102:validationprocess:LTA</ns2:SignatureValidationProcessID>
+        </ns2:SignatureValidationProcess>
+        <ns2:SignatureValidationStatus>
+            <ns2:MainIndication>urn:etsi:019102:mainindication:indeterminate</ns2:MainIndication>
+            <ns2:SubIndication>urn:etsi:019102:subindication:REVOKED_NO_POE</ns2:SubIndication>
+            <ns2:AssociatedValidationReportData>
+                <ns2:TrustAnchor VOReference="C-83299AE95FC69DE46327C6CABA48F8585D11E4A4C3E1E8B74ECD06125F5A0BAA"/>
+                <ns2:CertificateChain>
+                    <ns2:SigningCertificate VOReference="C-DCD18B5C7C51224D32F2510BFEAC3184F1C2574772B02016B429EAE734197CF4"/>
+                    <ns2:IntermediateCertificate VOReference="C-50B1E3B43028482A1830CAE60C7F02477005C6ADA0DA2119E4A64E134D1CFB57"/>
+                    <ns2:TrustAnchor VOReference="C-83299AE95FC69DE46327C6CABA48F8585D11E4A4C3E1E8B74ECD06125F5A0BAA"/>
+                </ns2:CertificateChain>
+                <ns2:RevocationStatusInformation>
+                    <ns2:ValidationObjectId VOReference="C-DCD18B5C7C51224D32F2510BFEAC3184F1C2574772B02016B429EAE734197CF4"/>
+                    <ns2:RevocationTime>2026-10-19T19:57:06Z</ns2:RevocationTime>
+                    <ns2:RevocationObject VOReference="R-CAA0D1CE7287886762EEC15FAC116A087228113D42E33E6FCCFF89EE1F6E2EEF"/>
+                </ns2:RevocationStatusInformation>
+                <ns2:CryptoInformation>
+                    <ns2:ValidationObjectId VOReference="S-45B673CCD9DEA167054F00150DAE6B0A1B7A831F653CC8864DE00C35830714DC"/>
+                    <ns2:Algorithm>http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256</ns2:Algorithm>
+                    <ns2:SecureAlgorithm>true</ns2:SecureAlgorithm>
+                </ns2:CryptoInformation>
+                <ns2:AdditionalValidationReportData>
+                    <ns2:ReportData>
+                        <ns2:Type>urn:cef:dss:message:error</ns2:Type>
+                        <ns2:Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The certificate validation is not conclusive!</ns2:Value>
+                    </ns2:ReportData>
+                    <ns2:ReportData>
+                        <ns2:Type>urn:cef:dss:message:error</ns2:Type>
+                        <ns2:Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The certificate is revoked!</ns2:Value>
+                    </ns2:ReportData>
+                    <ns2:ReportData>
+                        <ns2:Type>urn:cef:dss:message:error</ns2:Type>
+                        <ns2:Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The revocation time is not after best-signature-time!</ns2:Value>
+                    </ns2:ReportData>
+                    <ns2:ReportData>
+                        <ns2:Type>urn:cef:dss:message:error</ns2:Type>
+                        <ns2:Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">No long term availability and integrity of validation material is present!</ns2:Value>
+                    </ns2:ReportData>
+                    <ns2:ReportData>
+                        <ns2:Type>urn:cef:dss:message:warning</ns2:Type>
+                        <ns2:Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The authority info access is not present!</ns2:Value>
+                    </ns2:ReportData>
+                    <ns2:ReportData>
+                        <ns2:Type>urn:cef:dss:message:warning</ns2:Type>
+                        <ns2:Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The certificate does not contain the authority key identifier certificate extension!</ns2:Value>
+                    </ns2:ReportData>
+                    <ns2:ReportData>
+                        <ns2:Type>urn:cef:dss:message:warning</ns2:Type>
+                        <ns2:Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The revocation info access is not present!</ns2:Value>
+                    </ns2:ReportData>
+                </ns2:AdditionalValidationReportData>
+            </ns2:AssociatedValidationReportData>
+        </ns2:SignatureValidationStatus>
+    </ns2:SignatureValidationReport>
+    <ns2:SignatureValidationObjects>
+        <ns2:ValidationObject id="C-50B1E3B43028482A1830CAE60C7F02477005C6ADA0DA2119E4A64E134D1CFB57">
+            <ns2:ObjectType>urn:etsi:019102:validationObject:certificate</ns2:ObjectType>
+            <ns2:ValidationObjectRepresentation>
+                <ns2:DigestAlgAndValue>
+                    <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
+                    <DigestValue>ULHjtDAoSCoYMMrmDH8CR3AFxq2g2iEZ5KZOE00c+1c=</DigestValue>
+                </ns2:DigestAlgAndValue>
+            </ns2:ValidationObjectRepresentation>
+            <ns2:POE>
+                <ns2:POETime>2026-10-25T19:58:17Z</ns2:POETime>
+                <ns2:TypeOfProof>urn:etsi:019102:poetype:validation</ns2:TypeOfProof>
+            </ns2:POE>
+        </ns2:ValidationObject>
+        <ns2:ValidationObject id="C-83299AE95FC69DE46327C6CABA48F8585D11E4A4C3E1E8B74ECD06125F5A0BAA">
+            <ns2:ObjectType>urn:etsi:019102:validationObject:certificate</ns2:ObjectType>
+            <ns2:ValidationObjectRepresentation>
+                <ns2:DigestAlgAndValue>
+                    <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
+                    <DigestValue>gyma6V/GneRjJ8bKukj4WF0R5KTD4ei3Ts0GEl9aC6o=</DigestValue>
+                </ns2:DigestAlgAndValue>
+            </ns2:ValidationObjectRepresentation>
+            <ns2:POE>
+                <ns2:POETime>2026-10-25T19:58:17Z</ns2:POETime>
+                <ns2:TypeOfProof>urn:etsi:019102:poetype:validation</ns2:TypeOfProof>
+            </ns2:POE>
+        </ns2:ValidationObject>
+        <ns2:ValidationObject id="C-DCD18B5C7C51224D32F2510BFEAC3184F1C2574772B02016B429EAE734197CF4">
+            <ns2:ObjectType>urn:etsi:019102:validationObject:certificate</ns2:ObjectType>
+            <ns2:ValidationObjectRepresentation>
+                <ns2:DigestAlgAndValue>
+                    <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
+                    <DigestValue>3NGLXHxRIk0y8lEL/qwxhPHCV0dysCAWtCnq5zQZfPQ=</DigestValue>
+                </ns2:DigestAlgAndValue>
+            </ns2:ValidationObjectRepresentation>
+            <ns2:POE>
+                <ns2:POETime>2026-10-25T19:58:17Z</ns2:POETime>
+                <ns2:TypeOfProof>urn:etsi:019102:poetype:validation</ns2:TypeOfProof>
+            </ns2:POE>
+        </ns2:ValidationObject>
+        <ns2:ValidationObject id="R-722855F9417C236268CDA82141E6E308E5006F5509560DD05682EB930F73C779">
+            <ns2:ObjectType>urn:etsi:019102:validationObject:CRL</ns2:ObjectType>
+            <ns2:ValidationObjectRepresentation>
+                <ns2:DigestAlgAndValue>
+                    <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
+                    <DigestValue>cihV+UF8I2JozaghQebjCOUAb1UJVg3QVoLrkw9zx3k=</DigestValue>
+                </ns2:DigestAlgAndValue>
+            </ns2:ValidationObjectRepresentation>
+            <ns2:POE>
+                <ns2:POETime>2026-10-25T19:58:17Z</ns2:POETime>
+                <ns2:TypeOfProof>urn:etsi:019102:poetype:validation</ns2:TypeOfProof>
+            </ns2:POE>
+            <ns2:ValidationReport>
+                <ns2:ValidationConstraintsEvaluationReport>
+                    <ns2:ValidationConstraint>
+                        <ns2:ValidationConstraintIdentifier>urn:cef:dss:bbb:formatChecking</ns2:ValidationConstraintIdentifier>
+                        <ns2:ConstraintStatus>
+                            <ns2:Status>urn:etsi:019102:constraintStatus:disabled</ns2:Status>
+                        </ns2:ConstraintStatus>
+                    </ns2:ValidationConstraint>
+                    <ns2:ValidationConstraint>
+                        <ns2:ValidationConstraintIdentifier>urn:cef:dss:bbb:identificationOfTheSigningCertificate</ns2:ValidationConstraintIdentifier>
+                        <ns2:ConstraintStatus>
+                            <ns2:Status>urn:etsi:019102:constraintStatus:applied</ns2:Status>
+                        </ns2:ConstraintStatus>
+                        <ns2:ValidationStatus>
+                            <ns2:MainIndication>urn:etsi:019102:mainindication:passed</ns2:MainIndication>
+                        </ns2:ValidationStatus>
+                    </ns2:ValidationConstraint>
+                    <ns2:ValidationConstraint>
+                        <ns2:ValidationConstraintIdentifier>urn:cef:dss:bbb:validationContextInitialization</ns2:ValidationConstraintIdentifier>
+                        <ns2:ConstraintStatus>
+                            <ns2:Status>urn:etsi:019102:constraintStatus:disabled</ns2:Status>
+                        </ns2:ConstraintStatus>
+                    </ns2:ValidationConstraint>
+                    <ns2:ValidationConstraint>
+                        <ns2:ValidationConstraintIdentifier>urn:cef:dss:bbb:cryptographicVerification</ns2:ValidationConstraintIdentifier>
+                        <ns2:ConstraintStatus>
+                            <ns2:Status>urn:etsi:019102:constraintStatus:applied</ns2:Status>
+                        </ns2:ConstraintStatus>
+                        <ns2:ValidationStatus>
+                            <ns2:MainIndication>urn:etsi:019102:mainindication:passed</ns2:MainIndication>
+                        </ns2:ValidationStatus>
+                    </ns2:ValidationConstraint>
+                    <ns2:ValidationConstraint>
+                        <ns2:ValidationConstraintIdentifier>urn:cef:dss:bbb:signatureAcceptanceValidation</ns2:ValidationConstraintIdentifier>
+                        <ns2:ConstraintStatus>
+                            <ns2:Status>urn:etsi:019102:constraintStatus:applied</ns2:Status>
+                        </ns2:ConstraintStatus>
+                        <ns2:ValidationStatus>
+                            <ns2:MainIndication>urn:etsi:019102:mainindication:passed</ns2:MainIndication>
+                        </ns2:ValidationStatus>
+                    </ns2:ValidationConstraint>
+                    <ns2:ValidationConstraint>
+                        <ns2:ValidationConstraintIdentifier>urn:cef:dss:bbb:x509CertificateValidation</ns2:ValidationConstraintIdentifier>
+                        <ns2:ConstraintStatus>
+                            <ns2:Status>urn:etsi:019102:constraintStatus:applied</ns2:Status>
+                        </ns2:ConstraintStatus>
+                        <ns2:ValidationStatus>
+                            <ns2:MainIndication>urn:etsi:019102:mainindication:passed</ns2:MainIndication>
+                        </ns2:ValidationStatus>
+                    </ns2:ValidationConstraint>
+                </ns2:ValidationConstraintsEvaluationReport>
+                <ns2:SignerInformation>
+                    <ns2:SignerCertificate VOReference="C-83299AE95FC69DE46327C6CABA48F8585D11E4A4C3E1E8B74ECD06125F5A0BAA"/>
+                    <ns2:Signer>Nacre Test Root CA</ns2:Signer>
+                </ns2:SignerInformation>
+                <ns2:SignatureValidationStatus>
+                    <ns2:MainIndication>urn:etsi:019102:mainindication:passed</ns2:MainIndication>
+                    <ns2:AssociatedValidationReportData>
+                        <ns2:TrustAnchor VOReference="C-83299AE95FC69DE46327C6CABA48F8585D11E4A4C3E1E8B74ECD06125F5A0BAA"/>
+                        <ns2:CertificateChain>
+                            <ns2:SigningCertificate VOReference="C-83299AE95FC69DE46327C6CABA48F8585D11E4A4C3E1E8B74ECD06125F5A0BAA"/>
+                            <ns2:TrustAnchor VOReference="C-83299AE95FC69DE46327C6CABA48F8585D11E4A4C3E1E8B74ECD06125F5A0BAA"/>
+                        </ns2:CertificateChain>
+                        <ns2:CryptoInformation>
+                            <ns2:ValidationObjectId VOReference="R-722855F9417C236268CDA82141E6E308E5006F5509560DD05682EB930F73C779"/>
+                            <ns2:Algorithm>http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256</ns2:Algorithm>
+                            <ns2:SecureAlgorithm>true</ns2:SecureAlgorithm>
+                        </ns2:CryptoInformation>
+                    </ns2:AssociatedValidationReportData>
+                </ns2:SignatureValidationStatus>
+            </ns2:ValidationReport>
+        </ns2:ValidationObject>
+        <ns2:ValidationObject id="R-CAA0D1CE7287886762EEC15FAC116A087228113D42E33E6FCCFF89EE1F6E2EEF">
+            <ns2:ObjectType>urn:etsi:019102:validationObject:CRL</ns2:ObjectType>
+            <ns2:ValidationObjectRepresentation>
+                <ns2:DigestAlgAndValue>
+                    <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
+                    <DigestValue>yqDRznKHiGdi7sFfrBFqCHIoET1C4z5vzP+J7h9uLu8=</DigestValue>
+                </ns2:DigestAlgAndValue>
+            </ns2:ValidationObjectRepresentation>
+            <ns2:POE>
+                <ns2:POETime>2026-10-25T19:58:17Z</ns2:POETime>
+                <ns2:TypeOfProof>urn:etsi:019102:poetype:validation</ns2:TypeOfProof>
+            </ns2:POE>
+            <ns2:ValidationReport>
+                <ns2:ValidationConstraintsEvaluationReport>
+                    <ns2:ValidationConstraint>
+                        <ns2:ValidationConstraintIdentifier>urn:cef:dss:bbb:formatChecking</ns2:ValidationConstraintIdentifier>
+                        <ns2:ConstraintStatus>
+                            <ns2:Status>urn:etsi:019102:constraintStatus:disabled</ns2:Status>
+                        </ns2:ConstraintStatus>
+                    </ns2:ValidationConstraint>
+                    <ns2:ValidationConstraint>
+                        <ns2:ValidationConstraintIdentifier>urn:cef:dss:bbb:identificationOfTheSigningCertificate</ns2:ValidationConstraintIdentifier>
+                        <ns2:ConstraintStatus>
+                            <ns2:Status>urn:etsi:019102:constraintStatus:applied</ns2:Status>
+                        </ns2:ConstraintStatus>
+                        <ns2:ValidationStatus>
+                            <ns2:MainIndication>urn:etsi:019102:mainindication:passed</ns2:MainIndication>
+                        </ns2:ValidationStatus>
+                    </ns2:ValidationConstraint>
+                    <ns2:ValidationConstraint>
+                        <ns2:ValidationConstraintIdentifier>urn:cef:dss:bbb:validationContextInitialization</ns2:ValidationConstraintIdentifier>
+                        <ns2:ConstraintStatus>
+                            <ns2:Status>urn:etsi:019102:constraintStatus:disabled</ns2:Status>
+                        </ns2:ConstraintStatus>
+                    </ns2:ValidationConstraint>
+                    <ns2:ValidationConstraint>
+                        <ns2:ValidationConstraintIdentifier>urn:cef:dss:bbb:cryptographicVerification</ns2:ValidationConstraintIdentifier>
+                        <ns2:ConstraintStatus>
+                            <ns2:Status>urn:etsi:019102:constraintStatus:applied</ns2:Status>
+                        </ns2:ConstraintStatus>
+                        <ns2:ValidationStatus>
+                            <ns2:MainIndication>urn:etsi:019102:mainindication:passed</ns2:MainIndication>
+                        </ns2:ValidationStatus>
+                    </ns2:ValidationConstraint>
+                    <ns2:ValidationConstraint>
+                        <ns2:ValidationConstraintIdentifier>urn:cef:dss:bbb:signatureAcceptanceValidation</ns2:ValidationConstraintIdentifier>
+                        <ns2:ConstraintStatus>
+                            <ns2:Status>urn:etsi:019102:constraintStatus:applied</ns2:Status>
+                        </ns2:ConstraintStatus>
+                        <ns2:ValidationStatus>
+                            <ns2:MainIndication>urn:etsi:019102:mainindication:passed</ns2:MainIndication>
+                        </ns2:ValidationStatus>
+                    </ns2:ValidationConstraint>
+                    <ns2:ValidationConstraint>
+                        <ns2:ValidationConstraintIdentifier>urn:cef:dss:bbb:x509CertificateValidation</ns2:ValidationConstraintIdentifier>
+                        <ns2:ConstraintStatus>
+                            <ns2:Status>urn:etsi:019102:constraintStatus:applied</ns2:Status>
+                        </ns2:ConstraintStatus>
+                        <ns2:ValidationStatus>
+                            <ns2:MainIndication>urn:etsi:019102:mainindication:indeterminate</ns2:MainIndication>
+                            <ns2:SubIndication>urn:etsi:019102:subindication:OUT_OF_BOUNDS_NOT_REVOKED</ns2:SubIndication>
+                            <ns2:AssociatedValidationReportData>
+                                <ns2:AdditionalValidationReportData>
+                                    <ns2:ReportData>
+                                        <ns2:Type>urn:cef:dss:message:error</ns2:Type>
+                                        <ns2:Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The certificate validation is not conclusive!</ns2:Value>
+                                    </ns2:ReportData>
+                                    <ns2:ReportData>
+                                        <ns2:Type>urn:cef:dss:message:error</ns2:Type>
+                                        <ns2:Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The current time is not in the validity range of the signer's certificate!</ns2:Value>
+                                    </ns2:ReportData>
+                                    <ns2:ReportData>
+                                        <ns2:Type>urn:cef:dss:message:warning</ns2:Type>
+                                        <ns2:Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The certificate does not contain the authority key identifier certificate extension!</ns2:Value>
+                                    </ns2:ReportData>
+                                </ns2:AdditionalValidationReportData>
+                            </ns2:AssociatedValidationReportData>
+                        </ns2:ValidationStatus>
+                    </ns2:ValidationConstraint>
+                </ns2:ValidationConstraintsEvaluationReport>
+                <ns2:SignerInformation>
+                    <ns2:SignerCertificate VOReference="C-50B1E3B43028482A1830CAE60C7F02477005C6ADA0DA2119E4A64E134D1CFB57"/>
+                    <ns2:Signer>Nacre s18 campaign 87</ns2:Signer>
+                </ns2:SignerInformation>
+                <ns2:SignatureValidationStatus>
+                    <ns2:MainIndication>urn:etsi:019102:mainindication:indeterminate</ns2:MainIndication>
+                    <ns2:SubIndication>urn:etsi:019102:subindication:OUT_OF_BOUNDS_NOT_REVOKED</ns2:SubIndication>
+                    <ns2:AssociatedValidationReportData>
+                        <ns2:TrustAnchor VOReference="C-83299AE95FC69DE46327C6CABA48F8585D11E4A4C3E1E8B74ECD06125F5A0BAA"/>
+                        <ns2:CertificateChain>
+                            <ns2:SigningCertificate VOReference="C-50B1E3B43028482A1830CAE60C7F02477005C6ADA0DA2119E4A64E134D1CFB57"/>
+                            <ns2:TrustAnchor VOReference="C-83299AE95FC69DE46327C6CABA48F8585D11E4A4C3E1E8B74ECD06125F5A0BAA"/>
+                        </ns2:CertificateChain>
+                        <ns2:CryptoInformation>
+                            <ns2:ValidationObjectId VOReference="R-CAA0D1CE7287886762EEC15FAC116A087228113D42E33E6FCCFF89EE1F6E2EEF"/>
+                            <ns2:Algorithm>http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256</ns2:Algorithm>
+                            <ns2:SecureAlgorithm>true</ns2:SecureAlgorithm>
+                        </ns2:CryptoInformation>
+                        <ns2:AdditionalValidationReportData>
+                            <ns2:ReportData>
+                                <ns2:Type>urn:cef:dss:message:error</ns2:Type>
+                                <ns2:Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The certificate validation is not conclusive!</ns2:Value>
+                            </ns2:ReportData>
+                            <ns2:ReportData>
+                                <ns2:Type>urn:cef:dss:message:error</ns2:Type>
+                                <ns2:Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The current time is not in the validity range of the signer's certificate!</ns2:Value>
+                            </ns2:ReportData>
+                            <ns2:ReportData>
+                                <ns2:Type>urn:cef:dss:message:warning</ns2:Type>
+                                <ns2:Value xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xs="http://www.w3.org/2001/XMLSchema" xsi:type="xs:string">The certificate does not contain the authority key identifier certificate extension!</ns2:Value>
+                            </ns2:ReportData>
+                        </ns2:AdditionalValidationReportData>
+                    </ns2:AssociatedValidationReportData>
+                </ns2:SignatureValidationStatus>
+            </ns2:ValidationReport>
+        </ns2:ValidationObject>
+        <ns2:ValidationObject id="R-9649DA4CFCCF9380ECB639A6EF8A868C780786073929DBACD4625BA102680163">
+            <ns2:ObjectType>urn:etsi:019102:validationObject:CRL</ns2:ObjectType>
+            <ns2:ValidationObjectRepresentation>
+                <ns2:DigestAlgAndValue>
+                    <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
+                    <DigestValue>lknaTPzPk4Dstjmm74qGjHgHhgc5Kdus1GJboQJoAWM=</DigestValue>
+                </ns2:DigestAlgAndValue>
+            </ns2:ValidationObjectRepresentation>
+            <ns2:POE>
+                <ns2:POETime>2026-10-25T19:58:17Z</ns2:POETime>
+                <ns2:TypeOfProof>urn:etsi:019102:poetype:validation</ns2:TypeOfProof>
+            </ns2:POE>
+            <ns2:ValidationReport>
+                <ns2:ValidationConstraintsEvaluationReport>
+                    <ns2:ValidationConstraint>
+                        <ns2:ValidationConstraintIdentifier>urn:cef:dss:bbb:formatChecking</ns2:ValidationConstraintIdentifier>
+                        <ns2:ConstraintStatus>
+                            <ns2:Status>urn:etsi:019102:constraintStatus:disabled</ns2:Status>
+                        </ns2:ConstraintStatus>
+                    </ns2:ValidationConstraint>
+                    <ns2:ValidationConstraint>
+                        <ns2:ValidationConstraintIdentifier>urn:cef:dss:bbb:identificationOfTheSigningCertificate</ns2:ValidationConstraintIdentifier>
+                        <ns2:ConstraintStatus>
+                            <ns2:Status>urn:etsi:019102:constraintStatus:applied</ns2:Status>
+                        </ns2:ConstraintStatus>
+                        <ns2:ValidationStatus>
+                            <ns2:MainIndication>urn:etsi:019102:mainindication:passed</ns2:MainIndication>
+                        </ns2:ValidationStatus>
+                    </ns2:ValidationConstraint>
+                    <ns2:ValidationConstraint>
+                        <ns2:ValidationConstraintIdentifier>urn:cef:dss:bbb:validationContextInitialization</ns2:ValidationConstraintIdentifier>
+                        <ns2:ConstraintStatus>
+                            <ns2:Status>urn:etsi:019102:constraintStatus:disabled</ns2:Status>
+                        </ns2:ConstraintStatus>
+                    </ns2:ValidationConstraint>
+                    <ns2:ValidationConstraint>
+                        <ns2:ValidationConstraintIdentifier>urn:cef:dss:bbb:cryptographicVerification</ns2:ValidationConstraintIdentifier>
+                        <ns2:ConstraintStatus>
+                            <ns2:Status>urn:etsi:019102:constraintStatus:applied</ns2:Status>
+                        </ns2:ConstraintStatus>
+                        <ns2:ValidationStatus>
+                            <ns2:MainIndication>urn:etsi:019102:mainindication:passed</ns2:MainIndication>
+                        </ns2:ValidationStatus>
+                    </ns2:ValidationConstraint>
+                    <ns2:ValidationConstraint>
+                        <ns2:ValidationConstraintIdentifier>urn:cef:dss:bbb:signatureAcceptanceValidation</ns2:ValidationConstraintIdentifier>
+                        <ns2:ConstraintStatus>
+                            <ns2:Status>urn:etsi:019102:constraintStatus:applied</ns2:Status>
+                        </ns2:ConstraintStatus>
+                        <ns2:ValidationStatus>
+                            <ns2:MainIndication>urn:etsi:019102:mainindication:passed</ns2:MainIndication>
+                        </ns2:ValidationStatus>
+                    </ns2:ValidationConstraint>
+                    <ns2:ValidationConstraint>
+                        <ns2:ValidationConstraintIdentifier>urn:cef:dss:bbb:x509CertificateValidation</ns2:ValidationConstraintIdentifier>
+                        <ns2:ConstraintStatus>
+                            <ns2:Status>urn:etsi:019102:constraintStatus:applied</ns2:Status>
+                        </ns2:ConstraintStatus>
+                        <ns2:ValidationStatus>
+                            <ns2:MainIndication>urn:etsi:019102:mainindication:passed</ns2:MainIndication>
+                        </ns2:ValidationStatus>
+                    </ns2:ValidationConstraint>
+                </ns2:ValidationConstraintsEvaluationReport>
+                <ns2:SignerInformation>
+                    <ns2:SignerCertificate VOReference="C-83299AE95FC69DE46327C6CABA48F8585D11E4A4C3E1E8B74ECD06125F5A0BAA"/>
+                    <ns2:Signer>Nacre Test Root CA</ns2:Signer>
+                </ns2:SignerInformation>
+                <ns2:SignatureValidationStatus>
+                    <ns2:MainIndication>urn:etsi:019102:mainindication:passed</ns2:MainIndication>
+                    <ns2:AssociatedValidationReportData>
+                        <ns2:TrustAnchor VOReference="C-83299AE95FC69DE46327C6CABA48F8585D11E4A4C3E1E8B74ECD06125F5A0BAA"/>
+                        <ns2:CertificateChain>
+                            <ns2:SigningCertificate VOReference="C-83299AE95FC69DE46327C6CABA48F8585D11E4A4C3E1E8B74ECD06125F5A0BAA"/>
+                            <ns2:TrustAnchor VOReference="C-83299AE95FC69DE46327C6CABA48F8585D11E4A4C3E1E8B74ECD06125F5A0BAA"/>
+                        </ns2:CertificateChain>
+                        <ns2:CryptoInformation>
+                            <ns2:ValidationObjectId VOReference="R-9649DA4CFCCF9380ECB639A6EF8A868C780786073929DBACD4625BA102680163"/>
+                            <ns2:Algorithm>http://www.w3.org/2001/04/xmldsig-more#ecdsa-sha256</ns2:Algorithm>
+                            <ns2:SecureAlgorithm>true</ns2:SecureAlgorithm>
+                        </ns2:CryptoInformation>
+                    </ns2:AssociatedValidationReportData>
+                </ns2:SignatureValidationStatus>
+            </ns2:ValidationReport>
+        </ns2:ValidationObject>
+        <ns2:ValidationObject id="R-D69E0B72992EC73124B3234FA26F6F279CAADBC237531B1AE28D2887587256BC">
+            <ns2:ObjectType>urn:etsi:019102:validationObject:CRL</ns2:ObjectType>
+            <ns2:ValidationObjectRepresentation>
+                <ns2:DigestAlgAndValue>
+                    <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
+                    <DigestValue>1p4LcpkuxzEksyNPom9vJ5yq28I3Uxsa4o0oh1hyVrw=</DigestValue>
+                </ns2:DigestAlgAndValue>
+            </ns2:ValidationObjectRepresentation>
+            <ns2:POE>
+                <ns2:POETime>2026-10-25T19:58:17Z</ns2:POETime>
+                <ns2:TypeOfProof>urn:etsi:019102:poetype:validation</ns2:TypeOfProof>
+            </ns2:POE>
+        </ns2:ValidationObject>
+        <ns2:ValidationObject id="D-79A8EF2357344C2A2E5C04BD2F78F14B16A63C93A6A99F078548749D6C5B6F2B">
+            <ns2:ObjectType>urn:etsi:019102:validationObject:signedData</ns2:ObjectType>
+            <ns2:ValidationObjectRepresentation>
+                <ns2:DigestAlgAndValue>
+                    <DigestMethod Algorithm="http://www.w3.org/2001/04/xmlenc#sha256"/>
+                    <DigestValue>4lGbxv7hOvvURw9Raz3kouZau9PaQ0k6QRzIH/Qw+G4=</DigestValue>
+                </ns2:DigestAlgAndValue>
+            </ns2:ValidationObjectRepresentation>
+            <ns2:POE>
+                <ns2:POETime>2026-10-25T19:58:17Z</ns2:POETime>
+                <ns2:TypeOfProof>urn:etsi:019102:poetype:validation</ns2:TypeOfProof>
+            </ns2:POE>
+        </ns2:ValidationObject>
+    </ns2:SignatureValidationObjects>
+</ns2:ValidationReport>
