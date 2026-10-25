@@ -1,0 +1,704 @@
+# QA s42-tsa-freshness — criterion 2, other inputs: the 51 attack-corpus PDFs and unreadable inputs under dss(), story tree compared with main (driver scenarios.md, surface endpoint, platform lib)
+# Tree under test: 00eeb05edda5234151c78b9b11134edc626a9573 (copy of git ls-files in a mktemp -d directory; no .env* file to copy; Install 'cargo fetch' and Build 'cargo build --workspace --all-features' exit 0)
+# Replayed on this tree after the fix run (commit fa2cf99): the program, unchanged, was rebuilt in a fresh mktemp -d copy of each tree; every output below is byte-identical to the earlier walk on tree d40d641dc5899346ad7c59ffe671055054bc2de2 (cmp exit 0).
+# Comparison tree: main (91527c5, the merge base), copied file by file with 'git show main:<path>' for Cargo.toml, rust-toolchain.toml and crates/
+# Program: scratch binary crate qa-scen at crates/qa-scen of each copy, calling the public API of nacre-validate (validate_with_policy, ValidationPolicy::strict/dss and its require_fresh_revocation field, TrustAnchors, RevocationSource);
+#   inputs are PDFs and CRLs built at run time under this program's own fictitious PKI (keys [0x91..0x95; 32]) through the bench's crates/nacre-validate/tests/support/forge.rs (included by #[path]).
+# Working directory: <copy>/crates/qa-scen   stdin: none
+# Times UTC; tv_sec 1792659600 = 2026-10-22T09:00:00Z (the signer's revocation date). bst = best_signature_time.
+# Command: ../../target/debug/qa-scen c2-corpus   — run twice on each tree; identical outputs; 'diff story main' prints nothing (exit 0)
+
+## story tree: stdout+stderr
+51 PDFs of crates/nacre-validate/tests/corpus/attacks/, each judged twice: anchor this program's root at 2026-10-23T00:00Z, then anchor tests/corpus/chain/root.der at 2026-10-22T00:00Z (as tests/attacks.rs does); then garbage inputs
+byterange-not-from-start.pdf
+    [dss] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ByteRangeNotFromStart) chain=None bst=None
+    [dss, chain root 2026-10-22] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ByteRangeNotFromStart) chain=None bst=None
+    [strict minus require_fresh_revocation] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ByteRangeNotFromStart) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ByteRangeNotFromStart) chain=None bst=None
+    [dss plus require_fresh_revocation] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ByteRangeNotFromStart) chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ByteRangeNotFromStart) chain=None bst=None
+byterange-not-whole-file.pdf
+    [dss] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ByteRangeNotWholeFile) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ByteRangeNotWholeFile) chain=None bst=None
+    [dss plus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+byterange-outside-file.pdf
+    [dss] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ByteRangeOutsideFile) chain=None bst=None
+    [dss, chain root 2026-10-22] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ByteRangeOutsideFile) chain=None bst=None
+    [strict minus require_fresh_revocation] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ByteRangeOutsideFile) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ByteRangeOutsideFile) chain=None bst=None
+    [dss plus require_fresh_revocation] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ByteRangeOutsideFile) chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ByteRangeOutsideFile) chain=None bst=None
+byterange-overlap.pdf
+    [dss] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ByteRangeOverlap) chain=None bst=None
+    [dss, chain root 2026-10-22] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ByteRangeOverlap) chain=None bst=None
+    [strict minus require_fresh_revocation] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ByteRangeOverlap) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ByteRangeOverlap) chain=None bst=None
+    [dss plus require_fresh_revocation] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ByteRangeOverlap) chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ByteRangeOverlap) chain=None bst=None
+chain-ca-key-usage.pdf
+    [dss] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(ChainConstraintsFailure) defect=Some(Chain(CaKeyUsage { depth: 1 })) chain=None bst=None
+    [strict minus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(ChainConstraintsFailure) defect=Some(Chain(CaKeyUsage { depth: 1 })) chain=None bst=None
+    [dss plus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(ChainConstraintsFailure) defect=Some(Chain(CaKeyUsage { depth: 1 })) chain=None bst=None
+chain-critical-extension.pdf
+    [dss] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(CertificateChainGeneralFailure) defect=Some(Chain(UnsupportedCriticalExtension { depth: 1, oid: ObjectIdentifier(1.3.6.1.4.1.32473.1) })) chain=None bst=None
+    [strict minus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(CertificateChainGeneralFailure) defect=Some(Chain(UnsupportedCriticalExtension { depth: 1, oid: ObjectIdentifier(1.3.6.1.4.1.32473.1) })) chain=None bst=None
+    [dss plus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(CertificateChainGeneralFailure) defect=Some(Chain(UnsupportedCriticalExtension { depth: 1, oid: ObjectIdentifier(1.3.6.1.4.1.32473.1) })) chain=None bst=None
+chain-dss-junk.pdf
+    [dss] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(CertificateChainGeneralFailure) defect=Some(Revocation(Missing { depth: 0 })) chain=Some(3) bst=None
+    [strict minus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(CertificateChainGeneralFailure) defect=Some(Revocation(Missing { depth: 0 })) chain=Some(3) bst=None
+    [dss plus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(CertificateChainGeneralFailure) defect=Some(Revocation(Missing { depth: 0 })) chain=Some(3) bst=None
+chain-expired.pdf
+    [dss] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(CertificateChainGeneralFailure) defect=Some(Revocation(Missing { depth: 0 })) chain=Some(3) bst=None
+    [strict minus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(OutOfBoundsNoPoe) defect=Some(Chain(Expired { depth: 0 })) chain=None bst=None
+    [dss plus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(CertificateChainGeneralFailure) defect=Some(Revocation(Missing { depth: 0 })) chain=Some(3) bst=None
+chain-extended-key-usage.pdf
+    [dss] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(CertificateChainGeneralFailure) defect=Some(Revocation(Missing { depth: 0 })) chain=Some(3) bst=None
+    [strict minus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(ChainConstraintsFailure) defect=Some(Chain(ExtendedKeyUsage { depth: 0 })) chain=None bst=None
+    [dss plus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(CertificateChainGeneralFailure) defect=Some(Revocation(Missing { depth: 0 })) chain=Some(3) bst=None
+chain-impostor-root.pdf
+    [dss] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+chain-key-usage.pdf
+    [dss] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(CertificateChainGeneralFailure) defect=Some(Revocation(Missing { depth: 0 })) chain=Some(3) bst=None
+    [strict minus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(ChainConstraintsFailure) defect=Some(Chain(KeyUsage)) chain=None bst=None
+    [dss plus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(CertificateChainGeneralFailure) defect=Some(Revocation(Missing { depth: 0 })) chain=Some(3) bst=None
+chain-leaf-as-ca.pdf
+    [dss] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(ChainConstraintsFailure) defect=Some(Chain(NotACa { depth: 1 })) chain=None bst=None
+    [strict minus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(ChainConstraintsFailure) defect=Some(Chain(NotACa { depth: 1 })) chain=None bst=None
+    [dss plus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(ChainConstraintsFailure) defect=Some(Chain(NotACa { depth: 1 })) chain=None bst=None
+chain-malformed-extension.pdf
+    [dss] Err(MalformedCertificate) kind=InvalidInput display="a certificate of a signature repeats an extension"
+    [dss, chain root 2026-10-22] Err(MalformedCertificate) kind=InvalidInput display="a certificate of a signature repeats an extension"
+    [strict minus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(CertificateChainGeneralFailure) defect=Some(Chain(MalformedExtension { depth: 0 })) chain=None bst=None
+    [dss plus require_fresh_revocation] Err(MalformedCertificate) kind=InvalidInput display="a certificate of a signature repeats an extension"
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Err(MalformedCertificate) kind=InvalidInput display="a certificate of a signature repeats an extension"
+chain-not-yet-valid.pdf
+    [dss] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(CertificateChainGeneralFailure) defect=Some(Revocation(Missing { depth: 0 })) chain=Some(3) bst=None
+    [strict minus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(OutOfBoundsNoPoe) defect=Some(Chain(NotYetValid { depth: 0 })) chain=None bst=None
+    [dss plus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(CertificateChainGeneralFailure) defect=Some(Revocation(Missing { depth: 0 })) chain=Some(3) bst=None
+chain-path-length.pdf
+    [dss] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(ChainConstraintsFailure) defect=Some(Chain(PathLength { depth: 2 })) chain=None bst=None
+    [strict minus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(ChainConstraintsFailure) defect=Some(Chain(PathLength { depth: 2 })) chain=None bst=None
+    [dss plus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(ChainConstraintsFailure) defect=Some(Chain(PathLength { depth: 2 })) chain=None bst=None
+eaa-freetext.pdf
+    [dss] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 10251 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 10251 }) chain=None bst=None
+    [dss plus require_fresh_revocation] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+isa-appended-revision.pdf
+    [dss] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 3755 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 3755 }) chain=None bst=None
+    [dss plus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+isa-no-xref.pdf
+    [dss] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation] Err(Pdf(TrailingData { offset: 3179 })) kind=InvalidInput display="the PDF cannot be read: data after the last %%EOF at offset 3179"
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Err(Pdf(TrailingData { offset: 3179 })) kind=InvalidInput display="the PDF cannot be read: data after the last %%EOF at offset 3179"
+    [dss plus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+shadow-dss-page.pdf
+    [dss] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 3823 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 3823 }) chain=None bst=None
+    [dss plus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+shadow-fill-late-definition.pdf
+    [dss] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 11292 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 11292 }) chain=None bst=None
+    [dss plus require_fresh_revocation] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+shadow-form-field.pdf
+    [dss] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 4297 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 4297 }) chain=None bst=None
+    [dss plus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+shadow-hide-and-replace.pdf
+    [dss] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 3834 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 3834 }) chain=None bst=None
+    [dss plus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+shadow-hide.pdf
+    [dss] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 3756 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 3756 }) chain=None bst=None
+    [dss plus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+shadow-late-definition.pdf
+    [dss] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 3617 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 3617 }) chain=None bst=None
+    [dss plus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+shadow-replace.pdf
+    [dss] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 3342 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 3342 }) chain=None bst=None
+    [dss plus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+ssa-empty-field-signed.pdf
+    [dss] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 10562 }) chain=None bst=None
+    [strict minus require_fresh_revocation] Sneaky indication=TotalFailed sub=Some(FormatFailure) defect=Some(AddedByRevisionNotAllowed { end: 19195 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 10562 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Sneaky indication=TotalFailed sub=Some(FormatFailure) defect=Some(AddedByRevisionNotAllowed { end: 19195 }) chain=None bst=None
+    [dss plus require_fresh_revocation] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+ssa-hidden-widget-shown.pdf
+    [dss] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation] Sneaky indication=TotalFailed sub=Some(FormatFailure) defect=Some(AddedByRevisionNotAllowed { end: 19959 }) chain=None bst=None
+    [strict minus require_fresh_revocation] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 19959 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Sneaky indication=TotalFailed sub=Some(FormatFailure) defect=Some(AddedByRevisionNotAllowed { end: 19959 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 19959 }) chain=None bst=None
+    [dss plus require_fresh_revocation] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+ssa-indirect-rect.pdf
+    [dss] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation] Sneaky indication=TotalFailed sub=Some(FormatFailure) defect=Some(AddedByRevisionNotAllowed { end: 20030 }) chain=None bst=None
+    [strict minus require_fresh_revocation] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 20030 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Sneaky indication=TotalFailed sub=Some(FormatFailure) defect=Some(AddedByRevisionNotAllowed { end: 20030 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 20030 }) chain=None bst=None
+    [dss plus require_fresh_revocation] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+ssa-kid-widget-shown.pdf
+    [dss] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation] Sneaky indication=TotalFailed sub=Some(FormatFailure) defect=Some(AddedByRevisionNotAllowed { end: 20086 }) chain=None bst=None
+    [strict minus require_fresh_revocation] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 20086 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Sneaky indication=TotalFailed sub=Some(FormatFailure) defect=Some(AddedByRevisionNotAllowed { end: 20086 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 20086 }) chain=None bst=None
+    [dss plus require_fresh_revocation] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+ssa-layer-widget-shown.pdf
+    [dss] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation] Sneaky indication=TotalFailed sub=Some(FormatFailure) defect=Some(AddedByRevisionNotAllowed { end: 20242 }) chain=None bst=None
+    [strict minus require_fresh_revocation] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 20242 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Sneaky indication=TotalFailed sub=Some(FormatFailure) defect=Some(AddedByRevisionNotAllowed { end: 20242 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 20242 }) chain=None bst=None
+    [dss plus require_fresh_revocation] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+ssa-moved-rect.pdf
+    [dss] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation] Sneaky indication=TotalFailed sub=Some(FormatFailure) defect=Some(AddedByRevisionNotAllowed { end: 19939 }) chain=None bst=None
+    [strict minus require_fresh_revocation] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 19939 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Sneaky indication=TotalFailed sub=Some(FormatFailure) defect=Some(AddedByRevisionNotAllowed { end: 19939 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 19939 }) chain=None bst=None
+    [dss plus require_fresh_revocation] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+ssa-orphan-widget.pdf
+    [dss] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 19873 }) chain=None bst=None
+    [strict minus require_fresh_revocation] Sneaky indication=TotalFailed sub=Some(FormatFailure) defect=Some(AddedByRevisionNotAllowed { end: 19873 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 19873 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Sneaky indication=TotalFailed sub=Some(FormatFailure) defect=Some(AddedByRevisionNotAllowed { end: 19873 }) chain=None bst=None
+    [dss plus require_fresh_revocation] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+ssa-outside-fields.pdf
+    [dss] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 19655 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 19655 }) chain=None bst=None
+    [dss plus require_fresh_revocation] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+ssa-split-widget.pdf
+    [dss] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 19038 }) chain=None bst=None
+    [strict minus require_fresh_revocation] Sneaky indication=TotalFailed sub=Some(FormatFailure) defect=Some(AddedByRevisionNotAllowed { end: 19038 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 19038 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Sneaky indication=TotalFailed sub=Some(FormatFailure) defect=Some(AddedByRevisionNotAllowed { end: 19038 }) chain=None bst=None
+    [dss plus require_fresh_revocation] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+ssa-toggle-noview-shown.pdf
+    [dss] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 19744 }) chain=None bst=None
+    [strict minus require_fresh_revocation] Sneaky indication=TotalFailed sub=Some(FormatFailure) defect=Some(AddedByRevisionNotAllowed { end: 19744 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 19744 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Sneaky indication=TotalFailed sub=Some(FormatFailure) defect=Some(AddedByRevisionNotAllowed { end: 19744 }) chain=None bst=None
+    [dss plus require_fresh_revocation] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+ssa-unlisted-widget-shown.pdf
+    [dss] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation] Sneaky indication=TotalFailed sub=Some(FormatFailure) defect=Some(AddedByRevisionNotAllowed { end: 20106 }) chain=None bst=None
+    [strict minus require_fresh_revocation] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 20106 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Sneaky indication=TotalFailed sub=Some(FormatFailure) defect=Some(AddedByRevisionNotAllowed { end: 20106 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 20106 }) chain=None bst=None
+    [dss plus require_fresh_revocation] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+ssa-unreadable-rect.pdf
+    [dss] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 19745 }) chain=None bst=None
+    [strict minus require_fresh_revocation] Sneaky indication=TotalFailed sub=Some(FormatFailure) defect=Some(AddedByRevisionNotAllowed { end: 19745 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 19745 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Sneaky indication=TotalFailed sub=Some(FormatFailure) defect=Some(AddedByRevisionNotAllowed { end: 19745 }) chain=None bst=None
+    [dss plus require_fresh_revocation] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+ssa-visible-signature.pdf
+    [dss] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 18961 }) chain=None bst=None
+    [strict minus require_fresh_revocation] Sneaky indication=TotalFailed sub=Some(FormatFailure) defect=Some(AddedByRevisionNotAllowed { end: 18961 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 18961 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Sneaky indication=TotalFailed sub=Some(FormatFailure) defect=Some(AddedByRevisionNotAllowed { end: 18961 }) chain=None bst=None
+    [dss plus require_fresh_revocation] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+ssa-zero-rect-shown.pdf
+    [dss] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation] Sneaky indication=TotalFailed sub=Some(FormatFailure) defect=Some(AddedByRevisionNotAllowed { end: 19932 }) chain=None bst=None
+    [strict minus require_fresh_revocation] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 19932 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Sneaky indication=TotalFailed sub=Some(FormatFailure) defect=Some(AddedByRevisionNotAllowed { end: 19932 }) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Certification indication=TotalFailed sub=Some(FormatFailure) defect=Some(RevisionNotAllowed { end: 19932 }) chain=None bst=None
+    [dss plus require_fresh_revocation] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Sneaky indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Certification indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+subfilter-unsupported.pdf
+    [dss] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [strict minus require_fresh_revocation] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(UnsupportedSubFilter) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(UnsupportedSubFilter) chain=None bst=None
+    [dss plus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+swa-wrapped.pdf
+    [dss] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(GapNotContents) chain=None bst=None
+    [dss, chain root 2026-10-22] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(GapNotContents) chain=None bst=None
+    [strict minus require_fresh_revocation] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(GapNotContents) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(GapNotContents) chain=None bst=None
+    [dss plus require_fresh_revocation] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(GapNotContents) chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(GapNotContents) chain=None bst=None
+usf-byterange-missing.pdf
+    [dss] no signature
+    [dss, chain root 2026-10-22] no signature
+    [strict minus require_fresh_revocation] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ByteRangeMalformed) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ByteRangeMalformed) chain=None bst=None
+    [dss plus require_fresh_revocation] no signature
+    [dss plus require_fresh_revocation, chain root 2026-10-22] no signature
+usf-byterange-null.pdf
+    [dss] no signature
+    [dss, chain root 2026-10-22] no signature
+    [strict minus require_fresh_revocation] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ByteRangeMalformed) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ByteRangeMalformed) chain=None bst=None
+    [dss plus require_fresh_revocation] no signature
+    [dss plus require_fresh_revocation, chain root 2026-10-22] no signature
+usf-byterange-short.pdf
+    [dss] no signature
+    [dss, chain root 2026-10-22] no signature
+    [strict minus require_fresh_revocation] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ByteRangeMalformed) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ByteRangeMalformed) chain=None bst=None
+    [dss plus require_fresh_revocation] no signature
+    [dss plus require_fresh_revocation, chain root 2026-10-22] no signature
+usf-contents-empty.pdf
+    [dss] no signature
+    [dss, chain root 2026-10-22] no signature
+    [strict minus require_fresh_revocation] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ContentsMissing) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ContentsMissing) chain=None bst=None
+    [dss plus require_fresh_revocation] no signature
+    [dss plus require_fresh_revocation, chain root 2026-10-22] no signature
+usf-contents-missing.pdf
+    [dss] no signature
+    [dss, chain root 2026-10-22] no signature
+    [strict minus require_fresh_revocation] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ContentsMissing) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ContentsMissing) chain=None bst=None
+    [dss plus require_fresh_revocation] no signature
+    [dss plus require_fresh_revocation, chain root 2026-10-22] no signature
+usf-contents-null.pdf
+    [dss] no signature
+    [dss, chain root 2026-10-22] no signature
+    [strict minus require_fresh_revocation] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ContentsMissing) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ContentsMissing) chain=None bst=None
+    [dss plus require_fresh_revocation] no signature
+    [dss plus require_fresh_revocation, chain root 2026-10-22] no signature
+usf-contents-zeros.pdf
+    [dss] no signature
+    [dss, chain root 2026-10-22] no signature
+    [strict minus require_fresh_revocation] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ContentsNotDer) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(ContentsNotDer) chain=None bst=None
+    [dss plus require_fresh_revocation] no signature
+    [dss plus require_fresh_revocation, chain root 2026-10-22] no signature
+usf-v-direct.pdf
+    [dss] no signature
+    [dss, chain root 2026-10-22] no signature
+    [strict minus require_fresh_revocation] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(NotASignatureDictionary) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(NotASignatureDictionary) chain=None bst=None
+    [dss plus require_fresh_revocation] no signature
+    [dss plus require_fresh_revocation, chain root 2026-10-22] no signature
+usf-v-stream.pdf
+    [dss] no signature
+    [dss, chain root 2026-10-22] no signature
+    [strict minus require_fresh_revocation] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(NotASignatureDictionary) chain=None bst=None
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=TotalFailed sub=Some(FormatFailure) defect=Some(NotASignatureDictionary) chain=None bst=None
+    [dss plus require_fresh_revocation] no signature
+    [dss plus require_fresh_revocation, chain root 2026-10-22] no signature
+xref-misplaced-startxref.pdf
+    [dss] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(CertificateChainGeneralFailure) defect=Some(Revocation(Missing { depth: 0 })) chain=Some(3) bst=None
+    [strict minus require_fresh_revocation] Err(Pdf(NotAnXrefSection { offset: 3957 })) kind=InvalidInput display="the PDF cannot be read: no cross-reference section at offset 3957"
+    [strict minus require_fresh_revocation, chain root 2026-10-22] Err(Pdf(NotAnXrefSection { offset: 3957 })) kind=InvalidInput display="the PDF cannot be read: no cross-reference section at offset 3957"
+    [dss plus require_fresh_revocation] Signature1 indication=Indeterminate sub=Some(NoCertificateChainFound) defect=None chain=None bst=None
+    [dss plus require_fresh_revocation, chain root 2026-10-22] Signature1 indication=Indeterminate sub=Some(CertificateChainGeneralFailure) defect=Some(Revocation(Missing { depth: 0 })) chain=Some(3) bst=None
+garbage 'hello'
+    [dss] Err(Pdf(MissingHeader)) kind=InvalidInput display="the PDF cannot be read: the input does not start with %PDF-"
+empty
+    [dss] Err(Pdf(MissingHeader)) kind=InvalidInput display="the PDF cannot be read: the input does not start with %PDF-"
+## exit code: 0 (second run: 0)
+
+## diff story main
+## diff exit code: 0 (identical)
+
+## The program, quoted whole: crates/qa-scen/Cargo.toml
+[package]
+name = "qa-scen"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+nacre-validate = { path = "../nacre-validate" }
+nacre-core = { path = "../nacre-core", features = ["test-signer"] }
+nacre-pades = { path = "../nacre-pades" }
+nacre-pdf = { path = "../nacre-pdf" }
+nacre-cms = { path = "../nacre-cms" }
+nacre-revocation = { path = "../nacre-revocation" }
+sha2 = "0.11"
+spki = "0.8"
+der = { version = "0.8", features = ["alloc", "derive", "oid", "pem"] }
+x509-cert = { version = "0.3", features = ["builder"] }
+p256 = { version = "0.14", features = ["ecdsa", "pkcs8", "pem"] }
+
+## crates/qa-scen/src/main.rs
+// QA scratch program for s42: calls the public interface of nacre-validate.
+// `forge` is the test bench's fictitious PKI builder, used here only to build input files.
+#![allow(clippy::all, dead_code, unused_imports, unused_variables)]
+#[path = "../../nacre-validate/tests/support/forge.rs"]
+mod forge;
+
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use der::{DateTime, Encode};
+use forge::*;
+use nacre_core::{RevocationData, RevocationSource};
+use nacre_pades::Level;
+use nacre_validate::*;
+use p256::ecdsa::SigningKey;
+use x509_cert::Certificate;
+use x509_cert::time::Time;
+
+type R = Result<Vec<SignatureValidation>, Error>;
+
+fn iso(t: SystemTime) -> String {
+    let s = t.duration_since(UNIX_EPOCH).unwrap().as_secs();
+    format!("{}", DateTime::from_unix_duration(Duration::from_secs(s)).unwrap())
+}
+fn show(label: &str, r: &R) {
+    match r {
+        Err(e) => println!("    [{label}] Err({e:?}) kind={:?} display=\"{e}\"", e.kind()),
+        Ok(v) => {
+            if v.is_empty() { println!("    [{label}] no signature"); }
+            for s in v {
+                println!("    [{label}] {} indication={:?} sub={:?} defect={:?} chain={:?} bst={}",
+                    s.field, s.report.indication(), s.report.sub_indication(), s.defect,
+                    s.chain.as_ref().map(|c| c.certificates.len()),
+                    s.best_signature_time.map_or("None".into(), iso));
+            }
+        }
+    }
+}
+fn d(c: &Certificate) -> Vec<u8> { c.to_der().unwrap() }
+
+struct Pki { root: Certificate, rk: SigningKey, int: Certificate, ik: SigningKey, signer: Certificate, sk: SigningKey,
+             tsaca: Certificate, tck: SigningKey, tsa: Certificate, tk: SigningKey }
+impl Pki {
+    fn new() -> Self {
+        let rk = key(&[0x91; 32]); let ik = key(&[0x92; 32]); let sk = key(&[0x93; 32]);
+        let tck = key(&[0x94; 32]); let tk = key(&[0x95; 32]);
+        let root = issue(Role::Ca, "CN=QA42 root,O=QA,C=FR", 1, &rk, None, &rk);
+        let int = issue(Role::Ca, "CN=QA42 signer CA,O=QA,C=FR", 2, &ik, Some(&root), &rk);
+        let signer = issue(Role::Signer, "CN=QA42 signer,O=QA,C=FR", 3, &sk, Some(&int), &ik);
+        let tsaca = issue(Role::Ca, "CN=QA42 TSA CA,O=QA,C=FR", 4, &tck, Some(&root), &rk);
+        let tsa = issue(Role::Tsa, "CN=QA42 TSA,O=QA,C=FR", 5, &tk, Some(&tsaca), &tck);
+        Self { root, rk, int, ik, signer, sk, tsaca, tck, tsa, tk }
+    }
+    fn chain_signer(&self) -> ChainSigner { ChainSigner { key: self.sk.clone(), chain: vec![d(&self.signer), d(&self.int)] } }
+    fn tsa(&self) -> ForgedTsa { ForgedTsa { key: self.tk.clone(), certificates: vec![d(&self.tsa), d(&self.tsaca)],
+        gen_time: DateTime::new(2026, 10, 22, 8, 0, 0).unwrap(), imprint: None } }
+    fn bt(&self) -> Vec<u8> { signed(&self.chain_signer(), Level::T { tsa: &self.tsa() }) }
+    fn bb(&self) -> Vec<u8> { signed(&self.chain_signer(), Level::B) }
+    fn int_crl(&self, at: Time, revoked: &[(&Certificate, Time)]) -> Vec<u8> { crl(&self.int, &self.ik, at, time(2026, 11, 22, 0, 0, 0), revoked) }
+    fn tsaca_crl(&self, at: Time, revoked: &[(&Certificate, Time)]) -> Vec<u8> { crl(&self.tsaca, &self.tck, at, time(2026, 11, 22, 0, 0, 0), revoked) }
+    fn root_crl(&self, at: Time, revoked: &[(&Certificate, Time)]) -> Vec<u8> { crl(&self.root, &self.rk, at, time(2026, 11, 22, 0, 0, 0), revoked) }
+    // "sig-ts": a B-T with `crls` in its /DSS; "doc-ts": a B-B with `crls` in its /DSS, then a document timestamp.
+    fn file(&self, kind: &str, crls: &[Vec<u8>]) -> Vec<u8> {
+        match kind {
+            "sig-ts" => with_dss(&self.bt(), &[], crls),
+            _ => document_timestamp(&with_dss(&self.bb(), &[], crls), &self.tsa()),
+        }
+    }
+    fn judge(&self, pdf: &[u8], at: SystemTime, policy: &ValidationPolicy, source: Option<&dyn RevocationSource>) -> R {
+        let root = d(&self.root);
+        let anchors = TrustAnchors::from_certificates([root.as_slice()]).unwrap();
+        validate_with_policy(pdf, &anchors, at, source, policy)
+    }
+}
+
+fn control() -> SystemTime { instant(2026, 10, 23, 0, 0, 0) }
+fn fresh() -> Time { time(2026, 10, 22, 10, 0, 0) }
+fn stale() -> Time { time(2026, 10, 21, 23, 0, 0) }
+fn no_fresh() -> ValidationPolicy { let mut p = ValidationPolicy::strict(); p.require_fresh_revocation = false; p }
+fn policies(which: &str) -> Vec<(&'static str, ValidationPolicy)> {
+    match which {
+        "strict" => vec![("strict", ValidationPolicy::strict())],
+        _ => vec![("dss", ValidationPolicy::dss()), ("strict minus require_fresh_revocation", no_fresh()),
+                  ("dss plus require_fresh_revocation", { let mut p = ValidationPolicy::dss(); p.require_fresh_revocation = true; p })],
+    }
+}
+
+fn table(p: &Pki) -> Vec<(String, Vec<Vec<u8>>)> {
+    let r9 = time(2026, 10, 22, 9, 0, 0);
+    vec![
+        ("A all fresh (signer CA 22T10:00, TSA CA 22T10:00, root 22T10:00), nothing revoked".into(),
+         vec![p.int_crl(fresh(), &[]), p.tsaca_crl(fresh(), &[]), p.root_crl(fresh(), &[])]),
+        ("B TSA CA CRL stale (21T23:00, 25 h) says the TSA not revoked; signer CA and root fresh; signer clean".into(),
+         vec![p.int_crl(fresh(), &[]), p.tsaca_crl(stale(), &[]), p.root_crl(fresh(), &[])]),
+        ("C the attack: TSA key revoked since (never shown), only the stale TSA CA CRL; signer revoked 22T09:00 (after the 08:00 stamp) in the fresh signer CA CRL".into(),
+         vec![p.int_crl(fresh(), &[(&p.signer, r9)]), p.tsaca_crl(stale(), &[]), p.root_crl(fresh(), &[])]),
+        ("D control of C: TSA CA CRL fresh, signer revoked 22T09:00".into(),
+         vec![p.int_crl(fresh(), &[(&p.signer, r9)]), p.tsaca_crl(fresh(), &[]), p.root_crl(fresh(), &[])]),
+        ("E depth 1 of the TSA path: root CRL stale (says the TSA CA not revoked), TSA CA CRL fresh; signer revoked 22T09:00".into(),
+         vec![p.int_crl(fresh(), &[(&p.signer, r9)]), p.tsaca_crl(fresh(), &[]), p.root_crl(stale(), &[])]),
+        ("F boundary: TSA CA CRL thisUpdate 22T00:00:00 (exactly 24 h); signer revoked 22T09:00".into(),
+         vec![p.int_crl(fresh(), &[(&p.signer, r9)]), p.tsaca_crl(time(2026, 10, 22, 0, 0, 0), &[]), p.root_crl(fresh(), &[])]),
+        ("G boundary: TSA CA CRL thisUpdate 21T23:59:59 (24 h + 1 s); signer revoked 22T09:00".into(),
+         vec![p.int_crl(fresh(), &[(&p.signer, r9)]), p.tsaca_crl(time(2026, 10, 21, 23, 59, 59), &[]), p.root_crl(fresh(), &[])]),
+        ("H stale and fresh TSA CA CRLs together; signer revoked 22T09:00".into(),
+         vec![p.int_crl(fresh(), &[(&p.signer, r9)]), p.tsaca_crl(stale(), &[]), p.tsaca_crl(fresh(), &[]), p.root_crl(fresh(), &[])]),
+        ("I old proof of revocation: stale TSA CA CRL revoking the TSA at 21T22:00; signer clean".into(),
+         vec![p.int_crl(fresh(), &[]), p.tsaca_crl(stale(), &[(&p.tsa, time(2026, 10, 21, 22, 0, 0))]), p.root_crl(fresh(), &[])]),
+        ("J no CRL at all for the TSA CA; signer clean".into(),
+         vec![p.int_crl(fresh(), &[]), p.root_crl(fresh(), &[])]),
+        ("K signer CA CRL stale too, TSA CA CRL stale; signer clean".into(),
+         vec![p.int_crl(stale(), &[]), p.tsaca_crl(stale(), &[]), p.root_crl(fresh(), &[])]),
+    ]
+}
+
+fn run_table(which: &str) {
+    let pki = Pki::new();
+    println!("PKI: root 'QA42 root'; signer under 'QA42 signer CA'; TSA under 'QA42 TSA CA' (both CAs under the root), token carrying [TSA, TSA CA]; stamp 2026-10-22T08:00Z; control date 2026-10-23T00:00Z; no RevocationSource");
+    for (name, crls) in table(&pki) {
+        println!("{name}");
+        for kind in ["sig-ts", "doc-ts"] {
+            let pdf = pki.file(kind, &crls);
+            for (label, policy) in policies(which) {
+                show(&format!("{kind} {label}"), &pki.judge(&pdf, control(), &policy, None));
+            }
+        }
+    }
+}
+
+// Answers a CRL by issuer: (signer CA der, its CRL, TSA CA der, its CRL, root CRL).
+struct Answer(Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>);
+impl RevocationSource for Answer {
+    fn revocation(&self, _c: &[u8], issuer: &[u8]) -> Result<RevocationData, nacre_core::Error> {
+        if issuer == self.0 { Ok(RevocationData::Crl(self.1.clone())) }
+        else if issuer == self.2 { Ok(RevocationData::Crl(self.3.clone())) }
+        else { Ok(RevocationData::Crl(self.4.clone())) }
+    }
+}
+
+fn c1_error() {
+    let p = Pki::new();
+    let revoked9 = [(&p.signer, time(2026, 10, 22, 9, 0, 0))];
+    let set_c = vec![p.int_crl(fresh(), &revoked9), p.tsaca_crl(stale(), &[]), p.root_crl(fresh(), &[])];
+    let strict = ValidationPolicy::strict();
+    println!("Same PKI as c1. Inputs around the rule, under strict():");
+    for kind in ["sig-ts", "doc-ts"] {
+        let pdf = p.file(kind, &set_c);
+        println!("{kind}: the files of case C (stale TSA CA CRL, signer revoked 22T09:00)");
+        println!("  e1 control date 2026-10-22T07:00Z, before the stamp");
+        show("strict", &p.judge(&pdf, instant(2026, 10, 22, 7, 0, 0), &strict, None));
+        println!("  e2 control date 1970-01-01T01:00Z (the 24 h window cannot be subtracted)");
+        show("strict", &p.judge(&pdf, UNIX_EPOCH + Duration::from_secs(3600), &strict, None));
+        println!("  e3 control date 2026-10-22T20:00Z (the stale CRL is 21 h old there)");
+        show("strict", &p.judge(&pdf, instant(2026, 10, 22, 20, 0, 0), &strict, None));
+        println!("  e4 a RevocationSource answering fresh CRLs (22T10:00) for every certificate");
+        let src = Answer(d(&p.int), p.int_crl(fresh(), &revoked9), d(&p.tsaca), p.tsaca_crl(fresh(), &[]), p.root_crl(fresh(), &[]));
+        show("strict", &p.judge(&pdf, control(), &strict, Some(&src)));
+        println!("  e5 a RevocationSource answering the same stale TSA CA CRL");
+        let src = Answer(d(&p.int), p.int_crl(fresh(), &revoked9), d(&p.tsaca), p.tsaca_crl(stale(), &[]), p.root_crl(fresh(), &[]));
+        show("strict", &p.judge(&pdf, control(), &strict, Some(&src)));
+    }
+    let pdf_with = |crls: Vec<Vec<u8>>| p.file("sig-ts", &crls);
+    println!("e6 sig-ts: a fresh 'not revoked' TSA CA CRL signed with another key, next to the stale one");
+    let forged = crl(&p.tsaca, &key(&[0x99; 32]), fresh(), time(2026, 11, 22, 0, 0, 0), &[]);
+    show("strict", &p.judge(&pdf_with(vec![p.int_crl(fresh(), &revoked9), p.tsaca_crl(stale(), &[]), forged, p.root_crl(fresh(), &[])]), control(), &strict, None));
+    println!("e7 sig-ts: the only TSA CA CRL has thisUpdate 2026-10-23T06:00Z, after the control date");
+    show("strict", &p.judge(&pdf_with(vec![p.int_crl(fresh(), &revoked9), p.tsaca_crl(time(2026, 10, 23, 6, 0, 0), &[]), p.root_crl(fresh(), &[])]), control(), &strict, None));
+    println!("e8 not a PDF / empty input / B-T of case C cut in half");
+    let bt = p.file("sig-ts", &set_c);
+    show("strict garbage", &p.judge(b"hello", control(), &strict, None));
+    show("strict empty", &p.judge(b"", control(), &strict, None));
+    show("strict truncated", &p.judge(&bt[..bt.len() / 2], control(), &strict, None));
+}
+
+fn c2_corpus() {
+    let p = Pki::new();
+    let dir = "../nacre-validate/tests/corpus/attacks/";
+    let mut names: Vec<_> = std::fs::read_dir(dir).unwrap().map(|e| e.unwrap().file_name().into_string().unwrap())
+        .filter(|n| n.ends_with(".pdf")).collect();
+    names.sort();
+    let chain_root = std::fs::read("../nacre-validate/tests/corpus/chain/root.der").unwrap();
+    let chain = TrustAnchors::from_certificates([chain_root.as_slice()]).unwrap();
+    let chain_at = instant(2026, 10, 22, 0, 0, 0);
+    println!("{} PDFs of crates/nacre-validate/tests/corpus/attacks/, each judged twice: anchor this program's root at 2026-10-23T00:00Z, then anchor tests/corpus/chain/root.der at 2026-10-22T00:00Z (as tests/attacks.rs does); then garbage inputs", names.len());
+    for n in &names {
+        let bytes = std::fs::read(format!("{dir}{n}")).unwrap();
+        println!("{n}");
+        for (label, policy) in policies("dss") {
+            show(label, &p.judge(&bytes, control(), &policy, None));
+            show(&format!("{label}, chain root 2026-10-22"), &validate_with_policy(&bytes, &chain, chain_at, None, &policy));
+        }
+    }
+    for (n, bytes) in [("garbage 'hello'", b"hello".to_vec()), ("empty", vec![])] {
+        println!("{n}");
+        show("dss", &p.judge(&bytes, control(), &ValidationPolicy::dss(), None));
+    }
+}
+
+// The TSA's status given only by an OCSP response its CA signed, produced at `produced`; no CRL from the TSA CA.
+fn c4_ocsp() {
+    let p = Pki::new();
+    let r9 = time(2026, 10, 22, 9, 0, 0);
+    println!("Same PKI as c1; the TSA CA gives no CRL, only an OCSP 'good' on the TSA that it signs itself; signer CA CRL fresh (revokes the signer at 22T09:00), root CRL fresh");
+    for (name, produced) in [("OCSP producedAt 22T10:00 (14 h)", fresh()), ("OCSP producedAt 21T23:00 (25 h)", stale()),
+                             ("OCSP producedAt 22T00:00:00 (24 h)", time(2026, 10, 22, 0, 0, 0)), ("OCSP producedAt 21T23:59:59 (24 h + 1 s)", time(2026, 10, 21, 23, 59, 59))] {
+        println!("{name}");
+        let resp = ocsp(&p.tsa, &p.tsaca, &p.tck, &p.tsaca, None, produced, None, &[]);
+        let crls = vec![p.int_crl(fresh(), &[(&p.signer, r9)]), p.root_crl(fresh(), &[])];
+        let files = [("sig-ts", with_dss_ocsps(&p.bt(), &[], &crls, &[resp.clone()])),
+                     ("doc-ts", document_timestamp(&with_dss_ocsps(&p.bb(), &[], &crls, &[resp.clone()]), &p.tsa()))];
+        for (kind, pdf) in &files {
+            for (label, policy) in [("strict", ValidationPolicy::strict()), ("dss", ValidationPolicy::dss()), ("strict minus require_fresh_revocation", no_fresh())] {
+                show(&format!("{kind} {label}"), &p.judge(pdf, control(), &policy, None));
+            }
+        }
+    }
+}
+
+fn main() {
+    match std::env::args().nth(1).as_deref() {
+        Some("c1") => run_table("strict"),
+        Some("c1-error") => c1_error(),
+        Some("c2") => run_table("dss"),
+        Some("c2-corpus") => c2_corpus(),
+        Some("c4") => c4_ocsp(),
+        other => { eprintln!("usage: qa-scen c1|c1-error|c2|c2-corpus|c4 (got {other:?})"); std::process::exit(2) }
+    }
+}

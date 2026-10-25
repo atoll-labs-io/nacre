@@ -83,13 +83,13 @@ pub fn validate_with_anchors(
 /// `source` when given: of the data that verifies and was issued within the certificate's
 /// validity, from its `notBefore` to its `notAfter`, the latest decides. Data issued after
 /// the `notAfter` is dropped under every policy, as DSS 6.5.1 does: a signer expired since,
-/// even one valid at the time a timestamp proves, then has no usable data. With a
-/// best-signature-time from a timestamp, freshness is not judged, as DSS 6.5.1 does.
-/// Without one, a "not revoked" counts only when issued within 24 hours before `at` (the
-/// CRL's `thisUpdate`, the response's `producedAt`), so an old "not revoked" in the `/DSS`
-/// cannot pass a key revoked since: a deliberate departure from DSS, which ignores
-/// freshness there too. An older proof of revocation dated at or before the
-/// best-signature-time still counts, unless its reason is `certificateHold`. A revocation
+/// even one valid at the time a timestamp proves, then has no usable data. Under
+/// `require_fresh_revocation`, a "not revoked" counts only when issued within 24 hours
+/// before `at` (the CRL's `thisUpdate`, the response's `producedAt`), for the path of
+/// each timestamp authority and, with no best-signature-time, for the signer's, so an old
+/// "not revoked" in the `/DSS` cannot pass a key revoked since: a deliberate departure
+/// from DSS, which ignores freshness everywhere. An older proof of revocation dated at or
+/// before the best-signature-time still counts, unless its reason is `certificateHold`. A revocation
 /// at or before the best-signature-time gives [`Defect::Revocation`], `INDETERMINATE` /
 /// `REVOKED_NO_POE` (`REVOKED_CA_NO_POE` for a CA), or `TRY_LATER` when it is a
 /// `certificateHold`, as DSS does, and a certificate with no usable data gives
@@ -382,8 +382,10 @@ impl Context<'_> {
         let time = best_signature_time.unwrap_or(self.at);
         // With no proof of existence, data issued long before the control date could
         // predate a revocation the signer's key already suffered.
-        let issued_from = (best_signature_time.is_none() && self.policy.require_fresh_revocation)
-            .then(|| self.at.checked_sub(FRESHNESS_TOLERANCE).unwrap_or(self.at));
+        let issued_from = best_signature_time
+            .is_none()
+            .then(|| self.fresh_from())
+            .flatten();
 
         let certificates: Vec<&[u8]> = signed
             .certificates
@@ -514,11 +516,21 @@ impl Context<'_> {
         self.proven_time(token, &certificates, &imprint, pool)
     }
 
+    /// The start of the window in which a "not revoked" counts, under
+    /// `require_fresh_revocation`: 24 hours before the control date.
+    fn fresh_from(&self) -> Option<SystemTime> {
+        self.policy
+            .require_fresh_revocation
+            .then(|| self.at.checked_sub(FRESHNESS_TOLERANCE).unwrap_or(self.at))
+    }
+
     /// The `genTime` the timestamp token `token` proves over `imprint`, when it verifies,
     /// its authority's path, built from `certificates`, reaches an anchor at the control
     /// date, holds no CA below the anchor without `subjectKeyIdentifier`, as DSS 6.5.1
     /// requires (ADR-0030), and passes revocation there, and it is not after the control
-    /// date.
+    /// date. Under `require_fresh_revocation`, the authority's path counts only a "not
+    /// revoked" issued within 24 hours before the control date: its data has no proof of
+    /// existence.
     fn proven_time(
         &self,
         token: &[u8],
@@ -539,7 +551,16 @@ impl Context<'_> {
         if ca_without_key_identifier(&path).is_some() {
             return None;
         }
-        judge_path(&path, pool, self.source, self.at, None, None, self.policy).ok()?;
+        judge_path(
+            &path,
+            pool,
+            self.source,
+            self.at,
+            self.fresh_from(),
+            None,
+            self.policy,
+        )
+        .ok()?;
         let time = x509_cert::time::Time::from(verified.gen_time()).to_system_time();
         (time <= self.at).then_some(time)
     }

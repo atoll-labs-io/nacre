@@ -22,14 +22,14 @@ const EXPIRED_CERTS_ON_CRL: ObjectIdentifier = ObjectIdentifier::new_unwrap("2.5
 const MAX_POOL_LEN: usize = 256;
 
 /// How long before the control date a CRL (`thisUpdate`) or an OCSP response (`producedAt`)
-/// may have been issued and still count for a signature no timestamp gives a proof of
-/// existence: 24 hours.
+/// may have been issued and still count for a timestamp authority's path or for a signer
+/// no timestamp gives a proof of existence: 24 hours.
 ///
 /// Without that proof, data issued before a revocation would otherwise pass a key revoked
 /// later, and whoever holds the key chooses the `/DSS` it appends. A day matches CAs that
 /// publish their CRLs and OCSP responses at least daily, and bounds to one day the window
 /// in which a revoked key still passes offline. This departs from DSS 6.5.1, which ignores
-/// freshness in every case; a signature with a proof of existence keeps DSS's rule.
+/// freshness in every case; a signer with a proof of existence keeps DSS's rule.
 pub(crate) const FRESHNESS_TOLERANCE: Duration = Duration::from_secs(24 * 3600);
 
 /// Why a valid path does not pass its revocation check. `depth` counts from the leaf, 0.

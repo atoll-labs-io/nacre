@@ -1244,7 +1244,16 @@ fn issuer_out_of_validity_policy() {
         &[out_of_bounds],
         &ValidationPolicy::dss(),
     );
-    let strict = nacre(&stamped, None, &ValidationPolicy::strict());
+    // Under strict() the stamp's own TSA path needs a root CRL under 24 h old (s42), so this
+    // file carries one more; the signer, judged at the stamp, still sees the same CA data.
+    let mut fresh_crls = crls.to_vec();
+    fresh_crls.push(crl_at(&root, &bench_key("root"), now - hours(1)));
+    let stamped_fresh = forge::with_dss(
+        &forge::signed(&signer, Level::T { tsa: &tsa }),
+        &[],
+        &fresh_crls,
+    );
+    let strict = nacre(&stamped_fresh, None, &ValidationPolicy::strict());
     assert_eq!(verdict(&strict), out_of_bounds, "{:?}", strict.defect);
     assert!(strict.best_signature_time.is_some());
 

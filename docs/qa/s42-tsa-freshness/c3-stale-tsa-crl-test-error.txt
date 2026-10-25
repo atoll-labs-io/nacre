@@ -1,0 +1,19 @@
+# QA s42-tsa-freshness — criterion 3, invalid input to the test runner (driver scenarios.md, surface endpoint, platform lib)
+# Tree under test: 00eeb05edda5234151c78b9b11134edc626a9573   Working directory: <copy>   stdin: none
+
+## Command: cargo test -p nacre-validate --test revocation -- --frobnicate
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.06s
+     Running tests/revocation.rs (target/debug/deps/revocation-f42659fda0afae46)
+error: Unrecognized option: 'frobnicate'
+error: test failed, to rerun pass `-p nacre-validate --test revocation`
+## exit code: 101
+
+## Command: cargo test -p nacre-validate --test revocation -- --exact stale_crl_does_not_clear_a_timestamp   (a truncated name with --exact)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.06s
+     Running tests/revocation.rs (target/debug/deps/revocation-f42659fda0afae46)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 34 filtered out; finished in 0.00s
+
+## exit code: 0 — cargo's own behaviour: zero tests run, reported as '0 passed; 34 filtered out'
