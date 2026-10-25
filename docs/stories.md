@@ -831,18 +831,18 @@ Choisie par la personne le 2026-10-24 : une lecture qui répare est une surface 
 **As** développeur d'une application qui fait confiance à la validation **I want** qu'une modification apportée à un PDF après sa signature et que DSS refuse (page ajoutée, raison de signature remplacée) soit refusée par Nacre sous `strict()` comme sous `dss()` **so that** Nacre ne laisse jamais passer une modification que l'outil de référence détecte.
 
 - **Complexity**: 3
-- **Depends on**: s18-validate-level
+- **Depends on**: s18-validate-level, s50-fictitious-certified-corpus
 - **Surface**: `endpoint`
 - **Owns**: `crates/nacre-validate/`, `crates/nacre-pdf/`, `docs/security/attacks/pades.md`, `conformance/corpus/foreign/`
 
 ### Acceptance criteria
 - [ ] La recherche établit la cause : pourquoi Nacre rend `INDETERMINATE` là où DSS 6.5.1 rend `TOTAL_FAILED` / `FORMAT_FAILURE` sur `pades-spoofing-replaced-reason` et `pdf-signed-added-page` (données de test de DSS, LGPL-2.1), et quelle règle de DSS les refuse.
 - [ ] Cette règle s'applique sous les deux préréglages ; les deux fichiers, et un cas forgé par forme sur le banc, donnent le verdict de DSS.
-- [ ] Les deux fichiers entrent dans `conformance/corpus/foreign/` avec leur source et leur licence ; la campagne reste à 0 écart sous `dss()` et 0 inexpliqué sous `strict()`.
+- [ ] `pdf-signed-added-page` entre dans `conformance/corpus/foreign/` avec sa source et sa licence ; `pades-spoofing-replaced-reason`, qui porte le nom d'une personne réelle, n'est pas committé et un cas forgé sur le banc le remplace ; la campagne reste à 0 écart sous `dss()` et 0 inexpliqué sous `strict()`.
 - [ ] `docs/security/attacks/pades.md` décrit chaque forme, avec un cas de corpus et un test de rejet.
 
 ### Notes for the agent
-Point de sécurité trouvé par le spike de s19 le 2026-10-25 et porté à la personne, qui a choisi une story dédiée et prioritaire. Aucun interrupteur de `strict()` n'explique l'écart : Nacre est ici plus laxiste que DSS, ce que `strict()` ne doit jamais être.
+Point de sécurité trouvé par le spike de s19 le 2026-10-25 et porté à la personne, qui a choisi une story dédiée et prioritaire. Aucun interrupteur de `strict()` n'explique l'écart : La recherche du 2026-10-25 a montré que `strict()` refuse déjà les deux fichiers (`refuse_later_revisions`) : c'est `dss()` qui n'a pas les deux contrôles de DSS, `PdfPageDifference` et `PdfSignatureDictionary`, à appliquer sous les deux préréglages.
 
 ## s49-dss-parity-4 — Comprendre et corriger les écarts avec DSS révélés par les signatures publiques
 **As** développeur Rust qui confronte Nacre à DSS **I want** que chaque écart trouvé par le spike de s19 sur les signatures publiques de DSS soit compris jusqu'à sa cause puis corrigé **so that** la validation s'améliore réellement et que s19 livre ses fichiers à 100 % sans en retirer aucun.
@@ -859,3 +859,20 @@ Point de sécurité trouvé par le spike de s19 le 2026-10-25 et porté à la pe
 
 ### Notes for the agent
 Demandé par la personne le 2026-10-25 : « tout corriger en comprenant le problème pour améliorer ». La liste des fichiers et des verdicts est dans la recherche de s19. Si la complexité dépasse le budget, découper par famille plutôt que d'exclure un fichier.
+
+## s50-fictitious-certified-corpus — Remplacer le PDF certifié du corpus par un fichier entièrement fictif
+**As** mainteneur d'un dépôt public **I want** que le PDF certifié tiers du corpus ne porte aucune donnée personnelle **so that** le dépôt respecte la règle du brief (documents fictifs ou publics, aucune donnée personnelle) et que l'historique puisse être réécrit sans casser les tests.
+
+- **Complexity**: 2
+- **Depends on**: —
+- **Surface**: `endpoint`
+- **Owns**: `crates/nacre-pdf/tests/`, `crates/nacre-validate/tests/`, `conformance/campaign/reports/`
+
+### Acceptance criteria
+- [ ] `certified-dss.pdf` disparaît de `crates/nacre-pdf/tests/corpus/real/` et de `crates/nacre-validate/tests/corpus/` ; un PDF certifié (DocMDP P=3) produit par un outil tiers, signé par une clé fictive, avec un champ signé et un champ vide, le remplace sous un autre nom, sans aucun nom de personne réelle dans ses métadonnées ni ses certificats.
+- [ ] Chaque test qui lisait `certified-dss.pdf` lit le nouveau fichier et prouve la même chose (lecture des révisions, champs, DocMDP, signature tierce vérifiée, signature ajoutée sur un document certifié) ; les `README.md` du corpus donnent sa source, sa licence et son sha256.
+- [ ] Les rapports de la campagne ne citent plus `certified-dss` ; la campagne reste à 0 écart sous `dss()` et 0 inexpliqué sous `strict()`.
+- [ ] Aucun fichier du dépôt ne contient de nom de personne réelle (recherche dans les métadonnées des PDF et les sujets des certificats du corpus).
+
+### Notes for the agent
+Décidé par la personne le 2026-10-25 : `certified-dss.pdf` (données de test de DSS) porte dans `/Author` le nom d'une personne réelle, dans la partie signée, donc on ne peut pas l'anonymiser sans casser la signature. Après cette story, le lead réécrit l'historique (`git filter-repo`) pour retirer les deux anciens chemins ; le nouveau fichier prend donc un autre nom. pyHanko (installable en espace utilisateur) peut produire un document certifié RSA.
