@@ -1,0 +1,113 @@
+$ cd /tmp/qa-s50.QjQ9wB/copy && sh ac4.sh <file with the old surname, value redacted> /home/lecrabe/dev/atoll/nacre/.worktrees/s50-fictitious-certified-corpus
+--- script ---
+# Run from the repository copy. $1: file holding the old author's surname (never printed).
+NAME=$(cat "$1")
+echo "== pdfinfo Author/Title/Subject/Creator, dc:creator, pdfsig signer, over every tracked PDF"
+git -C "$2" ls-files '*.pdf' | while read f; do
+  a=$(pdfinfo "$f" 2>/dev/null | grep -E '^(Author|Title|Subject|Creator):' | tr -s ' ' | paste -sd ';')
+  m=$(pdfinfo -meta "$f" 2>/dev/null | grep -o '<dc:creator>.*</dc:creator>' | sed 's/<[^>]*>//g' | tr -s ' ' | paste -sd ';')
+  s=$(pdfsig "$f" 2>/dev/null | grep 'Common Name' | sed 's/.*Name: //' | sort -u | paste -sd ',')
+  [ -n "$a$m$s" ] && echo "$f | $a | dc:creator=$m | signers=$s"
+done
+echo "== subjects of tracked certificates (*.der, *.pem, *.crt that parse as X.509)"
+git -C "$2" ls-files '*.der' '*.pem' '*.crt' | while read f; do
+  s=$(openssl x509 -noout -subject -in "$f" 2>/dev/null || openssl x509 -inform DER -noout -subject -in "$f" 2>/dev/null) && echo "$f: $s"
+done | sed 's/^[^:]*: //' | sort | uniq -c
+echo "== case-insensitive search of the old author's surname over every tracked file (incl. binary)"
+git -C "$2" grep -I -i -c -- "$NAME" ; echo "text grep exit: $? (1 = no match)"
+git -C "$2" grep -a -i -l -- "$NAME" ; echo "binary-inclusive grep exit: $? (1 = no match)"
+echo "== a tracked file with the old sha256 17c74d6c…"
+git -C "$2" ls-files -z | xargs -0 sha256sum | grep -c '^17c74d6c6911cb8beed4430de172256bd5bed6bd' ; echo "(count above)"
+--- stdout+stderr ---
+== pdfinfo Author/Title/Subject/Creator, dc:creator, pdfsig signer, over every tracked PDF
+crates/nacre-pdf/tests/corpus/real/certified-pyhanko.pdf |  | dc:creator= | signers=Nacre third-party signer
+crates/nacre-pdf/tests/corpus/real/chrome-print.pdf | Title: Fictitious decision 2026-001;Creator: Chromium | dc:creator= | signers=
+crates/nacre-pdf/tests/corpus/real/firefox-print.pdf | Title: Fictitious decision 2026-001;Creator: Firefox | dc:creator= | signers=
+crates/nacre-pdf/tests/corpus/real/form-xfa-irs-w9.pdf | Title: Form W-9 (Rev. March 2024);Subject: Request for Taxpayer Identification Number and Certification;Author: SE:W:CAR:MP;Creator: Designer 6.5 | dc:creator= | signers=
+crates/nacre-pdf/tests/corpus/real/ghostscript-pdfa2.pdf | Title: Fictitious decision 2026-001;Creator: Chromium | dc:creator= | signers=
+crates/nacre-pdf/tests/corpus/real/libreoffice-pdfa3.pdf | Title: Statutes of “The Document Foundation” in the version of June 14, 2022;Creator: Writer | dc:creator= | signers=
+crates/nacre-pdf/tests/corpus/real/signed-lta-pyhanko.pdf |  | dc:creator= | signers=,Alice
+crates/nacre-pdf/tests/corpus/real/signed-twice-pyhanko.pdf |  | dc:creator= | signers=Lord Testerino
+crates/nacre-pdf/tests/corpus/real/word-hybrid.pdf | Title: Working example of creating a hyperlink in a PDF;Creator: Microsoft Word | dc:creator= | signers=
+crates/nacre-pdf/tests/corpus/real/word-pdfmaker-linearized.pdf | Author: Mary;Creator: Acrobat PDFMaker 9.0 for Word | dc:creator= | signers=
+crates/nacre-validate/tests/corpus/attacks/byterange-not-from-start.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/attacks/byterange-not-whole-file.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/attacks/byterange-overlap.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/attacks/chain-ca-key-usage.pdf |  | dc:creator= | signers=Nacre chain signer
+crates/nacre-validate/tests/corpus/attacks/chain-critical-extension.pdf |  | dc:creator= | signers=Nacre chain signer
+crates/nacre-validate/tests/corpus/attacks/chain-dss-junk.pdf |  | dc:creator= | signers=Nacre chain signer
+crates/nacre-validate/tests/corpus/attacks/chain-expired.pdf |  | dc:creator= | signers=Nacre chain signer
+crates/nacre-validate/tests/corpus/attacks/chain-extended-key-usage.pdf |  | dc:creator= | signers=Nacre chain signer
+crates/nacre-validate/tests/corpus/attacks/chain-impostor-root.pdf |  | dc:creator= | signers=Nacre chain signer
+crates/nacre-validate/tests/corpus/attacks/chain-key-usage.pdf |  | dc:creator= | signers=Nacre chain signer
+crates/nacre-validate/tests/corpus/attacks/chain-leaf-as-ca.pdf |  | dc:creator= | signers=Nacre chain signer
+crates/nacre-validate/tests/corpus/attacks/chain-malformed-extension.pdf |  | dc:creator= | signers=Nacre chain signer
+crates/nacre-validate/tests/corpus/attacks/chain-not-yet-valid.pdf |  | dc:creator= | signers=Nacre chain signer
+crates/nacre-validate/tests/corpus/attacks/chain-path-length.pdf |  | dc:creator= | signers=Nacre chain signer
+crates/nacre-validate/tests/corpus/attacks/eaa-freetext.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/attacks/isa-appended-revision.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/attacks/isa-no-xref.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/attacks/shadow-dss-page.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/attacks/shadow-fill-late-definition.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/attacks/shadow-form-field.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/attacks/shadow-hide-and-replace.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/attacks/shadow-hide.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/attacks/shadow-late-definition.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/attacks/shadow-replace.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/attacks/ssa-empty-field-signed.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/attacks/ssa-hidden-widget-shown.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/attacks/ssa-indirect-rect.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/attacks/ssa-kid-widget-shown.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/attacks/ssa-layer-widget-shown.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/attacks/ssa-moved-rect.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/attacks/ssa-orphan-widget.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/attacks/ssa-outside-fields.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/attacks/ssa-split-widget.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/attacks/ssa-toggle-noview-shown.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/attacks/ssa-unlisted-widget-shown.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/attacks/ssa-unreadable-rect.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/attacks/ssa-visible-signature.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/attacks/ssa-zero-rect-shown.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/attacks/swa-wrapped.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/attacks/xref-misplaced-startxref.pdf |  | dc:creator= | signers=Nacre chain signer
+crates/nacre-validate/tests/corpus/certified-form-fill.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/certified-p1-form-fill.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/certified-p1-second-signature.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/certified-pyhanko.pdf |  | dc:creator= | signers=Nacre third-party signer
+crates/nacre-validate/tests/corpus/certified-visible-field-signed.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/chain/chain-cms-refused-revision.pdf |  | dc:creator= | signers=Nacre chain signer
+crates/nacre-validate/tests/corpus/chain/chain-cms.pdf |  | dc:creator= | signers=Nacre chain signer
+crates/nacre-validate/tests/corpus/chain/chain-dss.pdf |  | dc:creator= | signers=Nacre chain signer
+crates/nacre-validate/tests/corpus/docmdp-reference-cap.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/fieldmdp-locked-fill.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/fill-and-second-signature.pdf |  | dc:creator= | signers=Nacre test signer
+crates/nacre-validate/tests/corpus/signed-lta-pyhanko.pdf |  | dc:creator= | signers=,Alice
+crates/nacre-validate/tests/corpus/signed-twice-pyhanko.pdf |  | dc:creator= | signers=Lord Testerino
+== subjects of tracked certificates (*.der, *.pem, *.crt that parse as X.509)
+      2 subject=C=FR, O=Nacre tests, CN=Nacre attack CA
+      1 subject=C=FR, O=Nacre tests, CN=Nacre attack leaf
+      1 subject=C=FR, O=Nacre tests, CN=Nacre chain intermediate
+      2 subject=C=FR, O=Nacre tests, CN=Nacre chain root
+      1 subject=C=FR, O=Nacre tests, CN=Nacre chain signer
+      1 subject=C=FR, O=Nacre tests, CN=Nacre OCSP attack CA
+      1 subject=C=FR, O=Nacre tests, CN=Nacre OCSP attack leaf
+      1 subject=C=FR, O=Nacre tests, CN=Nacre OCSP delegate without OCSPSigning
+      1 subject=C=FR, O=Nacre tests, CN=Nacre OCSP expired delegate
+      1 subject=C=FR, O=Nacre tests, CN=Nacre OCSP foreign delegate
+      1 subject=C=FR, O=Nacre tests, CN=Nacre other attack CA
+      1 subject=C=FR, O=Nacre tests, CN=Nacre renamed attack CA
+      2 subject=CN=Nacre OpenSSL CRL fixture CA, O=Nacre tests, C=FR
+      2 subject=CN=Nacre OpenSSL CRL fixture leaf, O=Nacre tests, C=FR
+      2 subject=CN=Nacre OpenSSL CRL fixture revoked, O=Nacre tests, C=FR
+      1 subject=CN=Nacre OpenSSL OCSP fixture CA, O=Nacre tests, C=FR
+      1 subject=CN=Nacre OpenSSL OCSP fixture leaf, O=Nacre tests, C=FR
+      1 subject=CN=Nacre OpenSSL OCSP fixture responder, O=Nacre tests, C=FR
+      1 subject=CN=Nacre OpenSSL OCSP fixture revoked, O=Nacre tests, C=FR
+      1 subject=CN=Nacre OpenSSL RSA CRL fixture CA, O=Nacre tests, C=FR
+== case-insensitive search of the old author's surname over every tracked file (incl. binary)
+text grep exit: 1 (1 = no match)
+binary-inclusive grep exit: 1 (1 = no match)
+== a tracked file with the old sha256 17c74d6c…
+0
+(count above)
+--- exit code: 0 ---

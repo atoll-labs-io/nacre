@@ -1,0 +1,65 @@
+Input: notpdf.pdf = the 10 bytes 'not a pdf' and a newline.
+Probe: a throwaway crate in the QA temp dir calling the public interface of nacre-pdf, nacre-pades and nacre-validate (path dependencies on a copy of the tracked files).
+--- probe/Cargo.toml ---
+[package]
+name = "probe"
+version = "0.0.0"
+edition = "2024"
+[workspace]
+[dependencies]
+nacre-pdf = { path = "/tmp/qa-s50.QjQ9wB/copy/crates/nacre-pdf" }
+nacre-validate = { path = "/tmp/qa-s50.QjQ9wB/copy/crates/nacre-validate" }
+nacre-pades = { path = "/tmp/qa-s50.QjQ9wB/copy/crates/nacre-pades" }
+nacre-core = { path = "/tmp/qa-s50.QjQ9wB/copy/crates/nacre-core", features = ["test-signer"] }
+--- probe/src/main.rs ---
+use nacre_core::TestSigner;
+use nacre_pades::{DateTime, sign};
+use nacre_pdf::Document;
+use nacre_validate::validate;
+
+fn main() {
+    let path = std::env::args().nth(1).expect("usage: probe <pdf>");
+    let bytes = std::fs::read(&path).expect("read");
+    println!("file: {path} ({} bytes)", bytes.len());
+    let doc = match Document::parse(&bytes) {
+        Ok(d) => d,
+        Err(e) => { println!("parse error: {e} / {e:?}"); std::process::exit(2); }
+    };
+    for r in doc.revisions() { println!("revision end={} xref={:?}", r.end, r.xref); }
+    for f in doc.signature_fields() {
+        println!("field {:?} signed={} value_unreadable={}", f.name, f.value.is_some(), f.value_unreadable);
+    }
+    println!("doc_mdp_level: {:?}", doc.doc_mdp_level());
+    let spec_err = {
+        // A second signature into the taken empty field is refused.
+        let spec = nacre_pdf::SignatureSpec { field: "Approval".to_owned(), sub_filter: b"ETSI.CAdES.detached".to_vec(), contents_len: 64, entries: nacre_pdf::Dictionary::new() };
+        doc.update().sign(spec).err().map(|e| format!("{e:?}"))
+    };
+    println!("sign into taken field \"Approval\": {spec_err:?}");
+    match validate(&bytes) {
+        Ok(rs) => for r in &rs {
+            println!("validate: field={:?} digest_verified={} signature_verified={} defect={:?} report={:?} later_revisions={}",
+                r.field, r.digest_verified, r.signature_verified, r.defect, r.report, r.later_revisions.len());
+        },
+        Err(e) => println!("validate error: {e:?}"),
+    }
+    let signer = TestSigner::from_secret(&[0x11; 32]).unwrap();
+    match sign(&bytes, &signer, DateTime::new(2026, 10, 22, 8, 0, 0).unwrap()) {
+        Ok(out) => match validate(&out) {
+            Ok(rs) => for r in &rs {
+                println!("after nacre sign: field={:?} defect={:?} later={:?}",
+                    r.field, r.defect, r.later_revisions.iter().map(|l| &l.verdict).collect::<Vec<_>>());
+            },
+            Err(e) => println!("validate after sign error: {e:?}"),
+        },
+        Err(e) => println!("nacre sign error: {e:?}"),
+    }
+}
+--- run ---
+$ cd /tmp/qa-s50.QjQ9wB/scratch/run
+$ /tmp/qa-s50.QjQ9wB/scratch/target/debug/probe notpdf.pdf
+stdin: (none)
+--- stdout+stderr ---
+file: notpdf.pdf (10 bytes)
+parse error: the input does not start with %PDF- / MissingHeader
+--- exit code: 2 ---

@@ -1,0 +1,30 @@
+$ cd /tmp/qa-s50.QjQ9wB/copy && sh ac3.sh   (reads the committed reports; the campaign was not re-run)
+--- script ---
+R=conformance/campaign/reports
+echo "== files citing certified-dss under the reports (names and content)"; ls $R | grep -c certified-dss; grep -rl certified-dss $R | wc -l
+echo "== ≠ rows in campaign-dss.md"; grep -c '≠' $R/campaign-dss.md
+echo "== ≠ rows in campaign-strict.md, and those whose last cell names no switch"; grep -c '≠' $R/campaign-strict.md; grep '≠' $R/campaign-strict.md | awk -F'|' '{c=$(NF-1); gsub(/ /,"",c); if (c=="") print}' | wc -l
+echo "== rows of the new file in both tables"; grep -n certified-pyhanko $R/campaign-dss.md $R/campaign-strict.md
+echo "== new per-file reports"; ls $R | grep certified-pyhanko
+--- stdout+stderr ---
+== files citing certified-dss under the reports (names and content)
+0
+0
+== ≠ rows in campaign-dss.md
+0
+== ≠ rows in campaign-strict.md, and those whose last cell names no switch
+121
+0
+== rows of the new file in both tables
+conformance/campaign/reports/campaign-dss.md:115:| `crates-nacre-validate-tests-corpus-certified-pyhanko` | `Certification` | INDETERMINATE / NO_CERTIFICATE_CHAIN_FOUND / PAdES BaselineB | INDETERMINATE / NO_CERTIFICATE_CHAIN_FOUND / PAdES BaselineB | = |  |
+conformance/campaign/reports/campaign-dss.md:116:| `crates-nacre-validate-tests-corpus-certified-pyhanko` | (count) | 1 | 1 | = |  |
+conformance/campaign/reports/campaign-dss.md:145:| `crates-nacre-pdf-tests-corpus-real-certified-pyhanko` | `Certification` | INDETERMINATE / NO_CERTIFICATE_CHAIN_FOUND / PAdES BaselineB | INDETERMINATE / NO_CERTIFICATE_CHAIN_FOUND / PAdES BaselineB | = |  |
+conformance/campaign/reports/campaign-dss.md:146:| `crates-nacre-pdf-tests-corpus-real-certified-pyhanko` | (count) | 1 | 1 | = |  |
+conformance/campaign/reports/campaign-strict.md:122:| `crates-nacre-validate-tests-corpus-certified-pyhanko` | `Certification` | INDETERMINATE / NO_CERTIFICATE_CHAIN_FOUND / PAdES BaselineB | INDETERMINATE / NO_CERTIFICATE_CHAIN_FOUND / PAdES BaselineB | = |  |
+conformance/campaign/reports/campaign-strict.md:123:| `crates-nacre-validate-tests-corpus-certified-pyhanko` | (count) | 1 | 1 | = |  |
+conformance/campaign/reports/campaign-strict.md:152:| `crates-nacre-pdf-tests-corpus-real-certified-pyhanko` | `Certification` | INDETERMINATE / NO_CERTIFICATE_CHAIN_FOUND / PAdES BaselineB | INDETERMINATE / NO_CERTIFICATE_CHAIN_FOUND / PAdES BaselineB | = |  |
+conformance/campaign/reports/campaign-strict.md:153:| `crates-nacre-pdf-tests-corpus-real-certified-pyhanko` | (count) | 1 | 1 | = |  |
+== new per-file reports
+campaign-crates-nacre-pdf-tests-corpus-real-certified-pyhanko.xml
+campaign-crates-nacre-validate-tests-corpus-certified-pyhanko.xml
+--- exit code: 0 ---

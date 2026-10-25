@@ -17,7 +17,7 @@ H = table with `/XRefStm` (hybrid).
 | `form-xfa-irs-w9.pdf` | IRS Form W-9, <https://www.irs.gov/pub/irs-pdf/fw9.pdf> | US public domain | `2d420cbb4123dcf1fb82595b2359cfbb5d81f00b9df9d359fcc7af361d093f53` | Designer 6.5, PDF 1.7, XFA | linearized, 17 object streams, Predictor 12, a `/Perms /UR3` usage-rights signature that is not a field; revisions 126744 S+S · 140815 S |
 | `signed-twice-pyhanko.pdf` | pyHanko test data, <https://github.com/MatthiasValvekens/pyHanko>, `internal/common-test-utils/src/pyhanko_testing_commons/test_data/data/pdf/minimal-two-fields-signed-twice.pdf` | MIT | `9aad3553e8ffdf0674eef661a9418089093cb98aa0fd1940bde87bf09a1a36af` | pyHanko | linearized, xref streams; fields `Sig1` and `Sig2`, both signed by pyHanko's test PKI; revisions 26384 S+S · 50827 S |
 | `signed-lta-pyhanko.pdf` | pyHanko test data, same folder, `pades-lta-dss-indirect-arrs-test.pdf` | MIT | `30fe330df187588d204519e0eff373de50a10c0fac08483368ccfc7420c1c1e4` | pyHanko | 5 tables; field `Sig1` and document timestamp field `Timestamp-977301ad-bec9-4cae-a0cd-f6a674c6e465`; revisions 739 · 1393 · 25853 · 46212 · 46884 (all T) |
-| `certified-dss.pdf` | esig/dss test data, <https://github.com/esig/dss>, `dss-pades/src/test/resources/validation/dss-2554/certified-changes-permitted.pdf` | LGPL-2.1 | `17c74d6c6911cb8beed4430de172256bd5bed6bdccc4c5cc7c1be95aee0e1d2b` | LibreOffice 5.2, certified (DocMDP) | `signature-test` signed, `signature-test2` empty; revisions 127672 T · 152955 T |
+| `certified-pyhanko.pdf` | written for this repository with pyHanko 0.38.0 from `conformance/reference/unsigned.pdf`, see below | as this repository | `5bd9078558e2a1e6eb2ffbc565de000bd13f28bdb9acbecbf8b92bf3a018930e` | pyHanko 0.38.0, certified (DocMDP `/P 3`), RSA, `CN=Nacre third-party signer` under `CN=Nacre third-party CA` (`O=Nacre tests,C=FR`), keys made for it and deleted | `Certification` signed, `Approval` empty and visible; revisions 744 T · 9700 T |
 | `print-source.html` | the fictitious page the prints were made from | as this repository | `69fb33f85eda28534ce2d8429dc373f410c128e6cf782f9bd13f7dead3533950` | — | — |
 
 Regenerating the prints and the PDF/A:
@@ -29,6 +29,35 @@ Regenerating the prints and the PDF/A:
 
 A regenerated file has another hash and other offsets: update this table and
 `tests/corpus.rs` together.
+
+Regenerating `certified-pyhanko.pdf` (pyHanko 0.38.0 in a throwaway virtualenv; the CLI cannot
+certify at `/P 3`, so the Python API is used; the keys are deleted once the file is made). The
+signing time is the wall clock, so a new run gives a new hash and new offsets:
+
+```sh
+openssl req -x509 -newkey rsa:2048 -nodes -keyout ca.key -out ca.pem -days 3650 -subj "/C=FR/O=Nacre tests/CN=Nacre third-party CA" -addext basicConstraints=critical,CA:TRUE -addext keyUsage=critical,keyCertSign,cRLSign
+openssl req -newkey rsa:2048 -nodes -keyout leaf.key -out leaf.csr -subj "/C=FR/O=Nacre tests/CN=Nacre third-party signer"
+printf 'basicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature,nonRepudiation\n' > ext.cnf
+openssl x509 -req -in leaf.csr -CA ca.pem -CAkey ca.key -CAcreateserial -out leaf.pem -days 3650 -extfile ext.cnf
+python -I certify.py conformance/reference/unsigned.pdf certified-pyhanko.pdf .
+```
+
+```python
+import sys
+from pyhanko.sign import signers, fields
+from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pyhanko.sign.fields import MDPPerm, SigFieldSpec
+src, out, keys = sys.argv[1:4]
+signer = signers.SimpleSigner.load(f"{keys}/leaf.key", f"{keys}/leaf.pem", ca_chain_files=(f"{keys}/ca.pem",))
+with open(src, "rb") as f:
+    w = IncrementalPdfFileWriter(f)
+    fields.append_signature_field(w, SigFieldSpec("Certification"))
+    fields.append_signature_field(w, SigFieldSpec("Approval", box=(72, 100, 300, 150)))
+    meta = signers.PdfSignatureMetadata(field_name="Certification", certify=True,
+        docmdp_permissions=MDPPerm.ANNOTATE, subfilter=fields.SigSeedSubFilter.PADES)
+    with open(out, "wb") as o:
+        signers.PdfSigner(meta, signer).sign_pdf(w, output=o)
+```
 
 ## `hostile/` — files the reader must refuse
 
@@ -64,6 +93,6 @@ Built at test time by `tests/support/mod.rs`, never stored:
 
 ## Credits
 
-pyHanko (Matthias Valvekens, MIT), esig/dss (European Commission, LGPL-2.1), W3C (W3C
+pyHanko (Matthias Valvekens, MIT), W3C (W3C
 document licence), the US Internal Revenue Service (public domain) and The Document
 Foundation.
