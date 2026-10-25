@@ -331,7 +331,7 @@ La recherche et le plan d'un premier passage (avant s41) ont montré que DSS cal
 **As** développeur de Nacre **I want** que le corpus de la campagne contienne des signatures produites par d'autres outils que Nacre **so that** l'accord avec DSS ne se limite pas aux angles morts de Nacre.
 
 - **Complexity**: 2
-- **Depends on**: s18-validate-level
+- **Depends on**: s18-validate-level, s49-dss-parity-4
 - **Surface**: `endpoint`
 - **Owns**: `conformance/corpus/foreign/`
 
@@ -341,7 +341,7 @@ La recherche et le plan d'un premier passage (avant s41) ont montré que DSS cal
 - [ ] Chaque fichier ajouté est fictif ou public ; aucune donnée personnelle (brief, Security & abuse).
 
 ### Notes for the agent
-Brief, constat 5 du pré-mortem. Les signatures pyHanko et DSS se produisent avec la PKI de s02 ; Acrobat demande un essai manuel, consigné comme la source du fichier. Un écart trouvé ici est un défaut de `validate`, à signaler par le `Issue tracker`, pas à masquer en retirant le fichier.
+Le spike du 2026-10-25 a trouvé 17 écarts sur 30 fichiers publics de DSS : s48 et s49 les corrigent avant que s19 ne livre ses fichiers. Les fichiers signés sur le banc ne passent entièrement que sur le démarrage qui les a signés (clés régénérées à chaque démarrage). Brief, constat 5 du pré-mortem. Les signatures pyHanko et DSS se produisent avec la PKI de s02 ; Acrobat demande un essai manuel, consigné comme la source du fichier. Un écart trouvé ici est un défaut de `validate`, à signaler par le `Issue tracker`, pas à masquer en retirant le fichier.
 
 ## s20-nacre-sig-milestone — Publier la façade nacre-sig du premier jalon
 **As** développeur Rust (Patelle d'abord) **I want** ajouter la seule dépendance `nacre-sig` et n'activer que les features dont j'ai besoin **so that** Patelle signe et valide jusqu'à B-LTA par une API unique, sans compiler le reste.
@@ -826,3 +826,36 @@ Découpée de s18 le 2026-10-24 sur décision de la personne, à partir du quatr
 
 ### Notes for the agent
 Choisie par la personne le 2026-10-24 : une lecture qui répare est une surface d'attaque, d'où une story à part, après s18. En attendant, la campagne de s18 ne forge aucun de ces cas.
+
+## s48-detect-later-modifications — Refuser, sous les deux préréglages, les modifications après signature que DSS détecte
+**As** développeur d'une application qui fait confiance à la validation **I want** qu'une modification apportée à un PDF après sa signature et que DSS refuse (page ajoutée, raison de signature remplacée) soit refusée par Nacre sous `strict()` comme sous `dss()` **so that** Nacre ne laisse jamais passer une modification que l'outil de référence détecte.
+
+- **Complexity**: 3
+- **Depends on**: s18-validate-level
+- **Surface**: `endpoint`
+- **Owns**: `crates/nacre-validate/`, `crates/nacre-pdf/`, `docs/security/attacks/pades.md`, `conformance/corpus/foreign/`
+
+### Acceptance criteria
+- [ ] La recherche établit la cause : pourquoi Nacre rend `INDETERMINATE` là où DSS 6.5.1 rend `TOTAL_FAILED` / `FORMAT_FAILURE` sur `pades-spoofing-replaced-reason` et `pdf-signed-added-page` (données de test de DSS, LGPL-2.1), et quelle règle de DSS les refuse.
+- [ ] Cette règle s'applique sous les deux préréglages ; les deux fichiers, et un cas forgé par forme sur le banc, donnent le verdict de DSS.
+- [ ] Les deux fichiers entrent dans `conformance/corpus/foreign/` avec leur source et leur licence ; la campagne reste à 0 écart sous `dss()` et 0 inexpliqué sous `strict()`.
+- [ ] `docs/security/attacks/pades.md` décrit chaque forme, avec un cas de corpus et un test de rejet.
+
+### Notes for the agent
+Point de sécurité trouvé par le spike de s19 le 2026-10-25 et porté à la personne, qui a choisi une story dédiée et prioritaire. Aucun interrupteur de `strict()` n'explique l'écart : Nacre est ici plus laxiste que DSS, ce que `strict()` ne doit jamais être.
+
+## s49-dss-parity-4 — Comprendre et corriger les écarts avec DSS révélés par les signatures publiques
+**As** développeur Rust qui confronte Nacre à DSS **I want** que chaque écart trouvé par le spike de s19 sur les signatures publiques de DSS soit compris jusqu'à sa cause puis corrigé **so that** la validation s'améliore réellement et que s19 livre ses fichiers à 100 % sans en retirer aucun.
+
+- **Complexity**: 5
+- **Depends on**: s48-detect-later-modifications
+- **Surface**: `endpoint`
+- **Owns**: `crates/nacre-validate/`, `crates/nacre-pdf/`, `crates/nacre-revocation/`, `docs/security/attacks/`, `conformance/corpus/foreign/`
+
+### Acceptance criteria
+- [ ] Pour chaque famille d'écarts (ordre des sous-indications sans chaîne, niveaux étendus EPES et LTV, niveau lu sur les horodatages, algorithme de signature non pris en charge, CMS enveloppant, signature référencée par plusieurs champs), la recherche écrit la cause dans Nacre et la règle de DSS 6.5.1 qui y répond.
+- [ ] Chaque correction suit les règles de l'ADR-0026 : règle de DSS sous les deux préréglages, interrupteur seulement si `strict()` deviendrait plus laxiste, choix soumis à la personne.
+- [ ] Les quinze fichiers concernés (données de test de DSS 6.5.1, LGPL-2.1) entrent dans `conformance/corpus/foreign/` avec leur source et leur licence ; la campagne reste à 0 écart sous `dss()` et 0 inexpliqué sous `strict()`.
+
+### Notes for the agent
+Demandé par la personne le 2026-10-25 : « tout corriger en comprenant le problème pour améliorer ». La liste des fichiers et des verdicts est dans la recherche de s19. Si la complexité dépasse le budget, découper par famille plutôt que d'exclure un fichier.
