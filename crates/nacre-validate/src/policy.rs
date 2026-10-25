@@ -59,10 +59,13 @@ pub struct ValidationPolicy {
     /// [`ChainDefect::MalformedExtension`]: crate::ChainDefect::MalformedExtension
     /// [`Error::MalformedCertificate`]: crate::Error::MalformedCertificate
     pub judge_malformed_extensions: bool,
-    /// With no proof of existence, count only revocation data issued within 24 hours before
-    /// the control date that says "not revoked"; an older revocation dated at or before the
+    /// Count only revocation data issued within 24 hours before the control date that says
+    /// "not revoked", for the path of each timestamp authority and, with no
+    /// best-signature-time, for the signer's; an older revocation dated at or before the
     /// judged time still counts, unless it is a `certificateHold`. Off, freshness is
-    /// ignored: an old "not revoked" in the `/DSS` passes a key revoked since.
+    /// ignored: an old "not revoked" in the `/DSS` passes a key revoked since. Offline, an
+    /// old archive whose authority has only old data proves no time under `strict()`
+    /// unless a `RevocationSource` answers.
     pub require_fresh_revocation: bool,
     /// Refuse a signature whose `/SubFilter` is neither `/ETSI.CAdES.detached` nor
     /// `/adbe.pkcs7.detached` ([`Defect::UnsupportedSubFilter`]). Off, any other
@@ -132,8 +135,9 @@ impl ValidationPolicy {
     /// `expiredCertsOnCRL`, or an OCSP response trusted on its `archiveCutoff`, revocation
     /// data saying revoked, trusted from a CA or responder out of its validity, a CA's
     /// "good" trusted from a delegated responder of the anchor out of its validity, an OCSP
-    /// response read past a critical extension, and, for a signature with no timestamp, a
-    /// stale "not revoked" CRL or OCSP response appended to the `/DSS`.
+    /// response read past a critical extension, a stale "not revoked" CRL or OCSP response
+    /// appended to the `/DSS` for a signature with no timestamp, and a stale "not revoked"
+    /// clearing a timestamp authority.
     ///
     /// Every switch off: the verdict DSS 6.5.1 gives, for comparing Nacre with it. Only the
     /// rules DSS also applies remain.

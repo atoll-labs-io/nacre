@@ -467,8 +467,9 @@ fn token_over_another_imprint_gives_no_poe() {
     assert_eq!(result.best_signature_time, None);
 }
 
-/// R13: with no proof of existence, a CRL issued before the signer's revocation, and more
-/// than a day before the control date, says nothing; a timestamp makes it count again.
+/// R13: a CRL issued before the signer's revocation, and more than a day before the
+/// control date, says nothing; a timestamp does not make it count again, for it clears no
+/// timestamp authority either under `strict()` (s42).
 #[test]
 fn old_crl_does_not_pass_a_signature_without_poe() {
     let pki = Pki::new();
@@ -488,8 +489,45 @@ fn old_crl_does_not_pass_a_signature_without_poe() {
     assert_eq!(defect, RevocationDefect::Missing { depth: 0 });
 
     let result = pki.judge(&with_dss(&pki.stamped(), &[], &crls), None);
-    passed(&result);
-    assert_eq!(result.best_signature_time, Some(stamp_time()));
+    let defect = refused(&result, SubIndication::CertificateChainGeneralFailure);
+    assert_eq!(defect, RevocationDefect::Missing { depth: 0 });
+    assert_eq!(result.best_signature_time, None);
+}
+
+/// s42 AC1, AC2, AC3: a "not revoked" more than a day old, said of the intermediate, does
+/// not clear the timestamp authority under `strict()`, for a signature timestamp and a
+/// document timestamp alike; `dss()` and the switch off keep DSS's verdict.
+#[test]
+fn stale_crl_does_not_clear_a_timestamp_authority() {
+    let pki = Pki::new();
+    let stale = crl(
+        &pki.intermediate,
+        &pki.intermediate_key,
+        time(2026, 10, 21, 23, 0, 0),
+        time(2026, 11, 22, 0, 0, 0),
+        &[],
+    );
+    let crls = [stale, pki.root_crl(&[])];
+    let files = [
+        with_dss(&pki.stamped(), &[], &crls),
+        document_timestamp(&with_dss(&pki.basic(), &[], &crls), &pki.tsa(None)),
+    ];
+
+    for file in &files {
+        let strict = pki.judge_under(file, control_date(), &ValidationPolicy::strict());
+        let defect = refused(&strict, SubIndication::CertificateChainGeneralFailure);
+        assert_eq!(defect, RevocationDefect::Missing { depth: 0 });
+        assert_eq!(strict.best_signature_time, None);
+
+        for policy in [
+            ValidationPolicy::dss(),
+            strict_without(|p| p.require_fresh_revocation = false),
+        ] {
+            let result = pki.judge_under(file, control_date(), &policy);
+            passed(&result);
+            assert_eq!(result.best_signature_time, Some(stamp_time()));
+        }
+    }
 }
 
 fn control_date() -> SystemTime {

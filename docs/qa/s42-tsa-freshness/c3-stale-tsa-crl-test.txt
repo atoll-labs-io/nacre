@@ -1,0 +1,115 @@
+# QA s42-tsa-freshness — criterion 3: the story's test with a stale TSA CRL as only revocation data (driver scenarios.md, surface endpoint, platform lib)
+# Tree under test: 00eeb05edda5234151c78b9b11134edc626a9573 (copy of git ls-files in a mktemp -d directory)
+# Working directory: <copy>   stdin: none
+# Command: cargo test -p nacre-validate --test revocation -- stale_crl_does_not_clear_a_timestamp_authority old_crl_does_not_pass_a_signature_without_poe revoked_tsa_gives_no_poe old_crl_passes_without_the_freshness_switch old_revocation_counts_unless_on_hold
+# Run twice; outputs identical but for timings.
+
+## stdout+stderr (Compiling/Blocking lines dropped)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.85s
+     Running tests/revocation.rs (target/debug/deps/revocation-f42659fda0afae46)
+
+running 5 tests
+test old_crl_passes_without_the_freshness_switch ... ok
+test old_revocation_counts_unless_on_hold ... ok
+test revoked_tsa_gives_no_poe ... ok
+test old_crl_does_not_pass_a_signature_without_poe ... ok
+test stale_crl_does_not_clear_a_timestamp_authority ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 29 filtered out; finished in 0.70s
+
+
+## exit code: 0 (second run: 0)
+
+## Command: cargo test -p nacre-validate --test policy --test revocation (the plan's guards, whole files)
+     Running tests/policy.rs (target/debug/deps/policy-46315f841a64ff41)
+running 14 tests
+test trailing_data_switch ... ok
+test misplaced_xref_switch ... ok
+test unusable_signatures_switch ... ok
+test unsupported_sub_filters_switch ... ok
+test malformed_extensions_switch ... ok
+test later_revisions_switch ... ok
+test validity_before_revocation_switch ... ok
+test sneaky_signatures_switch ... ok
+test signer_key_usage_switch ... ok
+test missing_sub_filter_switch ... ok
+test critical_ocsp_extensions_switch ... ok
+test anchor_delegated_responder_switch ... ok
+test dss_opens_only_what_the_catalog_marks ... ok
+test each_switch_changes_only_what_the_catalog_names ... ok
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.98s
+     Running tests/revocation.rs (target/debug/deps/revocation-f42659fda0afae46)
+running 34 tests
+test basic_signature_revoked_before_the_control_date ... ok
+test crl_signed_by_another_key_is_ignored ... ok
+test crl_before_not_before_is_ignored ... ok
+test expired_crl_still_counts ... ok
+test expired_not_revoked_is_out_of_bounds_not_revoked ... ok
+test claimed_time_before_not_before_is_a_constraints_failure ... ok
+test cms_revocation_data_does_not_give_lt ... ok
+test claimed_time_after_not_after_is_a_constraints_failure ... ok
+test latest_crl_wins ... ok
+test no_revocation_data_is_a_general_failure ... ok
+test data_issued_after_not_after_does_not_count ... ok
+test dss_covering_every_chain_gives_lt ... ok
+test old_crl_passes_without_the_freshness_switch ... ok
+test malformed_timestamp_certificate ... ok
+test old_revocation_counts_unless_on_hold ... ok
+test revoked_intermediate_is_revoked_ca_no_poe ... ok
+test document_timestamp_is_a_proof_of_existence ... ok
+test old_crl_does_not_pass_a_signature_without_poe ... ok
+test source_answers_what_the_document_lacks ... ok
+test revoked_before_the_timestamp_is_revoked_no_poe ... ok
+test document_timestamp_over_a_covering_dss_gives_lta ... ok
+test revoked_after_the_timestamp_passes ... ok
+test missing_claimed_time_is_a_constraints_failure ... ok
+test revoked_tsa_gives_no_poe ... ok
+test archive_cutoff_switch ... ok
+test token_over_another_imprint_gives_no_poe ... ok
+test expired_certs_on_crl_switch ... ok
+test issuer_of_revoked_data_switch ... ok
+test hold_before_the_stamp_is_try_later ... ok
+test delegated_responder_out_of_validity ... ok
+test ca_without_key_identifier_is_a_general_failure ... ok
+test tsa_ca_without_key_identifier_proves_no_time ... ok
+test issuer_out_of_validity_is_revocation_out_of_bounds ... ok
+test stale_crl_does_not_clear_a_timestamp_authority ... ok
+test result: ok. 34 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.35s
+## exit code: 0
+
+## The test, as it stands in crates/nacre-validate/tests/revocation.rs of the tree under test
+/// s42 AC1, AC2, AC3: a "not revoked" more than a day old, said of the intermediate, does
+/// not clear the timestamp authority under `strict()`, for a signature timestamp and a
+/// document timestamp alike; `dss()` and the switch off keep DSS's verdict.
+#[test]
+fn stale_crl_does_not_clear_a_timestamp_authority() {
+    let pki = Pki::new();
+    let stale = crl(
+        &pki.intermediate,
+        &pki.intermediate_key,
+        time(2026, 10, 21, 23, 0, 0),
+        time(2026, 11, 22, 0, 0, 0),
+        &[],
+    );
+    let crls = [stale, pki.root_crl(&[])];
+    let files = [
+        with_dss(&pki.stamped(), &[], &crls),
+        document_timestamp(&with_dss(&pki.basic(), &[], &crls), &pki.tsa(None)),
+    ];
+
+    for file in &files {
+        let strict = pki.judge_under(file, control_date(), &ValidationPolicy::strict());
+        let defect = refused(&strict, SubIndication::CertificateChainGeneralFailure);
+        assert_eq!(defect, RevocationDefect::Missing { depth: 0 });
+        assert_eq!(strict.best_signature_time, None);
+
+        for policy in [
+            ValidationPolicy::dss(),
+            strict_without(|p| p.require_fresh_revocation = false),
+        ] {
+            let result = pki.judge_under(file, control_date(), &policy);
+            passed(&result);
+            assert_eq!(result.best_signature_time, Some(stamp_time()));
+        }
+    }
+}
