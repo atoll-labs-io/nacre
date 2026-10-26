@@ -52,6 +52,10 @@ sound, so only the revision rule can refuse it.
 | `ssa-moved-rect.pdf` | the field `Sneaky`, placed at `[72 650 400 700]` with no appearance, certified at `/P 2`: signing it adds an appearance and moves its rectangle to `[72 100 400 150]` | `2d85c9219a7415f5639be6120291e1f456fe9797adbeb04eb13ac31312b3596e` |
 | `ssa-unreadable-rect.pdf` | given the text field `Name`, certified at `/P 2`: one revision adds a visible merged signature `Sneaky` whose `/Rect` cannot be read, its last item a reference to an object the file never defines | `a35ed3a82d11ef42329d990451f1b87cc49889bd4379030c744e2c3909a2b69f` |
 | `ssa-toggle-noview-shown.pdf` | the same certified file: one revision adds a visible merged signature `Sneaky` flagged Print, NoView and ToggleNoView (`/F 292`), so it shows on hover | `1cd548c5d8d32c83a03b2d2a0526951083973ada7bf0f8d08505d627d173b904` |
+| `isa-page-added.pdf` | a second page 9 added and the page tree 2 redefined with two `/Kids` and `/Count 2` (s48) | `8a5f81d1b497f85821f48e31260a3e14b7250862aef9df70ea861368b80623bb` |
+| `isa-reason-replaced.pdf` | signed with `/Reason (Approved)`; the signature dictionary redefined under its own id, `/Reason` `Rejected`, `/ByteRange` and `/Contents` unchanged (s48) | `65b0339a26f0922b941b4eb11fb66f749775213bd53add1db928fa9bdbfa020d` |
+| `isa-reason-redefined.pdf` | signed with an indirect `/Reason` object `(Approved)`; only that object redefined, `(Rejected)` (s48) | `393780c93a8c42c26572917fda426907940b6699a6d4c82592dd531ed76da1e0` |
+| `isa-signature-moved.pdf` | the signed field's `/Rect` changed from `[0 0 0 0]` to `[72 72 272 122]`, all else equal (s48) | `60b8a8296e62250c91ded27527d82d9ead5e9339ff5db1c16bce8dd95fd6170e` |
 
 The signature dictionary cases added by s43 are `unsigned.pdf` given one signature field:
 

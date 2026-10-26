@@ -1,0 +1,167 @@
+QA s48-detect-later-modifications — AC2, boundaries and invalid input
+Tree: 69877bfa853771632548531e76bec7873b83c7b9. Same program as ac2-both-presets.txt (quoted there whole). Unless stated otherwise, each document is the TestSigner B signature of unsigned.pdf followed by one hand-written revision (forge::redefine) that redefines the object named.
+Note: the signed field of this document carries no /AP, so the '/AP removed' row is equivalent to an identical redefinition.
+Every scenario was run twice; outputs identical.
+
+## 1. Page count, signature field and signature dictionary boundaries; legitimate later revisions; invalid input
+$ target/debug/examples/qa_s48 edges
+(cwd: copy of git ls-files at tree 69877bfa..., stdin: none)
+pages redefined, /Count 1 unchanged [strict] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=1
+pages redefined, /Count 1 unchanged [dss] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=1
+pages /Count 1.0 (real, same value) [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(RevisionNotAllowed { end: 3335 }); digest=true sig=true; later_revisions=1
+pages /Count 1.0 (real, same value) [dss] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=1
+pages /Count 1.9 (real, truncated to 1) [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(RevisionNotAllowed { end: 3335 }); digest=true sig=true; later_revisions=1
+pages /Count 1.9 (real, truncated to 1) [dss] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=1
+pages /Count 2 without a new kid [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(PageCountChanged { signed: 1, last: 2 }); digest=true sig=true; later_revisions=1
+pages /Count 2 without a new kid [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(PageCountChanged { signed: 1, last: 2 }); digest=true sig=true; later_revisions=1
+pages /Count 0 [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(PageCountChanged { signed: 1, last: 0 }); digest=true sig=true; later_revisions=1
+pages /Count 0 [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(PageCountChanged { signed: 1, last: 0 }); digest=true sig=true; later_revisions=1
+pages /Count as a name [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(PageCountChanged { signed: 1, last: 0 }); digest=true sig=true; later_revisions=1
+pages /Count as a name [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(PageCountChanged { signed: 1, last: 0 }); digest=true sig=true; later_revisions=1
+field /F modified [strict] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=1
+field /F modified [dss] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=1
+field /F removed [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+field /F removed [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+field /Rect moved [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+field /Rect moved [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+field /T renamed [strict] Renamed -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+field /T renamed [dss] Renamed -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+field /TU added (key not compared) [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(RevisionNotAllowed { end: 3424 }); digest=true sig=true; later_revisions=1
+field /TU added (key not compared) [dss] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=1
+field /AP removed [strict] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=1
+field /AP removed [dss] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=1
+field redefined identical [strict] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=1
+field redefined identical [dss] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=1
+sig /M replaced [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+sig /M replaced [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+sig /Type replaced (tolerated key) [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(RevisionNotAllowed { end: 5128 }); digest=true sig=true; later_revisions=1
+sig /Type replaced (tolerated key) [dss] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=1
+sig /Location added [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+sig /Location added [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+legit: /DSS added [strict] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=1
+legit: /DSS added [dss] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=1
+legit: second signature [strict] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=1
+legit: second signature [strict] Signature2 -> Indeterminate / Some(NoCertificateChainFound); defect=None; digest=true sig=true; later_revisions=0
+legit: second signature [dss] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=1
+legit: second signature [dss] Signature2 -> Indeterminate / Some(NoCertificateChainFound); defect=None; digest=true sig=true; later_revisions=0
+bytes after %%EOF, no revision [strict] Err(Pdf(TrailingData { offset: 3180 })) kind=InvalidInput
+bytes after %%EOF, no revision [dss] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=0
+empty input [strict] Err(Pdf(MissingHeader)) kind=InvalidInput
+empty input [dss] Err(Pdf(MissingHeader)) kind=InvalidInput
+not a PDF [strict] Err(Pdf(MissingHeader)) kind=InvalidInput
+not a PDF [dss] Err(Pdf(MissingHeader)) kind=InvalidInput
+page-count revision truncated mid-way [strict] Err(Pdf(TrailingData { offset: 3179 })) kind=InvalidInput
+page-count revision truncated mid-way [dss] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=0
+exit code: 0
+
+## 2. Order: a signed byte flipped (CMS digest mismatch), then a modification appended
+$ target/debug/examples/qa_s48 order
+(cwd: copy of git ls-files at tree 69877bfa..., stdin: none)
+signed byte flipped, no later revision [strict] Signature1 -> TotalFailed / Some(HashFailure); defect=Some(Cms(MessageDigestMismatch)); digest=false sig=false; later_revisions=0
+signed byte flipped, no later revision [dss] Signature1 -> TotalFailed / Some(HashFailure); defect=Some(Cms(MessageDigestMismatch)); digest=false sig=false; later_revisions=0
+signed byte flipped + /Count 2 appended [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(PageCountChanged { signed: 1, last: 2 }); digest=false sig=false; later_revisions=1
+signed byte flipped + /Count 2 appended [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(PageCountChanged { signed: 1, last: 2 }); digest=false sig=false; later_revisions=1
+signed byte flipped + reason replaced [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=false sig=false; later_revisions=1
+signed byte flipped + reason replaced [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=false sig=false; later_revisions=1
+exit code: 0
+
+## 3. False positives: every PDF of tests/corpus/ and tests/corpus/chain/, and conformance/corpus/; only files giving PageCountChanged or SignatureDictionaryChanged under a preset are printed
+$ target/debug/examples/qa_s48 files-quiet crates/nacre-validate/tests/corpus/certified-form-fill.pdf crates/nacre-validate/tests/corpus/certified-p1-form-fill.pdf crates/nacre-validate/tests/corpus/certified-p1-second-signature.pdf crates/nacre-validate/tests/corpus/certified-pyhanko.pdf crates/nacre-validate/tests/corpus/certified-visible-field-signed.pdf crates/nacre-validate/tests/corpus/chain/chain-cms.pdf crates/nacre-validate/tests/corpus/chain/chain-cms-refused-revision.pdf crates/nacre-validate/tests/corpus/chain/chain-dss.pdf crates/nacre-validate/tests/corpus/docmdp-reference-cap.pdf crates/nacre-validate/tests/corpus/fieldmdp-locked-fill.pdf crates/nacre-validate/tests/corpus/fill-and-second-signature.pdf crates/nacre-validate/tests/corpus/signed-lta-pyhanko.pdf crates/nacre-validate/tests/corpus/signed-twice-pyhanko.pdf crates/nacre-validate/tests/corpus/unsigned.pdf conformance/corpus/foreign/public/pdf-signed-added-page.pdf
+(cwd: copy of git ls-files at tree 69877bfa..., stdin: none)
+pdf-signed-added-page.pdf [strict] Signature1 -> Some(PageCountChanged { signed: 1, last: 2 })
+pdf-signed-added-page.pdf [dss] Signature1 -> Some(PageCountChanged { signed: 1, last: 2 })
+files scanned: 15
+exit code: 0
+
+## 4. Same over the 55 files of tests/corpus/attacks/
+$ target/debug/examples/qa_s48 files-quiet crates/nacre-validate/tests/corpus/attacks/byterange-not-from-start.pdf crates/nacre-validate/tests/corpus/attacks/byterange-not-whole-file.pdf crates/nacre-validate/tests/corpus/attacks/byterange-outside-file.pdf crates/nacre-validate/tests/corpus/attacks/byterange-overlap.pdf crates/nacre-validate/tests/corpus/attacks/chain-ca-key-usage.pdf crates/nacre-validate/tests/corpus/attacks/chain-critical-extension.pdf crates/nacre-validate/tests/corpus/attacks/chain-dss-junk.pdf crates/nacre-validate/tests/corpus/attacks/chain-expired.pdf crates/nacre-validate/tests/corpus/attacks/chain-extended-key-usage.pdf crates/nacre-validate/tests/corpus/attacks/chain-impostor-root.pdf crates/nacre-validate/tests/corpus/attacks/chain-key-usage.pdf crates/nacre-validate/tests/corpus/attacks/chain-leaf-as-ca.pdf crates/nacre-validate/tests/corpus/attacks/chain-malformed-extension.pdf crates/nacre-validate/tests/corpus/attacks/chain-not-yet-valid.pdf crates/nacre-validate/tests/corpus/attacks/chain-path-length.pdf crates/nacre-validate/tests/corpus/attacks/eaa-freetext.pdf crates/nacre-validate/tests/corpus/attacks/isa-appended-revision.pdf crates/nacre-validate/tests/corpus/attacks/isa-no-xref.pdf crates/nacre-validate/tests/corpus/attacks/isa-page-added.pdf crates/nacre-validate/tests/corpus/attacks/isa-reason-redefined.pdf crates/nacre-validate/tests/corpus/attacks/isa-reason-replaced.pdf crates/nacre-validate/tests/corpus/attacks/isa-signature-moved.pdf crates/nacre-validate/tests/corpus/attacks/shadow-dss-page.pdf crates/nacre-validate/tests/corpus/attacks/shadow-fill-late-definition.pdf crates/nacre-validate/tests/corpus/attacks/shadow-form-field.pdf crates/nacre-validate/tests/corpus/attacks/shadow-hide-and-replace.pdf crates/nacre-validate/tests/corpus/attacks/shadow-hide.pdf crates/nacre-validate/tests/corpus/attacks/shadow-late-definition.pdf crates/nacre-validate/tests/corpus/attacks/shadow-replace.pdf crates/nacre-validate/tests/corpus/attacks/ssa-empty-field-signed.pdf crates/nacre-validate/tests/corpus/attacks/ssa-hidden-widget-shown.pdf crates/nacre-validate/tests/corpus/attacks/ssa-indirect-rect.pdf crates/nacre-validate/tests/corpus/attacks/ssa-kid-widget-shown.pdf crates/nacre-validate/tests/corpus/attacks/ssa-layer-widget-shown.pdf crates/nacre-validate/tests/corpus/attacks/ssa-moved-rect.pdf crates/nacre-validate/tests/corpus/attacks/ssa-orphan-widget.pdf crates/nacre-validate/tests/corpus/attacks/ssa-outside-fields.pdf crates/nacre-validate/tests/corpus/attacks/ssa-split-widget.pdf crates/nacre-validate/tests/corpus/attacks/ssa-toggle-noview-shown.pdf crates/nacre-validate/tests/corpus/attacks/ssa-unlisted-widget-shown.pdf crates/nacre-validate/tests/corpus/attacks/ssa-unreadable-rect.pdf crates/nacre-validate/tests/corpus/attacks/ssa-visible-signature.pdf crates/nacre-validate/tests/corpus/attacks/ssa-zero-rect-shown.pdf crates/nacre-validate/tests/corpus/attacks/subfilter-unsupported.pdf crates/nacre-validate/tests/corpus/attacks/swa-wrapped.pdf crates/nacre-validate/tests/corpus/attacks/usf-byterange-missing.pdf crates/nacre-validate/tests/corpus/attacks/usf-byterange-null.pdf crates/nacre-validate/tests/corpus/attacks/usf-byterange-short.pdf crates/nacre-validate/tests/corpus/attacks/usf-contents-empty.pdf crates/nacre-validate/tests/corpus/attacks/usf-contents-missing.pdf crates/nacre-validate/tests/corpus/attacks/usf-contents-null.pdf crates/nacre-validate/tests/corpus/attacks/usf-contents-zeros.pdf crates/nacre-validate/tests/corpus/attacks/usf-v-direct.pdf crates/nacre-validate/tests/corpus/attacks/usf-v-stream.pdf crates/nacre-validate/tests/corpus/attacks/xref-misplaced-startxref.pdf
+(cwd: copy of git ls-files at tree 69877bfa..., stdin: none)
+isa-page-added.pdf [strict] Signature1 -> Some(PageCountChanged { signed: 1, last: 2 })
+isa-page-added.pdf [dss] Signature1 -> Some(PageCountChanged { signed: 1, last: 2 })
+isa-reason-redefined.pdf [strict] Signature1 -> Some(SignatureDictionaryChanged)
+isa-reason-redefined.pdf [dss] Signature1 -> Some(SignatureDictionaryChanged)
+isa-reason-replaced.pdf [strict] Signature1 -> Some(SignatureDictionaryChanged)
+isa-reason-replaced.pdf [dss] Signature1 -> Some(SignatureDictionaryChanged)
+isa-signature-moved.pdf [strict] Signature1 -> Some(SignatureDictionaryChanged)
+isa-signature-moved.pdf [dss] Signature1 -> Some(SignatureDictionaryChanged)
+files scanned: 55
+exit code: 0
+
+## 5. Review finding 1 of fix loop 0 (fixed by 60adafe): an object of the last revision that cannot be read. Each revision carries one object written unterminated ('<< /B [ 1' then the xref), reached as stated
+$ target/debug/examples/qa_s48 fix
+(cwd: copy of git ls-files at tree 69877bfa..., stdin: none)
+isa-page-added + revision whose catalog reaches an unreadable object [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(PageCountChanged { signed: 1, last: 2 }); digest=true sig=true; later_revisions=2
+isa-page-added + revision whose catalog reaches an unreadable object [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(PageCountChanged { signed: 1, last: 2 }); digest=true sig=true; later_revisions=2
+b + catalog reaches an unreadable object, page count kept [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+b + catalog reaches an unreadable object, page count kept [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+b + catalog /Pages points at an unreadable object [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(PageCountChanged { signed: 1, last: 0 }); digest=true sig=true; later_revisions=1
+b + catalog /Pages points at an unreadable object [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(PageCountChanged { signed: 1, last: 0 }); digest=true sig=true; later_revisions=1
+b + signed field /TU points at an unreadable object [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+b + signed field /TU points at an unreadable object [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+b + catalog reaches an object absent from every xref [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(RevisionNotAllowed { end: 3353 }); digest=true sig=true; later_revisions=1
+b + catalog reaches an object absent from every xref [dss] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=1
+exit code: 0
+
+## 6. Review finding 3 of fix loop 0 (fixed by 60adafe): a large subtree under the signed field's /V. The signature dictionary carries an extra key /QaWidths holding the array named, signed in (nacre_pdf SignatureSpec, ETSI.CAdES.detached); then a /DSS revision (allowed), or the array's last item changed
+$ target/debug/examples/qa_s48 big
+(cwd: copy of git ls-files at tree 69877bfa..., stdin: none)
+/V holds an array of 4000 integers, no later revision [strict] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=0
+/V holds an array of 4000 integers, no later revision [dss] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=0
+/V holds an array of 4000 integers, then /DSS added [strict] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=1
+/V holds an array of 4000 integers, then /DSS added [dss] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=1
+/V array of 4000 integers, its last item changed later [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+/V array of 4000 integers, its last item changed later [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+/V holds an array of 70000 integers, no later revision [strict] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=0
+/V holds an array of 70000 integers, no later revision [dss] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=0
+/V holds an array of 70000 integers, then /DSS added [strict] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=1
+/V holds an array of 70000 integers, then /DSS added [dss] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=1
+/V array of 70000 integers, its last item changed later [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+/V array of 70000 integers, its last item changed later [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+/V holds an array of 200000 integers, no later revision [strict] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=0
+/V holds an array of 200000 integers, no later revision [dss] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=0
+/V holds an array of 200000 integers, then /DSS added [strict] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=1
+/V holds an array of 200000 integers, then /DSS added [dss] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=1
+/V array of 200000 integers, its last item changed later [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+/V array of 200000 integers, its last item changed later [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+/V holds an array of 1000 references, then /DSS added [strict] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=1
+/V holds an array of 1000 references, then /DSS added [dss] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=1
+/V holds an array of 70000 references, then /DSS added [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+/V holds an array of 70000 references, then /DSS added [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+exit code: 0
+
+## 7. Two signatures, then a later revision
+$ target/debug/examples/qa_s48 multi
+(cwd: copy of git ls-files at tree 69877bfa..., stdin: none)
+two signatures, then /DSS [strict] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=2
+two signatures, then /DSS [strict] Signature2 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=1
+two signatures, then /DSS [dss] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=2
+two signatures, then /DSS [dss] Signature2 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=1
+two signatures, then /Count 2 [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(PageCountChanged { signed: 1, last: 2 }); digest=true sig=true; later_revisions=2
+two signatures, then /Count 2 [strict] Signature2 -> TotalFailed / Some(FormatFailure); defect=Some(PageCountChanged { signed: 1, last: 2 }); digest=true sig=true; later_revisions=1
+two signatures, then /Count 2 [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(PageCountChanged { signed: 1, last: 2 }); digest=true sig=true; later_revisions=2
+two signatures, then /Count 2 [dss] Signature2 -> TotalFailed / Some(FormatFailure); defect=Some(PageCountChanged { signed: 1, last: 2 }); digest=true sig=true; later_revisions=1
+two signatures, then Signature2's reason replaced [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(RevisionNotAllowed { end: 7518 }); digest=true sig=true; later_revisions=2
+two signatures, then Signature2's reason replaced [strict] Signature2 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+two signatures, then Signature2's reason replaced [dss] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=2
+two signatures, then Signature2's reason replaced [dss] Signature2 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+exit code: 0
+
+## 8. Review finding of fix loop 1 (test added by ec9dbd5): an unreadable object in the last revision must skip no field comparison. Built independently of the committed test's helper: a revision redefining the catalog with /Foo pointing at an object written unterminated ('<< /B [ 1'), on top of each reason/rect attack file, or in the same revision as a field change, or after an allowed /DSS revision
+$ target/debug/examples/qa_s48 fix2
+(cwd: copy of git ls-files at tree 69877bfa..., stdin: none)
+isa-reason-replaced + revision whose catalog reaches an unreadable object [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=2
+isa-reason-replaced + revision whose catalog reaches an unreadable object [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=2
+isa-reason-redefined + revision whose catalog reaches an unreadable object [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=2
+isa-reason-redefined + revision whose catalog reaches an unreadable object [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=2
+isa-signature-moved + revision whose catalog reaches an unreadable object [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=2
+isa-signature-moved + revision whose catalog reaches an unreadable object [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=2
+b + reason replaced and catalog reaches an unreadable object, same revision [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+b + reason replaced and catalog reaches an unreadable object, same revision [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+b + /Rect moved and catalog reaches an unreadable object, same revision [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+b + /Rect moved and catalog reaches an unreadable object, same revision [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+m2 (reason replaced) + a further revision whose catalog reaches an unreadable object [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=2
+m2 (reason replaced) + a further revision whose catalog reaches an unreadable object [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=2
+b + /DSS added + a further revision whose catalog reaches an unreadable object [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=2
+b + /DSS added + a further revision whose catalog reaches an unreadable object [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=2
+exit code: 0
+

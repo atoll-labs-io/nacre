@@ -725,6 +725,7 @@ impl Bench {
         self.holds(&mut cases);
         self.anchor_delegates(&mut cases);
         self.critical(&mut cases);
+        self.modified(&mut cases);
         cases
             .into_iter()
             .map(|(name, pdf)| (format!("bench-{name}"), pdf))
@@ -738,6 +739,61 @@ fn put(cases: &mut Vec<(String, Vec<u8>)>, name: &str, pdf: Vec<u8>) {
 
 /// The bench cases, one per row of the s18 research's spike tables, `x` cases aside (s47).
 impl Bench {
+    /// s48, `m`: modifications after signing that DSS's format checks refuse, from the bench
+    /// signer's B signature. `m2` stands in for DSS's `pades-spoofing-replaced-reason.pdf`,
+    /// which carries a real person's name and is never committed.
+    fn modified(&self, cases: &mut Vec<(String, Vec<u8>)>) {
+        let b = forge::signed(&self.signer, Level::B);
+        let doc = Document::parse(&b).unwrap();
+
+        let Some(Object::Reference(old_pages)) = doc.catalog().get(b"Pages").cloned() else {
+            panic!("no /Pages reference");
+        };
+        let Object::Dictionary(old) = doc.object(old_pages).unwrap() else {
+            panic!("/Pages is no dictionary");
+        };
+        let Some(Object::Array(kids)) = old.get(b"Kids").cloned() else {
+            panic!("no /Kids");
+        };
+        // Ids are allocated in sequence: the page takes the first free one, its tree the next.
+        let page_id = doc.update().add(Object::Null).unwrap();
+        let pages_id = nacre_pdf::ObjectId::new(page_id.number + 1, 0);
+        let mut update = doc.update();
+        let mut page = Dictionary::new();
+        page.insert(b"Type", Object::Name(b"Page".to_vec()));
+        page.insert(b"Parent", Object::Reference(pages_id));
+        page.insert(
+            b"MediaBox",
+            Object::Array([0, 0, 595, 842].map(Object::Integer).to_vec()),
+        );
+        assert_eq!(update.add(Object::Dictionary(page)).unwrap(), page_id);
+        let mut pages = Dictionary::new();
+        pages.insert(b"Type", Object::Name(b"Pages".to_vec()));
+        pages.insert(
+            b"Kids",
+            Object::Array(
+                kids.into_iter()
+                    .chain([Object::Reference(page_id)])
+                    .collect(),
+            ),
+        );
+        pages.insert(b"Count", Object::Integer(2));
+        assert_eq!(update.add(Object::Dictionary(pages)).unwrap(), pages_id);
+        update.set_catalog(b"Pages", Object::Reference(pages_id));
+        put(cases, "m1-b-page-added", update.finish().unwrap());
+
+        let value = doc.signature_fields()[0].value.unwrap();
+        let Object::Dictionary(mut signature) = doc.object(value).unwrap() else {
+            panic!("no signature dictionary");
+        };
+        signature.insert(b"Reason", Object::String(b"Rejected".to_vec()));
+        put(
+            cases,
+            "m2-b-reason-replaced",
+            forge::redefine(&b, &[(value, Object::Dictionary(signature))]),
+        );
+    }
+
     /// Spike 3, `l`: the bench signer at each level, then each element of a level alone.
     fn levels(&self, cases: &mut Vec<(String, Vec<u8>)>) {
         let s = &self.signer;

@@ -15,7 +15,7 @@ use nacre_cms::{
 };
 use nacre_core::{DigestAlgorithm, SignatureAlgorithm, Signer, TimestampAuthority};
 use nacre_pades::{Level, sign_at_level};
-use nacre_pdf::{Dictionary, Document, Object, SignatureSpec};
+use nacre_pdf::{Dictionary, Document, Object, ObjectId, SignatureSpec};
 use p256::ecdsa::signature::hazmat::PrehashSigner;
 use p256::ecdsa::{DerSignature, SigningKey};
 use sha2::{Digest, Sha256};
@@ -644,6 +644,94 @@ pub fn resign(pdf: &[u8], signer: &dyn Signer) -> Vec<u8> {
     slot.fill(b'0');
     slot[..hexed.len()].copy_from_slice(hexed.as_bytes());
     out
+}
+
+/// `pdf` given one revision written by hand that redefines each object of `objects` under
+/// its id: a classic cross-reference section, a trailer with `/Prev` and the same `/Root`.
+/// No stream is written this way.
+pub fn redefine(pdf: &[u8], objects: &[(ObjectId, Object)]) -> Vec<u8> {
+    let doc = Document::parse(pdf).unwrap();
+    let prev = doc.revisions().last().unwrap().startxref;
+    let root = doc.catalog_id();
+    let Some(Object::Integer(size)) = doc.trailer().get(b"Size") else {
+        panic!("no /Size");
+    };
+    let mut out = pdf.to_vec();
+    if !matches!(out.last(), Some(b'\n' | b'\r')) {
+        out.push(b'\n');
+    }
+    let mut entries = Vec::new();
+    for (id, object) in objects {
+        entries.push((*id, out.len()));
+        out.extend_from_slice(format!("{} {} obj\n", id.number, id.generation).as_bytes());
+        serialize(&mut out, object);
+        out.extend_from_slice(b"\nendobj\n");
+    }
+    entries.sort_unstable();
+    let size = entries
+        .iter()
+        .map(|(id, _)| i64::from(id.number) + 1)
+        .chain([*size])
+        .max()
+        .unwrap();
+    let xref_at = out.len();
+    out.extend_from_slice(b"xref\n");
+    for (id, at) in &entries {
+        out.extend_from_slice(
+            format!("{} 1\n{at:010} {:05} n\r\n", id.number, id.generation).as_bytes(),
+        );
+    }
+    out.extend_from_slice(
+        format!(
+            "trailer\n<< /Size {size} /Prev {prev} /Root {} {} R >>\nstartxref\n{xref_at}\n%%EOF\n",
+            root.number, root.generation
+        )
+        .as_bytes(),
+    );
+    out
+}
+
+/// `value` written as PDF syntax, strings in hex.
+fn serialize(out: &mut Vec<u8>, value: &Object) {
+    match value {
+        Object::Null => out.extend_from_slice(b"null"),
+        Object::Bool(b) => out.extend_from_slice(if *b { b"true" } else { b"false" }),
+        Object::Integer(n) => out.extend_from_slice(n.to_string().as_bytes()),
+        Object::Real(r) => out.extend_from_slice(format!("{r:?}").as_bytes()),
+        Object::String(bytes) => {
+            out.push(b'<');
+            for byte in bytes {
+                out.extend_from_slice(format!("{byte:02X}").as_bytes());
+            }
+            out.push(b'>');
+        }
+        Object::Name(n) => {
+            out.push(b'/');
+            out.extend_from_slice(n);
+        }
+        Object::Array(items) => {
+            out.push(b'[');
+            for item in items {
+                out.push(b' ');
+                serialize(out, item);
+            }
+            out.extend_from_slice(b" ]");
+        }
+        Object::Dictionary(dict) => {
+            out.extend_from_slice(b"<<");
+            for (key, value) in dict.iter() {
+                out.extend_from_slice(b" /");
+                out.extend_from_slice(key);
+                out.push(b' ');
+                serialize(out, value);
+            }
+            out.extend_from_slice(b" >>");
+        }
+        Object::Reference(id) => {
+            out.extend_from_slice(format!("{} {} R", id.number, id.generation).as_bytes());
+        }
+        Object::Stream(_) => panic!("a stream is not serialized"),
+    }
 }
 
 /// `pdf` given one revision whose catalog points at a `/DSS` listing `certificates` under

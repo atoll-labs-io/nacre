@@ -14,6 +14,7 @@ use x509_cert::ext::pkix::SubjectKeyIdentifier;
 use crate::chain::{Purpose, Rules, build_path, in_validity, repeats_extension};
 use crate::date::pdf_date;
 use crate::level::{DocumentTimestamp, Structure};
+use crate::modifications::changed_since;
 use crate::revisions::{Qualified, qualify};
 use crate::revocation::{FRESHNESS_TOLERANCE, RevocationPool, judge_path};
 use crate::{
@@ -242,6 +243,12 @@ fn validate_with(
     };
     let dss = Dss::read(&doc, pdf);
     let structure = Structure::read(&doc, pdf, &options, anchors);
+    // Read once for every signature, and only when one is followed by a later revision.
+    let last_objects = checked
+        .iter()
+        .any(|((_, _, end), _, _, _)| end.is_some_and(|end| end < pdf.len()))
+        .then(|| doc.reachable().ok())
+        .flatten();
 
     Ok(checked
         .into_iter()
@@ -274,17 +281,32 @@ fn validate_with(
                 .filter(|_| policy.refuse_later_revisions)
                 .find(|r| !matches!(r.verdict, RevisionVerdict::Allowed(_)))
                 .map(|r| r.end);
-            let validation = match (result, added_by, refused) {
-                (Err(defect), _, _) => SignatureValidation::defective(field, defect, mine),
-                (Ok(_), Some(end), _) => SignatureValidation::defective(
+            // DSS runs its format checks before crypto and chain.
+            let modified = end.zip(value).and_then(|(end, value)| {
+                changed_since(
+                    &doc,
+                    last_objects.as_ref(),
+                    pdf,
+                    end,
+                    &field,
+                    value,
+                    &options,
+                )
+            });
+            let validation = match (modified, result, added_by, refused) {
+                (Some(defect), result, _, _) => {
+                    SignatureValidation::modified(field, defect, result.err(), mine)
+                }
+                (None, Err(defect), _, _) => SignatureValidation::defective(field, defect, mine),
+                (None, Ok(_), Some(end), _) => SignatureValidation::defective(
                     field,
                     Defect::AddedByRevisionNotAllowed { end },
                     mine,
                 ),
-                (Ok(_), None, Some(end)) => {
+                (None, Ok(_), None, Some(end)) => {
                     SignatureValidation::defective(field, Defect::RevisionNotAllowed { end }, mine)
                 }
-                (Ok(signed), None, None) => {
+                (None, Ok(signed), None, None) => {
                     let later: Vec<&DocumentTimestamp> = structure
                         .timestamps
                         .iter()

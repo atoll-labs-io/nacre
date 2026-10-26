@@ -1,0 +1,18 @@
+QA s48-detect-later-modifications — AC4, boundary: each new attack file cut at the end of its signed bytes, so the rejection must come from the later revision alone
+Tree: 69877bfa853771632548531e76bec7873b83c7b9; cwd: copy of git ls-files; program as in ac2-both-presets.txt; files written under the temporary directory; run twice, identical
+
+isa-page-added-signed-revision-only.pdf cut at the end of the signed bytes, 3179 of 3433
+isa-reason-replaced-signed-revision-only.pdf cut at the end of the signed bytes, 9716 of 18199
+isa-reason-redefined-signed-revision-only.pdf cut at the end of the signed bytes, 9758 of 9880
+isa-signature-moved-signed-revision-only.pdf cut at the end of the signed bytes, 3179 of 3407
+$ target/debug/examples/qa_s48 files <tmp>/cut/isa-page-added-signed-revision-only.pdf <tmp>/cut/isa-reason-redefined-signed-revision-only.pdf <tmp>/cut/isa-reason-replaced-signed-revision-only.pdf <tmp>/cut/isa-signature-moved-signed-revision-only.pdf
+(cwd: copy of git ls-files at tree 69877bfa..., stdin: none)
+isa-page-added-signed-revision-only.pdf [strict] Signature1 -> Indeterminate / Some(NoCertificateChainFound); defect=None; digest=true sig=true; later_revisions=0
+isa-page-added-signed-revision-only.pdf [dss] Signature1 -> Indeterminate / Some(NoCertificateChainFound); defect=None; digest=true sig=true; later_revisions=0
+isa-reason-redefined-signed-revision-only.pdf [strict] Signature1 -> Indeterminate / Some(NoCertificateChainFound); defect=None; digest=true sig=true; later_revisions=0
+isa-reason-redefined-signed-revision-only.pdf [dss] Signature1 -> Indeterminate / Some(NoCertificateChainFound); defect=None; digest=true sig=true; later_revisions=0
+isa-reason-replaced-signed-revision-only.pdf [strict] Signature1 -> Indeterminate / Some(NoCertificateChainFound); defect=None; digest=true sig=true; later_revisions=0
+isa-reason-replaced-signed-revision-only.pdf [dss] Signature1 -> Indeterminate / Some(NoCertificateChainFound); defect=None; digest=true sig=true; later_revisions=0
+isa-signature-moved-signed-revision-only.pdf [strict] Signature1 -> Indeterminate / Some(NoCertificateChainFound); defect=None; digest=true sig=true; later_revisions=0
+isa-signature-moved-signed-revision-only.pdf [dss] Signature1 -> Indeterminate / Some(NoCertificateChainFound); defect=None; digest=true sig=true; later_revisions=0
+exit code: 0

@@ -16,7 +16,7 @@ use nacre_pades::{DateTime, sign};
 use nacre_pdf::{Document, Object};
 use nacre_validate::{
     AllowedChange, Defect, LaterRevision, RevisionVerdict, RevocationDefect, SignatureValidation,
-    TrustAnchors, validate, validate_with_anchors,
+    TrustAnchors, ValidationPolicy, validate, validate_with_anchors, validate_with_policy,
 };
 
 const UNSIGNED: &[u8] = include_bytes!("corpus/unsigned.pdf");
@@ -434,4 +434,41 @@ fn revision_defect_outranks_chain() {
 
     refused_revision(&result);
     assert!(result.chain.is_none());
+}
+
+/// DSS 6.5.1's own case of a page added after signing (s48): its `PdfPageDifference` check
+/// fails it under both presets, where `dss()` keeps no revision rule.
+#[test]
+fn dss_added_page_fails_under_both_presets() {
+    let pdf =
+        include_bytes!("../../../conformance/corpus/foreign/public/pdf-signed-added-page.pdf");
+
+    let strict = validate(pdf).unwrap();
+    let dss = validate_with_policy(
+        pdf,
+        &TrustAnchors::default(),
+        SystemTime::UNIX_EPOCH,
+        None,
+        &ValidationPolicy::dss(),
+    )
+    .unwrap();
+
+    for results in [&strict, &dss] {
+        let [result] = results.as_slice() else {
+            panic!("{results:?}");
+        };
+        assert_eq!(result.report.indication(), Indication::TotalFailed);
+        assert_eq!(
+            result.report.sub_indication(),
+            Some(SubIndication::FormatFailure)
+        );
+        assert!(
+            matches!(
+                result.defect,
+                Some(Defect::PageCountChanged { signed: 1, last: 2 })
+            ),
+            "{:?}",
+            result.defect
+        );
+    }
 }
