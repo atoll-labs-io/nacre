@@ -9,10 +9,15 @@
 /// otherwise lack, such as a signing time (`/M`) missing or out of the signer's validity,
 /// revocation data issued after a certificate's `notAfter` with no `expiredCertsOnCRL`
 /// not counting, revocation data from a CA out of its validity at the control date, a
-/// CA without `subjectKeyIdentifier`, or a `certificateHold` before the best-signature-time
-/// giving `TRY_LATER`, is no switch:
+/// CA without `subjectKeyIdentifier`, a `certificateHold` before the best-signature-time
+/// giving `TRY_LATER`, or a page count or a signature field and dictionary changed between
+/// the signed and the last revision ([`Defect::PageCountChanged`],
+/// [`Defect::SignatureDictionaryChanged`]), is no switch:
 /// both presets apply it, so no preset is laxer than DSS. Turning one switch off from
 /// `strict()` reopens that switch's attack only.
+///
+/// [`Defect::PageCountChanged`]: crate::Defect::PageCountChanged
+/// [`Defect::SignatureDictionaryChanged`]: crate::Defect::SignatureDictionaryChanged
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ValidationPolicy {
@@ -128,19 +133,21 @@ impl ValidationPolicy {
 
     /// **Unsafe for deciding whether to trust a document**: this preset accepts attacks
     /// that [`strict`](Self::strict) refuses — shadow attacks and incremental saving
-    /// attacks (any later revision), sneaky signatures, data appended after the last
-    /// `%%EOF`, a signer certificate whose key usage forbids signing, a signature under a
-    /// `/SubFilter` Nacre does not support, a cross-reference section found only by
-    /// skipping whitespace, a CRL issued after a certificate expired, trusted on its
-    /// `expiredCertsOnCRL`, or an OCSP response trusted on its `archiveCutoff`, revocation
-    /// data saying revoked, trusted from a CA or responder out of its validity, a CA's
-    /// "good" trusted from a delegated responder of the anchor out of its validity, an OCSP
-    /// response read past a critical extension, a stale "not revoked" CRL or OCSP response
-    /// appended to the `/DSS` for a signature with no timestamp, and a stale "not revoked"
-    /// clearing a timestamp authority.
+    /// attacks (any later revision that keeps the page count and the signature field),
+    /// sneaky signatures, data appended after the last `%%EOF`, a signer certificate whose
+    /// key usage forbids signing, a signature under a `/SubFilter` Nacre does not support,
+    /// a cross-reference section found only by skipping whitespace, a CRL issued after a
+    /// certificate expired, trusted on its `expiredCertsOnCRL`, or an OCSP response trusted
+    /// on its `archiveCutoff`, revocation data saying revoked, trusted from a CA or
+    /// responder out of its validity, a CA's "good" trusted from a delegated responder of
+    /// the anchor out of its validity, an OCSP response read past a critical extension, a
+    /// stale "not revoked" CRL or OCSP response appended to the `/DSS` for a signature with
+    /// no timestamp, and a stale "not revoked" clearing a timestamp authority.
     ///
     /// Every switch off: the verdict DSS 6.5.1 gives, for comparing Nacre with it. Only the
-    /// rules DSS also applies remain.
+    /// rules DSS also applies remain, among them its two format checks on a later
+    /// revision: a page added or removed, and the signature field or dictionary changed,
+    /// still fail the signature, though no later revision is otherwise refused.
     pub const fn dss() -> Self {
         Self {
             refuse_later_revisions: false,

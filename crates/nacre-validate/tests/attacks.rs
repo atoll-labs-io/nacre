@@ -13,7 +13,7 @@ use std::time::SystemTime;
 
 use nacre_validate::{
     ChainDefect, Defect, Error, ObjectId, RevisionVerdict, RevocationDefect, SignatureValidation,
-    TrustAnchors, validate, validate_with_anchors,
+    TrustAnchors, ValidationPolicy, validate, validate_with_anchors, validate_with_policy,
 };
 
 /// The single signature of `file`, checked to be refused as a format failure.
@@ -173,6 +173,168 @@ fn swa_wrapped_is_rejected() {
 #[test]
 fn isa_appended_revision_is_rejected() {
     revision_refused(include_bytes!("corpus/attacks/isa-appended-revision.pdf"));
+}
+
+/// The single signature of `file`, sound in itself, refused for a modification after
+/// signing under `strict()`, and refused under `dss()` too, where only DSS's format checks
+/// can refuse it: the defect under `strict()`.
+fn modified(file: &[u8]) -> Defect {
+    for result in [
+        validate(file).unwrap(),
+        validate_with_policy(
+            file,
+            &TrustAnchors::default(),
+            SystemTime::UNIX_EPOCH,
+            None,
+            &ValidationPolicy::dss(),
+        )
+        .unwrap(),
+    ] {
+        let [result] = result.as_slice() else {
+            panic!("{result:?}");
+        };
+        assert_eq!(result.report.indication(), Indication::TotalFailed);
+        assert_eq!(
+            result.report.sub_indication(),
+            Some(SubIndication::FormatFailure)
+        );
+        assert!(result.digest_verified && result.signature_verified);
+    }
+    validate(file).unwrap().remove(0).defect.unwrap()
+}
+
+#[test]
+fn isa_page_added_is_rejected() {
+    let defect = modified(include_bytes!("corpus/attacks/isa-page-added.pdf"));
+    assert!(
+        matches!(defect, Defect::PageCountChanged { signed: 1, last: 2 }),
+        "{defect:?}"
+    );
+}
+
+#[test]
+fn isa_reason_replaced_is_rejected() {
+    let defect = modified(include_bytes!("corpus/attacks/isa-reason-replaced.pdf"));
+    assert!(
+        matches!(defect, Defect::SignatureDictionaryChanged),
+        "{defect:?}"
+    );
+}
+
+#[test]
+fn isa_reason_redefined_is_rejected() {
+    let defect = modified(include_bytes!("corpus/attacks/isa-reason-redefined.pdf"));
+    assert!(
+        matches!(defect, Defect::SignatureDictionaryChanged),
+        "{defect:?}"
+    );
+}
+
+#[test]
+fn isa_signature_moved_is_rejected() {
+    let defect = modified(include_bytes!("corpus/attacks/isa-signature-moved.pdf"));
+    assert!(
+        matches!(defect, Defect::SignatureDictionaryChanged),
+        "{defect:?}"
+    );
+}
+
+/// The only signature of `file` under `strict()` then `dss()`.
+fn both_presets(file: &[u8]) -> [SignatureValidation; 2] {
+    [
+        validate(file).unwrap(),
+        validate_with_policy(
+            file,
+            &TrustAnchors::default(),
+            SystemTime::UNIX_EPOCH,
+            None,
+            &ValidationPolicy::dss(),
+        )
+        .unwrap(),
+    ]
+    .map(|mut results| {
+        assert_eq!(results.len(), 1, "{results:?}");
+        results.remove(0)
+    })
+}
+
+#[test]
+fn modification_is_judged_before_a_failed_digest() {
+    let file = include_bytes!("corpus/attacks/isa-page-added.pdf");
+    let at = file.windows(6).position(|w| w == b"72 760").unwrap();
+    let mut file = file.to_vec();
+    file[at + 5] = b'1';
+    for result in both_presets(&file) {
+        assert_eq!(result.report.indication(), Indication::TotalFailed);
+        assert_eq!(
+            result.report.sub_indication(),
+            Some(SubIndication::FormatFailure)
+        );
+        assert!(!result.digest_verified);
+        assert!(
+            matches!(
+                result.defect,
+                Some(Defect::PageCountChanged { signed: 1, last: 2 })
+            ),
+            "{:?}",
+            result.defect
+        );
+    }
+}
+
+/// `file` followed by a revision whose catalog reaches an object that never ends.
+fn with_unreadable_object(file: &[u8]) -> Vec<u8> {
+    let tail = file.windows(10).rposition(|w| w == b"startxref\n").unwrap() + 10;
+    let prev = std::str::from_utf8(&file[tail..])
+        .unwrap()
+        .split_whitespace()
+        .next()
+        .unwrap();
+    let mut file = file.to_vec();
+    let broken = file.len();
+    file.extend_from_slice(b"10 0 obj\n<< /Broken [ 1 2 \nendobj\n");
+    let catalog = file.len();
+    file.extend_from_slice(
+        b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R /AcroForm 8 0 R /Foo 10 0 R >>\nendobj\n",
+    );
+    let xref = file.len();
+    file.extend_from_slice(
+        format!(
+            "xref\n1 1\n{catalog:010} 00000 n\r\n10 1\n{broken:010} 00000 n\r\n\
+             trailer\n<< /Size 11 /Prev {prev} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n"
+        )
+        .as_bytes(),
+    );
+    file
+}
+
+#[test]
+fn unreadable_object_in_the_last_revision_skips_no_check() {
+    let file = with_unreadable_object(include_bytes!("corpus/attacks/isa-page-added.pdf"));
+    for result in both_presets(&file) {
+        assert_eq!(result.report.indication(), Indication::TotalFailed);
+        assert!(
+            matches!(
+                result.defect,
+                Some(Defect::PageCountChanged { signed: 1, last: 2 })
+            ),
+            "{:?}",
+            result.defect
+        );
+    }
+}
+
+#[test]
+fn unreadable_object_in_the_last_revision_skips_no_field_comparison() {
+    let file = with_unreadable_object(include_bytes!("corpus/attacks/isa-reason-replaced.pdf"));
+    for result in both_presets(&file) {
+        assert_eq!(result.report.indication(), Indication::TotalFailed);
+        assert!(
+            matches!(result.defect, Some(Defect::SignatureDictionaryChanged)),
+            "{:?}",
+            result.defect
+        );
+    }
 }
 
 #[test]

@@ -14,7 +14,11 @@
 //! change fails the signature with [`Defect::RevisionNotAllowed`]. A signature its own
 //! revision refuses as a signature (on a certified document, one whose field shows a widget
 //! the certified state did not place at the same rectangle, or one under DocMDP 1) fails
-//! with [`Defect::AddedByRevisionNotAllowed`].
+//! with [`Defect::AddedByRevisionNotAllowed`]. Before the CMS verdict, as DSS 6.5.1 runs its
+//! format checks first, the revision the signed bytes end at is compared with the last:
+//! a different root `/Pages` `/Count` gives [`Defect::PageCountChanged`], a signature field
+//! missing from it or whose `/V`, `/Rect`, `/AP` or `/F` changed beyond what DSS tolerates
+//! [`Defect::SignatureDictionaryChanged`], both under every policy.
 //!
 //! [`validate_with_revocation`] also builds the signer's certification path from the
 //! certificates of the CMS and of the `/DSS` up to the [`TrustAnchors`] the caller supplies
@@ -80,6 +84,7 @@ mod chain;
 mod date;
 mod error;
 mod level;
+mod modifications;
 mod policy;
 mod report;
 mod revisions;

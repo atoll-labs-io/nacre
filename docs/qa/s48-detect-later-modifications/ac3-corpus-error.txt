@@ -1,0 +1,12 @@
+QA s48-detect-later-modifications — AC3, invalid input and boundary: the committed DSS file cut at the end of its signed bytes (no later revision), and with its last /Count 2 rewritten /Count 3
+Tree: 69877bfa853771632548531e76bec7873b83c7b9; cwd: copy of git ls-files; program as in ac2-both-presets.txt; run twice, identical
+
+pdf-signed-added-page-signed-revision-only.pdf cut at the end of the signed bytes (revision end 151126, from qa_s48 prefix), 151126 of 152031
+<tmp>/cut/pdf-signed-added-page-count3.pdf last /Count 2 at offset 151340 rewritten /Count 3
+$ target/debug/examples/qa_s48 files <tmp>/cut/pdf-signed-added-page-signed-revision-only.pdf <tmp>/cut/pdf-signed-added-page-count3.pdf
+(cwd: copy of git ls-files at tree 69877bfa..., stdin: none)
+pdf-signed-added-page-signed-revision-only.pdf [strict] Signature1 -> Indeterminate / Some(NoCertificateChainFound); defect=None; digest=true sig=true; later_revisions=0
+pdf-signed-added-page-signed-revision-only.pdf [dss] Signature1 -> Indeterminate / Some(NoCertificateChainFound); defect=None; digest=true sig=true; later_revisions=0
+pdf-signed-added-page-count3.pdf [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(PageCountChanged { signed: 1, last: 3 }); digest=true sig=true; later_revisions=1
+pdf-signed-added-page-count3.pdf [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(PageCountChanged { signed: 1, last: 3 }); digest=true sig=true; later_revisions=1
+exit code: 0

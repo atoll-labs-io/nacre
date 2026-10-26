@@ -1,0 +1,342 @@
+QA s48-detect-later-modifications — AC2: the rule under both presets; the two DSS files and one bench case per shape get DSS's verdict
+Tree: 69877bfa853771632548531e76bec7873b83c7b9 (after the fix run ec9dbd5)
+Build: in a mktemp -d copy of git ls-files (no .env* file to copy): cargo fetch && cargo build --workspace --all-features (exit 0), then cargo build -p nacre-validate --example qa_s48 (exit 0)
+Policies: ValidationPolicy::strict() and ValidationPolicy::dss(), validate_with_policy, control date 2026-10-23T00:00Z, no revocation source.
+Anchors: none for files on disk; the TestSigner([0x11;32]) certificate for documents forged at run time (plus TestSigner([0x22;32]) in mode multi).
+DSS 6.5.1's verdict named by the story and the research for these shapes: TOTAL_FAILED / FORMAT_FAILURE.
+Every scenario was run twice (two output folders, diff -r identical). Every verdict line of the QA of tree 5ea26620 (127 lines across this file and ac2-both-presets-error.txt) came back byte-identical (sorted diff empty).
+The program is the one the QA of tree 5ea26620 quoted, unchanged, plus one mode "fix2" for the review finding of fix loop 1.
+
+--- program: crates/nacre-validate/examples/qa_s48.rs (in the temporary copy; forge.rs is the story's tests/support/forge.rs, included by #[path]) ---
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::indexing_slicing)]
+//! QA s48: the public interface of nacre-validate, under strict() and dss().
+#[path = "../tests/support/forge.rs"]
+#[allow(dead_code)]
+mod forge;
+
+use std::time::SystemTime;
+use nacre_core::{Signer, TestSigner};
+use nacre_pades::{DateTime, sign};
+use nacre_pdf::{Document, Object, ObjectId};
+use nacre_validate::{TrustAnchors, ValidationPolicy, validate, validate_with_policy};
+
+fn at() -> SystemTime {
+    x509_cert::time::Time::from(der::DateTime::new(2026, 10, 23, 0, 0, 0).unwrap()).to_system_time()
+}
+
+fn judge(name: &str, pdf: &[u8], anchors: &TrustAnchors) {
+    for (label, policy) in [("strict", ValidationPolicy::strict()), ("dss", ValidationPolicy::dss())] {
+        match validate_with_policy(pdf, anchors, at(), None, &policy) {
+            Ok(results) if results.is_empty() => println!("{name} [{label}] no signature"),
+            Ok(results) => {
+                for r in results {
+                    println!(
+                        "{name} [{label}] {} -> {:?} / {:?}; defect={:?}; digest={} sig={}; later_revisions={}",
+                        r.field, r.report.indication(), r.report.sub_indication(), r.defect,
+                        r.digest_verified, r.signature_verified, r.later_revisions.len()
+                    );
+                }
+            }
+            Err(e) => println!("{name} [{label}] Err({e:?}) kind={:?}", e.kind()),
+        }
+    }
+}
+
+fn dict_of(doc: &Document<'_>, id: ObjectId) -> nacre_pdf::Dictionary {
+    let Object::Dictionary(d) = doc.object(id).unwrap() else { panic!("not a dictionary") };
+    d
+}
+
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let mode = args.get(1).map(String::as_str).unwrap_or("");
+    let signer = TestSigner::from_secret(&[0x11; 32]).unwrap();
+    let anchors = TrustAnchors::from_certificates(signer.certificate_chain().iter().map(Vec::as_slice)).unwrap();
+    let none = TrustAnchors::default();
+    let time = DateTime::new(2026, 10, 22, 8, 0, 0).unwrap();
+    let b = sign(forge::UNSIGNED, &signer, time).unwrap();
+    let doc = Document::parse(&b).unwrap();
+    let field = doc.signature_fields()[0].clone();
+    let value = field.value.unwrap();
+    let pages_id = match doc.catalog().get(b"Pages") { Some(Object::Reference(id)) => *id, _ => panic!() };
+    let pages = dict_of(&doc, pages_id);
+    let fdict = dict_of(&doc, field.id);
+    let sig = dict_of(&doc, value);
+
+    match mode {
+        "files" => {
+            for path in &args[2..] {
+                let pdf = std::fs::read(path).unwrap();
+                judge(path.rsplit('/').next().unwrap(), &pdf, &none);
+            }
+        }
+        "files-quiet" => {
+            // Only files giving one of the two new defects under some preset are printed.
+            for path in &args[2..] {
+                let pdf = std::fs::read(path).unwrap();
+                for (label, policy) in [("strict", ValidationPolicy::strict()), ("dss", ValidationPolicy::dss())] {
+                    if let Ok(results) = validate_with_policy(&pdf, &none, at(), None, &policy) {
+                        for r in results {
+                            let d = format!("{:?}", r.defect);
+                            if d.contains("PageCountChanged") || d.contains("SignatureDictionaryChanged") {
+                                println!("{} [{label}] {} -> {d}", path.rsplit('/').next().unwrap(), r.field);
+                            }
+                        }
+                    }
+                }
+            }
+            println!("files scanned: {}", args.len() - 2);
+        }
+        "forged" => {
+            println!("signed field {:?} keys: {:?}", field.name,
+                fdict.iter().map(|(k, _)| String::from_utf8_lossy(k).into_owned()).collect::<Vec<_>>());
+            judge("b (signed, no later revision)", &b, &anchors);
+            // m1 shape: page added, as the campaign's bench case does.
+            let Some(Object::Array(kids)) = pages.get(b"Kids").cloned() else { panic!() };
+            let page_id = doc.update().add(Object::Null).unwrap();
+            let new_pages = ObjectId::new(page_id.number + 1, 0);
+            let mut update = doc.update();
+            let mut page = nacre_pdf::Dictionary::new();
+            page.insert(b"Type", Object::Name(b"Page".to_vec()));
+            page.insert(b"Parent", Object::Reference(new_pages));
+            page.insert(b"MediaBox", Object::Array([0, 0, 595, 842].map(Object::Integer).to_vec()));
+            update.add(Object::Dictionary(page)).unwrap();
+            let mut p = nacre_pdf::Dictionary::new();
+            p.insert(b"Type", Object::Name(b"Pages".to_vec()));
+            p.insert(b"Kids", Object::Array(kids.into_iter().chain([Object::Reference(page_id)]).collect()));
+            p.insert(b"Count", Object::Integer(2));
+            update.add(Object::Dictionary(p)).unwrap();
+            update.set_catalog(b"Pages", Object::Reference(new_pages));
+            judge("m1 page added", &update.finish().unwrap(), &anchors);
+            // m2 shape: signature dictionary redefined, /Reason replaced.
+            let mut s = sig.clone();
+            s.insert(b"Reason", Object::String(b"Rejected".to_vec()));
+            judge("m2 reason replaced", &forge::redefine(&b, &[(value, Object::Dictionary(s))]), &anchors);
+        }
+        "edges" => {
+            let with_pages = |count: Object| {
+                let mut p = pages.clone();
+                p.insert(b"Count", count);
+                forge::redefine(&b, &[(pages_id, Object::Dictionary(p))])
+            };
+            judge("pages redefined, /Count 1 unchanged", &with_pages(Object::Integer(1)), &anchors);
+            judge("pages /Count 1.0 (real, same value)", &with_pages(Object::Real(1.0)), &anchors);
+            judge("pages /Count 1.9 (real, truncated to 1)", &with_pages(Object::Real(1.9)), &anchors);
+            judge("pages /Count 2 without a new kid", &with_pages(Object::Integer(2)), &anchors);
+            judge("pages /Count 0", &with_pages(Object::Integer(0)), &anchors);
+            judge("pages /Count as a name", &with_pages(Object::Name(b"One".to_vec())), &anchors);
+            let with_field = |f: nacre_pdf::Dictionary| forge::redefine(&b, &[(field.id, Object::Dictionary(f))]);
+            let mut f = fdict.clone(); f.insert(b"F", Object::Integer(132));
+            judge("field /F modified", &with_field(f), &anchors);
+            let f = without(&fdict, b"F");
+            judge("field /F removed", &with_field(f), &anchors);
+            let mut f = fdict.clone();
+            if let Some(Object::Array(r)) = f.get(b"Rect").cloned() {
+                let mut r = r; r[2] = Object::Integer(120); r[3] = Object::Integer(60);
+                f.insert(b"Rect", Object::Array(r));
+            }
+            judge("field /Rect moved", &with_field(f), &anchors);
+            let mut f = fdict.clone(); f.insert(b"T", Object::String(b"Renamed".to_vec()));
+            judge("field /T renamed", &with_field(f), &anchors);
+            let mut f = fdict.clone(); f.insert(b"TU", Object::String(b"Tooltip".to_vec()));
+            judge("field /TU added (key not compared)", &with_field(f), &anchors);
+            let f = without(&fdict, b"AP");
+            judge("field /AP removed", &with_field(f), &anchors);
+            judge("field redefined identical", &with_field(fdict.clone()), &anchors);
+            let mut s = sig.clone(); s.insert(b"M", Object::String(b"D:20991231000000Z".to_vec()));
+            judge("sig /M replaced", &forge::redefine(&b, &[(value, Object::Dictionary(s))]), &anchors);
+            let mut s = sig.clone(); s.insert(b"Type", Object::Name(b"Other".to_vec()));
+            judge("sig /Type replaced (tolerated key)", &forge::redefine(&b, &[(value, Object::Dictionary(s))]), &anchors);
+            let mut s = sig.clone(); s.insert(b"Location", Object::String(b"Nowhere".to_vec()));
+            judge("sig /Location added", &forge::redefine(&b, &[(value, Object::Dictionary(s))]), &anchors);
+            // Legitimate later revisions.
+            judge("legit: /DSS added", &forge::with_dss(&b, &[signer.certificate_chain()[0].clone()], &[]), &anchors);
+            let second = TestSigner::from_secret(&[0x22; 32]).unwrap();
+            judge("legit: second signature", &sign(&b, &second, time).unwrap(), &anchors);
+            let mut trailing = b.clone(); trailing.extend_from_slice(b"\n% trailing bytes, no revision\n");
+            judge("bytes after %%EOF, no revision", &trailing, &anchors);
+            // Invalid input.
+            judge("empty input", b"", &anchors);
+            judge("not a PDF", b"hello, world", &anchors);
+            let m1_end = b.len();
+            let mut cut = with_pages(Object::Integer(2)); cut.truncate(m1_end + 40);
+            judge("page-count revision truncated mid-way", &cut, &anchors);
+            let _ = validate(&b).unwrap();
+        }
+        "order" => {
+            // A signed byte flipped (the document title), then a page-count change appended.
+            let mut broken = b.clone();
+            let at = broken.windows(5).position(|w| w == b"Nacre").unwrap();
+            broken[at] = b'M';
+            judge("signed byte flipped, no later revision", &broken, &anchors);
+            let mut p = pages.clone();
+            p.insert(b"Count", Object::Integer(2));
+            judge("signed byte flipped + /Count 2 appended", &forge::redefine(&broken, &[(pages_id, Object::Dictionary(p))]), &anchors);
+            let mut s = sig.clone(); s.insert(b"Reason", Object::String(b"Rejected".to_vec()));
+            judge("signed byte flipped + reason replaced", &forge::redefine(&broken, &[(value, Object::Dictionary(s))]), &anchors);
+        }
+        "spoof" => {
+            let pdf = std::fs::read(&args[2]).unwrap();
+            judge("pades-spoofing-replaced-reason.pdf", &pdf, &none);
+        }
+        "prefix" => {
+            // The committed DSS file cut at the end of its signed revision.
+            let pdf = std::fs::read(&args[2]).unwrap();
+            let doc = Document::parse(&pdf).unwrap();
+            for r in doc.revisions() { println!("revision ends at {:?}", r); }
+        }
+        "fix" => {
+            // Review finding 1: an unreadable object in the last revision must skip no check.
+            let catalog_id = doc.catalog_id();
+            let Some(Object::Integer(size)) = doc.trailer().get(b"Size").cloned() else { panic!() };
+            let broken_id = ObjectId::new(u32::try_from(size).unwrap() + 5, 0);
+            let broken = |base: &[u8], objects: Vec<(ObjectId, Object)>| {
+                let mut objects = objects;
+                objects.push((broken_id, Object::Null));
+                forge::patch(&forge::redefine(base, &objects), b"null\nendobj\n", b"<< /B [ 1 \n")
+            };
+            let isa = std::fs::read("crates/nacre-validate/tests/corpus/attacks/isa-page-added.pdf").unwrap();
+            let isa_doc = Document::parse(&isa).unwrap();
+            let mut cat = isa_doc.catalog().clone();
+            cat.insert(b"Foo", Object::Reference(broken_id));
+            judge("isa-page-added + revision whose catalog reaches an unreadable object", &broken(&isa, vec![(isa_doc.catalog_id(), Object::Dictionary(cat))]), &none);
+            let mut cat = doc.catalog().clone();
+            cat.insert(b"Foo", Object::Reference(broken_id));
+            judge("b + catalog reaches an unreadable object, page count kept", &broken(&b, vec![(catalog_id, Object::Dictionary(cat))]), &anchors);
+            let mut cat = doc.catalog().clone();
+            cat.insert(b"Pages", Object::Reference(broken_id));
+            judge("b + catalog /Pages points at an unreadable object", &broken(&b, vec![(catalog_id, Object::Dictionary(cat))]), &anchors);
+            let mut f = fdict.clone();
+            f.insert(b"TU", Object::Reference(broken_id));
+            judge("b + signed field /TU points at an unreadable object", &broken(&b, vec![(field.id, Object::Dictionary(f))]), &anchors);
+            let mut cat = doc.catalog().clone();
+            cat.insert(b"Foo", Object::Reference(ObjectId::new(9999, 0)));
+            judge("b + catalog reaches an object absent from every xref", &forge::redefine(&b, &[(catalog_id, Object::Dictionary(cat))]), &anchors);
+        }
+        "big" => {
+            // Review finding 3: a large reference-free subtree under /V, then an allowed later revision.
+            let signed_with = |entry: Object| {
+                let mut entries = nacre_pdf::Dictionary::new();
+                entries.insert(b"QaWidths", entry);
+                let prepared = Document::parse(forge::UNSIGNED).unwrap().update().sign(nacre_pdf::SignatureSpec {
+                    field: "Signature1".into(),
+                    sub_filter: b"ETSI.CAdES.detached".to_vec(),
+                    contents_len: 40000,
+                    entries,
+                }).unwrap();
+                use sha2::Digest;
+                let mut hasher = sha2::Sha256::new();
+                for part in prepared.signed_parts() { hasher.update(part); }
+                let cms = nacre_cms::sign_detached(&hasher.finalize(), &signer, &nacre_cms::Profile::PADES, None).unwrap();
+                prepared.embed(&cms).unwrap()
+            };
+            let dss = |pdf: &[u8]| forge::with_dss(pdf, &[signer.certificate_chain()[0].clone()], &[]);
+            for n in [4_000usize, 70_000, 200_000] {
+                let wide = signed_with(Object::Array((0..n).map(|i| Object::Integer(i as i64 % 1000)).collect()));
+                judge(&format!("/V holds an array of {n} integers, no later revision"), &wide, &anchors);
+                judge(&format!("/V holds an array of {n} integers, then /DSS added"), &dss(&wide), &anchors);
+                let d = Document::parse(&wide).unwrap();
+                let v = d.signature_fields()[0].value.unwrap();
+                let mut s = dict_of(&d, v);
+                let mut arr = match s.get(b"QaWidths").cloned() { Some(Object::Array(a)) => a, _ => panic!() };
+                let last = arr.len() - 1; arr[last] = Object::Integer(-1);
+                s.insert(b"QaWidths", Object::Array(arr));
+                judge(&format!("/V array of {n} integers, its last item changed later"), &forge::redefine(&wide, &[(v, Object::Dictionary(s))]), &anchors);
+            }
+            for n in [1_000usize, 70_000] {
+                let refs = signed_with(Object::Array((0..n).map(|_| Object::Reference(pages_id)).collect()));
+                judge(&format!("/V holds an array of {n} references, then /DSS added"), &dss(&refs), &anchors);
+            }
+        }
+        "multi" => {
+            let second = TestSigner::from_secret(&[0x22; 32]).unwrap();
+            let two = sign(&b, &second, time).unwrap();
+            let all = TrustAnchors::from_certificates(signer.certificate_chain().iter().chain(second.certificate_chain().iter()).map(Vec::as_slice)).unwrap();
+            judge("two signatures, then /DSS", &forge::with_dss(&two, &[signer.certificate_chain()[0].clone()], &[]), &all);
+            let d2 = Document::parse(&two).unwrap();
+            let pid = match d2.catalog().get(b"Pages") { Some(Object::Reference(id)) => *id, _ => panic!() };
+            let mut p = dict_of(&d2, pid); p.insert(b"Count", Object::Integer(2));
+            judge("two signatures, then /Count 2", &forge::redefine(&two, &[(pid, Object::Dictionary(p))]), &all);
+            let v2 = d2.signature_fields().iter().find(|f| f.name == "Signature2").unwrap().value.unwrap();
+            let mut s = dict_of(&d2, v2); s.insert(b"Reason", Object::String(b"Rejected".to_vec()));
+            judge("two signatures, then Signature2's reason replaced", &forge::redefine(&two, &[(v2, Object::Dictionary(s))]), &all);
+        }
+        "fix2" => {
+            // Review fix loop 1: an unreadable object in the last revision must skip no field comparison.
+            let catalog_id = doc.catalog_id();
+            let broken = |base: &[u8], objects: Vec<(ObjectId, Object)>| {
+                let d = Document::parse(base).unwrap();
+                let Some(Object::Integer(size)) = d.trailer().get(b"Size").cloned() else { panic!() };
+                let broken_id = ObjectId::new(u32::try_from(size).unwrap() + 5, 0);
+                let mut objects = objects;
+                let mut cat = d.catalog().clone();
+                cat.insert(b"Foo", Object::Reference(broken_id));
+                objects.push((d.catalog_id(), Object::Dictionary(cat)));
+                objects.push((broken_id, Object::Null));
+                forge::patch(&forge::redefine(base, &objects), b"null\nendobj\n", b"<< /B [ 1 \n")
+            };
+            for name in ["isa-reason-replaced", "isa-reason-redefined", "isa-signature-moved"] {
+                let isa = std::fs::read(format!("crates/nacre-validate/tests/corpus/attacks/{name}.pdf")).unwrap();
+                judge(&format!("{name} + revision whose catalog reaches an unreadable object"), &broken(&isa, vec![]), &none);
+            }
+            let mut s = sig.clone(); s.insert(b"Reason", Object::String(b"Rejected".to_vec()));
+            judge("b + reason replaced and catalog reaches an unreadable object, same revision", &broken(&b, vec![(value, Object::Dictionary(s))]), &anchors);
+            let mut f = fdict.clone();
+            if let Some(Object::Array(r)) = f.get(b"Rect").cloned() {
+                let mut r = r; r[2] = Object::Integer(120); r[3] = Object::Integer(60);
+                f.insert(b"Rect", Object::Array(r));
+            }
+            judge("b + /Rect moved and catalog reaches an unreadable object, same revision", &broken(&b, vec![(field.id, Object::Dictionary(f))]), &anchors);
+            let mut s = sig.clone(); s.insert(b"Reason", Object::String(b"Rejected".to_vec()));
+            let m2 = forge::redefine(&b, &[(value, Object::Dictionary(s))]);
+            judge("m2 (reason replaced) + a further revision whose catalog reaches an unreadable object", &broken(&m2, vec![]), &anchors);
+            judge("b + /DSS added + a further revision whose catalog reaches an unreadable object", &broken(&forge::with_dss(&b, &[signer.certificate_chain()[0].clone()], &[]), vec![]), &anchors);
+            let _ = catalog_id;
+        }
+        _ => panic!("mode"),
+    }
+}
+
+fn without(d: &nacre_pdf::Dictionary, key: &[u8]) -> nacre_pdf::Dictionary {
+    let mut out = nacre_pdf::Dictionary::new();
+    for (k, v) in d.iter() {
+        if k != key { out.insert(k, v.clone()); }
+    }
+    out
+}
+--- end of program ---
+
+## 1. The committed DSS file and the four attack files
+$ target/debug/examples/qa_s48 files conformance/corpus/foreign/public/pdf-signed-added-page.pdf crates/nacre-validate/tests/corpus/attacks/isa-page-added.pdf crates/nacre-validate/tests/corpus/attacks/isa-reason-replaced.pdf crates/nacre-validate/tests/corpus/attacks/isa-reason-redefined.pdf crates/nacre-validate/tests/corpus/attacks/isa-signature-moved.pdf
+(cwd: copy of git ls-files at tree 69877bfa..., stdin: none)
+pdf-signed-added-page.pdf [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(PageCountChanged { signed: 1, last: 2 }); digest=true sig=true; later_revisions=1
+pdf-signed-added-page.pdf [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(PageCountChanged { signed: 1, last: 2 }); digest=true sig=true; later_revisions=1
+isa-page-added.pdf [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(PageCountChanged { signed: 1, last: 2 }); digest=true sig=true; later_revisions=1
+isa-page-added.pdf [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(PageCountChanged { signed: 1, last: 2 }); digest=true sig=true; later_revisions=1
+isa-reason-replaced.pdf [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+isa-reason-replaced.pdf [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+isa-reason-redefined.pdf [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+isa-reason-redefined.pdf [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+isa-signature-moved.pdf [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+isa-signature-moved.pdf [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+exit code: 0
+
+## 2. The bench shapes m1 (page added) and m2 (reason replaced), forged at run time as tests/campaign.rs does, from a B signature
+$ target/debug/examples/qa_s48 forged
+(cwd: copy of git ls-files at tree 69877bfa..., stdin: none)
+signed field "Signature1" keys: ["FT", "T", "V", "Type", "Subtype", "Rect", "F", "P"]
+b (signed, no later revision) [strict] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=0
+b (signed, no later revision) [dss] Signature1 -> TotalPassed / None; defect=None; digest=true sig=true; later_revisions=0
+m1 page added [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(PageCountChanged { signed: 1, last: 2 }); digest=true sig=true; later_revisions=1
+m1 page added [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(PageCountChanged { signed: 1, last: 2 }); digest=true sig=true; later_revisions=1
+m2 reason replaced [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+m2 reason replaced [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+exit code: 0
+
+## 3. DSS's pades-spoofing-replaced-reason.pdf, read in place outside the worktree (never copied: it carries a real person's name; only the verdict lines are kept)
+File: <s19 spike download>/validation__pades-spoofing-replaced-reason.pdf, SHA-256 14b7f31cda8b6966a162c3639d7cb1f092565b8ee95f84734455c3b595174ac2
+$ target/debug/examples/qa_s48 spoof <s19 spike download>/validation__pades-spoofing-replaced-reason.pdf
+(cwd: copy of git ls-files at tree 69877bfa..., stdin: none)
+pades-spoofing-replaced-reason.pdf [strict] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+pades-spoofing-replaced-reason.pdf [dss] Signature1 -> TotalFailed / Some(FormatFailure); defect=Some(SignatureDictionaryChanged); digest=true sig=true; later_revisions=1
+exit code: 0

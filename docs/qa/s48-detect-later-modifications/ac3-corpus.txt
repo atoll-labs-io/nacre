@@ -1,0 +1,92 @@
+QA s48-detect-later-modifications — AC3: pdf-signed-added-page.pdf in conformance/corpus/foreign/ with its source and licence; pades-spoofing-replaced-reason.pdf not committed
+Tree: 69877bfa853771632548531e76bec7873b83c7b9
+
+$ git -C /home/lecrabe/dev/atoll/nacre/.worktrees/s48-detect-later-modifications ls-files conformance/corpus
+conformance/corpus/foreign/README.md
+conformance/corpus/foreign/public/pdf-signed-added-page.pdf
+exit code: 0
+
+$ sha256sum /home/lecrabe/dev/atoll/nacre/.worktrees/s48-detect-later-modifications/conformance/corpus/foreign/public/pdf-signed-added-page.pdf
+467573be2135cb83c17e450a1ea7992f087d79d4f18f5386509020901da7a2ec  /home/lecrabe/dev/atoll/nacre/.worktrees/s48-detect-later-modifications/conformance/corpus/foreign/public/pdf-signed-added-page.pdf
+exit code: 0
+
+$ cmp <s19 spike download>/validation__pdf-signed-added-page.pdf /home/lecrabe/dev/atoll/nacre/.worktrees/s48-detect-later-modifications/conformance/corpus/foreign/public/pdf-signed-added-page.pdf && echo identical
+identical
+exit code: 0
+
+$ grep -o "LGPL-2.1\|esig/dss, tag `6.5.1`\|467573be[0-9a-f]*" /home/lecrabe/dev/atoll/nacre/.worktrees/s48-detect-later-modifications/conformance/corpus/foreign/README.md
+esig/dss, tag `6.5.1`
+LGPL-2.1
+467573be2135cb83c17e450a1ea7992f087d79d4f18f5386509020901da7a2ec
+exit code: 0
+
+$ find /home/lecrabe/dev/atoll/nacre/.worktrees/s48-detect-later-modifications -path /home/lecrabe/dev/atoll/nacre/.worktrees/s48-detect-later-modifications/target -prune -o -iname "*spoofing*" -print; git log --all --oneline -- "*spoofing*" | wc -l
+0
+
+$ git -C /home/lecrabe/dev/atoll/nacre/.worktrees/s48-detect-later-modifications diff --stat 62c3a58 story/s48-detect-later-modifications -- "*.pdf" conformance crates/nacre-validate/src crates/nacre-pdf
+ crates/nacre-validate/src/policy.rs | 14 +++++++-------
+ 1 file changed, 7 insertions(+), 7 deletions(-)
+exit code: 0
+
+## Names carried by the new PDFs: certificates of the CMS (openssl pkcs7 -print_certs over /Contents) and strings — carried over from the QA of tree 6755ab49: the five PDFs are byte-identical since cf0c8ba (QA of tree 5ea26620) and since 62c3a58 (diff above)
+== conformance/corpus/foreign/public/pdf-signed-added-page.pdf
+subject=CN=good-user, O=Nowina Solutions, OU=PKI-TEST, C=LU
+issuer=CN=good-ca, O=Nowina Solutions, OU=PKI-TEST, C=LU
+subject=CN=good-ca, O=Nowina Solutions, OU=PKI-TEST, C=LU
+issuer=CN=root-ca, O=Nowina Solutions, OU=PKI-TEST, C=LU
+strings (literal, and hex decoded):
+()
+(ALIS-PDF 1.05)
+(D:20170607162843+02'00')
+(D:20190704135743+02'00')
+(Dokument)
+(good-user 0bfb81e44f4ef38e003e3d9d7b8d4edced99af42)
+(GPL Ghostscript 9.16)
+(/Helv 0 Tf 0 g )
+(My signature)
+(Signature1)
+(sRGB_IEC61966-2-1)
+(ް)
+  /pU.Z....x@._...
+  ...tl..>2#.O..K+
+  ........}9.".>..
+== crates/nacre-validate/tests/corpus/attacks/isa-page-added.pdf
+subject=C=FR, O=Nacre tests, CN=Nacre test signer
+issuer=C=FR, O=Nacre tests, CN=Nacre test signer
+strings (literal, and hex decoded):
+(Nacre conformance bench - fictitious reference document)
+(This document has no meaning; it exists to be signed by the bench test PKI.)
+  D:20261022080000Z
+  Signature1
+== crates/nacre-validate/tests/corpus/attacks/isa-reason-replaced.pdf
+subject=C=FR, O=Nacre tests, CN=Nacre test signer
+issuer=C=FR, O=Nacre tests, CN=Nacre test signer
+strings (literal, and hex decoded):
+(Nacre conformance bench - fictitious reference document)
+(This document has no meaning; it exists to be signed by the bench test PKI.)
+  Approved
+  D:20261022080000Z
+  Rejected
+  Signature1
+== crates/nacre-validate/tests/corpus/attacks/isa-reason-redefined.pdf
+subject=C=FR, O=Nacre tests, CN=Nacre test signer
+issuer=C=FR, O=Nacre tests, CN=Nacre test signer
+strings (literal, and hex decoded):
+(Nacre conformance bench - fictitious reference document)
+(Rejected)
+(This document has no meaning; it exists to be signed by the bench test PKI.)
+  Approved
+  D:20261022080000Z
+  Signature1
+== crates/nacre-validate/tests/corpus/attacks/isa-signature-moved.pdf
+subject=C=FR, O=Nacre tests, CN=Nacre test signer
+issuer=C=FR, O=Nacre tests, CN=Nacre test signer
+strings (literal, and hex decoded):
+(Nacre conformance bench - fictitious reference document)
+(This document has no meaning; it exists to be signed by the bench test PKI.)
+  D:20261022080000Z
+  Signature1
+
+
+## Campaign: 0 differences under dss(), 0 unexplained under strict()
+Not run: the campaign needs the DSS bench (conformance/compose.yaml), which this driver does not start. See the report, ## Not seen.

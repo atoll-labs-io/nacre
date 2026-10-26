@@ -1,0 +1,58 @@
+QA s48-detect-later-modifications — AC4: docs/security/attacks/pades.md describes each shape, with a corpus case and a rejecting test
+Tree: 69877bfa853771632548531e76bec7873b83c7b9
+
+$ grep -n "s48\|isa-page-added\|isa-reason\|isa-signature-moved" /home/lecrabe/dev/atoll/nacre/.worktrees/s48-detect-later-modifications/docs/security/attacks/pades.md
+46:| ISA (CCS 2019) ; contrôle `PdfPageDifference` de DSS 6.5.1 (`pdf-signed-added-page.pdf`) | page ajoutée après la signature : nouvel objet page, arbre des pages redéfini avec deux `/Kids` et `/Count 2` | `isa-page-added.pdf` | `isa_page_added_is_rejected` | s48 | `Defect::PageCountChanged { signed: 1, last: 2 }` | aucune |
+47:| ISA (CCS 2019) ; contrôle `PdfSignatureDictionary` de DSS 6.5.1 (`pades-spoofing-replaced-reason.pdf`) | dictionnaire de signature redéfini sous son propre numéro, `/Reason` changé, `/ByteRange` et `/Contents` identiques | `isa-reason-replaced.pdf` | `isa_reason_replaced_is_rejected` | s48 | `Defect::SignatureDictionaryChanged` | aucune |
+48:| ISA (CCS 2019) ; contrôle `PdfSignatureDictionary` de DSS 6.5.1 | `/Reason` signé comme objet indirect, seul cet objet redéfini | `isa-reason-redefined.pdf` | `isa_reason_redefined_is_rejected` | s48 | `Defect::SignatureDictionaryChanged` | aucune |
+49:| ISA (CCS 2019) ; contrôle `PdfSignatureDictionary` de DSS 6.5.1 | `/Rect` du champ signé changé, tout le reste égal | `isa-signature-moved.pdf` | `isa_signature_moved_is_rejected` | s48 | `Defect::SignatureDictionaryChanged` | aucune |
+102:- **Fichiers publics de DSS pour le contrôle 10** : `pdf-signed-added-page.pdf` est versé dans `conformance/corpus/foreign/public/` (source et licence dans son `README.md`), jugé par `dss_added_page_fails_under_both_presets` (`tests/validate.rs`) et par la campagne ; `pades-spoofing-replaced-reason.pdf` porte le nom d'une personne réelle et n'est jamais versé : `isa-reason-replaced.pdf` et le cas du banc `m2-b-reason-replaced` le remplacent. La comparaison visuelle des révisions (`PdfVisualDifference`), que DSS ne fait qu'avertir, n'est pas reprise : rien n'est rendu.
+exit code: 0
+
+$ cd /home/lecrabe/dev/atoll/nacre/.worktrees/s48-detect-later-modifications && for f in isa-page-added isa-reason-replaced isa-reason-redefined isa-signature-moved; do ls -l crates/nacre-validate/tests/corpus/attacks/$f.pdf; grep -n "fn ${f//-/_}_is_rejected" crates/nacre-validate/tests/attacks.rs; done
+-rw-r--r-- 1 lecrabe lecrabe 3433 26 oct.  10:17 crates/nacre-validate/tests/corpus/attacks/isa-page-added.pdf
+207:fn isa_page_added_is_rejected() {
+-rw-r--r-- 1 lecrabe lecrabe 18199 26 oct.  10:17 crates/nacre-validate/tests/corpus/attacks/isa-reason-replaced.pdf
+216:fn isa_reason_replaced_is_rejected() {
+-rw-r--r-- 1 lecrabe lecrabe 9880 26 oct.  10:17 crates/nacre-validate/tests/corpus/attacks/isa-reason-redefined.pdf
+225:fn isa_reason_redefined_is_rejected() {
+-rw-r--r-- 1 lecrabe lecrabe 3407 26 oct.  10:17 crates/nacre-validate/tests/corpus/attacks/isa-signature-moved.pdf
+234:fn isa_signature_moved_is_rejected() {
+
+$ grep -n "MAX_PAIRS: usize\|MAX_DEPTH: usize" crates/nacre-validate/src/modifications.rs; grep -o "bornée à une profondeur de 500 (celle de DSS) et à [0-9 ]* paires[^.]*" docs/security/attacks/pades.md
+14:const MAX_DEPTH: usize = 500;
+20:const MAX_PAIRS: usize = 65_536;
+bornée à une profondeur de 500 (celle de DSS) et à 65 536 paires ; une paire identique des deux côtés et sans référence compte pour une, quelle que soit sa taille (le `/Widths` d'une police)
+
+$ grep -o "unreadable_object_in_the_last_revision_skips_no_[a-z_]*" docs/security/attacks/pades.md; grep -n "fn unreadable_object" crates/nacre-validate/tests/attacks.rs
+unreadable_object_in_the_last_revision_skips_no_check
+unreadable_object_in_the_last_revision_skips_no_field_comparison
+312:fn unreadable_object_in_the_last_revision_skips_no_check() {
+328:fn unreadable_object_in_the_last_revision_skips_no_field_comparison() {
+
+## The rejecting tests, the tests of the two fix runs, and the catalogue contract tests, run in the copy (cwd: copy of git ls-files at tree 69877bfa...)
+$ cargo test -q -p nacre-validate --test attacks isa_ 2>&1 | tail -3
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 51 filtered out; finished in 0.03s
+exit code: 0
+
+$ cargo test -q -p nacre-validate --test attacks modification_is_judged_before_a_failed_digest 2>&1 | tail -3
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 56 filtered out; finished in 0.01s
+exit code: 0
+
+$ cargo test -q -p nacre-validate --test attacks unreadable_object_in_the_last_revision 2>&1 | tail -3
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 55 filtered out; finished in 0.02s
+exit code: 0
+
+$ cargo test -q -p nacre-validate --test validate dss_added_page 2>&1 | tail -3
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 18 filtered out; finished in 0.04s
+exit code: 0
+
+$ cargo test -q -p nacre-validate --lib dss_exclusions 2>&1 | tail -3
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+exit code: 0
+
+$ cargo test -q -p nacre-validate --test policy 2>&1 | tail -3
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.99s
+exit code: 0
+
+## Each attack file's verdict through the library: see ac2-both-presets.txt section 1; the field-comparison path of fix loop 1 reached from outside the test: ac2-both-presets-error.txt section 8

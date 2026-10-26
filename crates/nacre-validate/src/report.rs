@@ -112,6 +112,18 @@ pub enum Defect {
     ByteRangeNotWholeFile,
     /// A later revision, the one ending at `end`, is not allowed or cannot be read.
     RevisionNotAllowed { end: usize },
+    /// The root `/Pages` `/Count` of the revision the signed bytes end at, `signed`, differs
+    /// from that of the last revision, `last`: DSS 6.5.1's rule "Do signed and final
+    /// revisions contain equal amount of pages?" (`PdfPageDifference`), a `/Count` other
+    /// than a number read as 0. Applied under every policy, and judged before the CMS
+    /// verdict, as DSS runs its format checks first.
+    PageCountChanged { signed: i64, last: i64 },
+    /// The signature field, as the last revision holds it, is missing from the revision the
+    /// signed bytes end at, or its `/V`, `/Rect`, `/AP` or `/F` differs there beyond what
+    /// DSS 6.5.1 tolerates: its rule "Is the signature dictionary consistent?"
+    /// (`PdfSignatureDictionary`). Applied under every policy, and judged before the CMS
+    /// verdict, as DSS runs its format checks first.
+    SignatureDictionaryChanged,
     /// The revision that added this signature, the one ending at `end`, refuses it as a
     /// signature: on a certified document, one whose field shows a widget the certified
     /// state did not place at the same rectangle, or any signature under DocMDP 1.
@@ -179,6 +191,29 @@ impl SignatureValidation {
         }
     }
 
+    /// A signature a later modification fails, `modified` being that defect: the verified
+    /// flags keep what the integrity checks established, those of `integrity` when the CMS
+    /// did not verify.
+    pub(crate) fn modified(
+        field: String,
+        modified: Defect,
+        integrity: Option<Defect>,
+        later_revisions: Vec<LaterRevision>,
+    ) -> Self {
+        let (digest_verified, signature_verified) = match integrity {
+            Some(defect) => {
+                let failed = Self::defective(String::new(), defect, Vec::new());
+                (failed.digest_verified, failed.signature_verified)
+            }
+            None => (true, true),
+        };
+        Self {
+            digest_verified,
+            signature_verified,
+            ..Self::defective(field, modified, later_revisions)
+        }
+    }
+
     /// A signature whose valid `chain` failed a check judged after it: revocation, validity
     /// after revocation, or the claimed signing time.
     pub(crate) fn after_chain(
@@ -219,9 +254,10 @@ impl SignatureValidation {
                 let (report, digest_verified) = cms_outcome(error);
                 (report, digest_verified, false)
             }
-            Defect::RevisionNotAllowed { .. } | Defect::AddedByRevisionNotAllowed { .. } => {
-                (failed(), true, true)
-            }
+            Defect::RevisionNotAllowed { .. }
+            | Defect::AddedByRevisionNotAllowed { .. }
+            | Defect::PageCountChanged { .. }
+            | Defect::SignatureDictionaryChanged => (failed(), true, true),
             Defect::Chain(chain) => (chain.report(), true, true),
             Defect::Revocation(revocation) => (revocation.report(), true, true),
             Defect::OutOfRangeNotRevoked(_) => (

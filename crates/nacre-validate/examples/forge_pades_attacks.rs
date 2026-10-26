@@ -308,6 +308,100 @@ fn later_revisions(dir: &Path, signer: &TestSigner) {
         "docmdp-reference-cap",
         &add_signature(&capped, signer, "Late", false, &[]),
     );
+
+    later_modifications(dir, signer);
+}
+
+/// The modifications after signing DSS's format checks refuse (s48): a page added, the
+/// signature dictionary's `/Reason` replaced or redefined, the signed field moved.
+fn later_modifications(dir: &Path, signer: &TestSigner) {
+    let time = DateTime::new(2026, 10, 22, 8, 0, 0).unwrap();
+    let base = sign(UNSIGNED, signer, time).unwrap();
+
+    let page = next_free(&base);
+    let pages = with(
+        &with(&object(&base, 2), b"Kids", refs(&[3, page])),
+        b"Count",
+        Object::Integer(2),
+    );
+    let added = b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] >>".to_vec();
+    write(
+        dir,
+        "isa-page-added",
+        &append(&base, &[(page, added), (2, ser(&pages))], &[], None).0,
+    );
+
+    // The signature dictionary rewritten under its own id, `/ByteRange` and `/Contents`
+    // unchanged: the shape of DSS's `pades-spoofing-replaced-reason.pdf`.
+    let reasoned = with_reason(signer, false);
+    let value = signature_value(&reasoned);
+    let sig = with(
+        &object(&reasoned, value.number),
+        b"Reason",
+        Object::String(b"Rejected".to_vec()),
+    );
+    write(
+        dir,
+        "isa-reason-replaced",
+        &append(&reasoned, &[(value.number, ser(&sig))], &[], None).0,
+    );
+
+    let indirect = with_reason(signer, true);
+    let Some(Object::Reference(reason)) = object(&indirect, signature_value(&indirect).number)
+        .get(b"Reason")
+        .cloned()
+    else {
+        panic!("the reason is not indirect")
+    };
+    write(
+        dir,
+        "isa-reason-redefined",
+        &append(
+            &indirect,
+            &[(reason.number, b"(Rejected)".to_vec())],
+            &[],
+            None,
+        )
+        .0,
+    );
+
+    let field = Document::parse(&base).unwrap().signature_fields()[0].id;
+    let rect = Object::Array([72, 72, 272, 122].map(Object::Integer).to_vec());
+    let moved = with(&object(&base, field.number), b"Rect", rect);
+    write(
+        dir,
+        "isa-signature-moved",
+        &append(&base, &[(field.number, ser(&moved))], &[], None).0,
+    );
+}
+
+/// `unsigned.pdf` signed with `/Reason (Approved)`, written as an indirect object when
+/// `indirect` is set.
+fn with_reason(signer: &TestSigner, indirect: bool) -> Vec<u8> {
+    let doc = Document::parse(UNSIGNED).unwrap();
+    let mut update = doc.update();
+    let reason = Object::String(b"Approved".to_vec());
+    let mut spec = spec();
+    let reason = if indirect {
+        Object::Reference(update.add(reason).unwrap())
+    } else {
+        reason
+    };
+    spec.entries.insert(b"Reason", reason);
+    let prepared = update.sign(spec).unwrap();
+    let mut hasher = Sha256::new();
+    for part in prepared.signed_parts() {
+        hasher.update(part);
+    }
+    let cms = sign_detached(&hasher.finalize(), signer, &Profile::PADES, None).unwrap();
+    prepared.embed(&cms).unwrap()
+}
+
+/// The signature dictionary of the first signature field of `pdf`.
+fn signature_value(pdf: &[u8]) -> ObjectId {
+    Document::parse(pdf).unwrap().signature_fields()[0]
+        .value
+        .unwrap()
 }
 
 fn id(number: u32) -> ObjectId {
