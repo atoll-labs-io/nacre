@@ -49,6 +49,20 @@ ykman piv certificates import 9c 9c.cert.pem
 `intermediate.index`, the bench's container wrote `out/` as another user: run `pki-init`
 again rootless, or fix the ownership of `out/`.
 
+The bench's OCSP responder reads `intermediate.index` when it starts, so it answers
+`unknown` for a certificate issued after `up`, and DSS then judges the signature
+`INDETERMINATE` / `CERTIFICATE_CHAIN_GENERAL_FAILURE`. Restart it before signing, and check
+it answers `good`:
+
+```sh
+podman compose -f conformance/compose.yaml restart pki
+openssl ocsp -issuer conformance/pki/out/intermediate.cert.pem -cert 9c.cert.pem \
+  -url http://127.0.0.1:18081/cgi-bin/ocsp -noverify
+```
+
+DSS caches the OCSP answers it gets; if it already validated a signature with this
+certificate, restart it too (`restart dss`, then `check.sh`).
+
 The issuer to pass below is `conformance/pki/out/intermediate.cert.pem`.
 
 ## Route B: slot 9c holds a key in use
@@ -77,10 +91,11 @@ of `9c.cert.pem`, and pass it as the issuer.
 
 `libykcs11` gives the 9c key and its certificate the PKCS#11 id `02`. The PIN is read from
 standard input; `read -s` keeps it off the screen and `printf`, a shell builtin, keeps it
-out of the process list:
+out of the process list. The prompt is printed apart because `read -p` means a coprocess
+in zsh, which leaves `PIN` empty:
 
 ```sh
-read -rsp 'PIV PIN: ' PIN; echo
+printf 'PIV PIN: '; IFS= read -rs PIN; echo
 printf '%s\n' "$PIN" | cargo run -p nacre-pkcs11 --example sign_pdf -- \
   /usr/lib/libykcs11.so 02 <issuer.pem or -> \
   conformance/reference/unsigned.pdf target/s13-yubikey.pdf
@@ -95,14 +110,18 @@ sub-indication and format, and the path of the ETSI XML report,
 
 | Field | Value |
 | --- | --- |
-| Date | not run |
-| YubiKey model and firmware (`ykman info`) | not run |
-| `libykcs11` version | not run |
-| Route (A or B) | not run |
-| 9c PIN policy (`ykman piv info`) | not run |
-| Signed, or the error | not run |
-| DSS indication / sub-indication / format | not run |
-| Report file | not run |
+| Date | 2026-10-26 |
+| YubiKey model and firmware (`ykman info`) | YubiKey 5C NFC, firmware 5.8.0 |
+| `libykcs11` version | 2.7.3 (Arch `yubico-piv-tool` 2.7.3-1) |
+| Route (A or B) | A, ECC P-256 generated on the key |
+| 9c PIN policy (`ykman piv keys info 9c`) | PIN `ALWAYS`, touch `NEVER` |
+| Signed, or the error | Signed with one PIN entry: the context-specific login of the always-authenticate key went through `libykcs11` |
+| DSS indication / sub-indication / format | `TOTAL_PASSED` / none / `PAdES-BASELINE-B`, once the OCSP responder knew the certificate (see route A) |
+| Report file | `crates/nacre-pkcs11/manual/s13-yubikey-b.xml` |
+
+An empty PIN (a failed `read`) did not reach a PIN check: `open` failed with
+`Pkcs11(KeyHandleInvalid, Login)` and the key still had 3 of 3 tries. SoftHSM answers the
+same empty PIN with `WrongPin`.
 
 Only for route A, whose certificate is fictitious, copy the XML report to
 `crates/nacre-pkcs11/manual/s13-yubikey-b.xml` and commit it with this table. Never commit
