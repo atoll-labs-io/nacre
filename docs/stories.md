@@ -336,12 +336,12 @@ La recherche et le plan d'un premier passage (avant s41) ont montré que DSS cal
 - **Owns**: `conformance/corpus/foreign/`
 
 ### Acceptance criteria
-- [ ] Le corpus contient des PDF signés par DSS, par pyHanko et par Adobe Acrobat, à chaque niveau baseline qu'ils savent produire, et des PDF signés publics dont la licence permet la redistribution, chacun avec sa source notée.
+- [ ] Le corpus contient des PDF signés par DSS, par pyHanko et par Adobe Acrobat, à chaque niveau baseline qu'ils savent produire, et des PDF signés publics dont la licence permet la redistribution et qui ne portent aucune donnée personnelle, chacun avec sa source notée.
 - [ ] La campagne de s18 passe sur ce corpus enrichi : verdict identique à DSS dans 100 % des cas.
 - [ ] Chaque fichier ajouté est fictif ou public ; aucune donnée personnelle (brief, Security & abuse).
 
 ### Notes for the agent
-Le spike du 2026-10-25 a trouvé 17 écarts sur 30 fichiers publics de DSS : s48 et s49 les corrigent avant que s19 ne livre ses fichiers. Les fichiers signés sur le banc ne passent entièrement que sur le démarrage qui les a signés (clés régénérées à chaque démarrage). Brief, constat 5 du pré-mortem. Les signatures pyHanko et DSS se produisent avec la PKI de s02 ; Acrobat demande un essai manuel, consigné comme la source du fichier. Un écart trouvé ici est un défaut de `validate`, à signaler par le `Issue tracker`, pas à masquer en retirant le fichier.
+Données personnelles (décision de la personne, 2026-10-26) : 20 des 30 fichiers publics de DSS retenus portent le nom d'une personne réelle dans leur partie signée. Ils ne servent qu'en local, jamais committés, pour comprendre un écart ; un cas fictif de même forme, forgé sur le banc, entre dans le corpus et la campagne à leur place. Seuls les fichiers sans nom réel sont committés tels quels. Le spike du 2026-10-25 a trouvé 17 écarts sur 30 fichiers publics de DSS : s48 et s49 les corrigent avant que s19 ne livre ses fichiers. Les fichiers signés sur le banc ne passent entièrement que sur le démarrage qui les a signés (clés régénérées à chaque démarrage). Brief, constat 5 du pré-mortem. Les signatures pyHanko et DSS se produisent avec la PKI de s02 ; Acrobat demande un essai manuel, consigné comme la source du fichier. Un écart trouvé ici est un défaut de `validate`, à signaler par le `Issue tracker`, pas à masquer en retirant le fichier.
 
 ## s20-nacre-sig-milestone — Publier la façade nacre-sig du premier jalon
 **As** développeur Rust (Patelle d'abord) **I want** ajouter la seule dépendance `nacre-sig` et n'activer que les features dont j'ai besoin **so that** Patelle signe et valide jusqu'à B-LTA par une API unique, sans compiler le reste.
@@ -855,10 +855,10 @@ Point de sécurité trouvé par le spike de s19 le 2026-10-25 et porté à la pe
 ### Acceptance criteria
 - [ ] Pour chaque famille d'écarts (ordre des sous-indications sans chaîne, niveaux étendus EPES et LTV, niveau lu sur les horodatages, algorithme de signature non pris en charge, CMS enveloppant, signature référencée par plusieurs champs), la recherche écrit la cause dans Nacre et la règle de DSS 6.5.1 qui y répond.
 - [ ] Chaque correction suit les règles de l'ADR-0026 : règle de DSS sous les deux préréglages, interrupteur seulement si `strict()` deviendrait plus laxiste, choix soumis à la personne.
-- [ ] Les quinze fichiers concernés (données de test de DSS 6.5.1, LGPL-2.1) entrent dans `conformance/corpus/foreign/` avec leur source et leur licence ; la campagne reste à 0 écart sous `dss()` et 0 inexpliqué sous `strict()`.
+- [ ] Pour chacun des quinze fichiers concernés (données de test de DSS 6.5.1, LGPL-2.1), le fichier lui-même s'il ne porte aucun nom réel, sinon un cas fictif de même forme forgé sur le banc, entre dans `conformance/corpus/foreign/` avec sa source et sa licence ; la campagne reste à 0 écart sous `dss()` et 0 inexpliqué sous `strict()`.
 
 ### Notes for the agent
-Demandé par la personne le 2026-10-25 : « tout corriger en comprenant le problème pour améliorer ». La liste des fichiers et des verdicts est dans la recherche de s19. Si la complexité dépasse le budget, découper par famille plutôt que d'exclure un fichier.
+Données personnelles (décision de la personne, 2026-10-26) : 20 des 30 fichiers publics de DSS retenus portent le nom d'une personne réelle dans leur partie signée. Ils ne servent qu'en local, jamais committés, pour comprendre un écart ; un cas fictif de même forme, forgé sur le banc, entre dans le corpus et la campagne à leur place. Seuls les fichiers sans nom réel sont committés tels quels. Demandé par la personne le 2026-10-25 : « tout corriger en comprenant le problème pour améliorer ». La liste des fichiers et des verdicts est dans la recherche de s19. Si la complexité dépasse le budget, découper par famille plutôt que d'exclure un fichier.
 
 ## s50-fictitious-certified-corpus — Remplacer le PDF certifié du corpus par un fichier entièrement fictif
 **As** mainteneur d'un dépôt public **I want** que le PDF certifié tiers du corpus ne porte aucune donnée personnelle **so that** le dépôt respecte la règle du brief (documents fictifs ou publics, aucune donnée personnelle) et que l'historique puisse être réécrit sans casser les tests.
