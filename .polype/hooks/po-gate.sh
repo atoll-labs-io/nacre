@@ -16,9 +16,18 @@
 #                                 when given, else HEAD
 #   po-gate findings-shape <id>  0 when ## Findings of the last review holds no line that names a severity outside the
 #                                 shape /po-ship reads; 1 with each such line quoted as `<path>:<line>: <text>`;
-#                                 2 when it cannot run (no id, no review, no verdict block)
+#                                 2 when it cannot run (no id, no review, unreadable review, no verdict block)
 #   po-gate floor-guard <id> <base>  scans `git diff <base>...story/<id>` for what lowers the bar of the checks:
 #                                 0 nothing, 1 one `<path>:<line>: <rule>: <detail>` per flag, 2 cannot verify
+#   po-gate oracle-intact <id>    compares each oracle file that `## Acceptance tests` of the plan names, on
+#                                 story/<id>, with its cksum: 0 all equal, each logged change listed, or no oracle (a
+#                                 line says so); 1 one line per file changed or missing that `## Oracle changes` of
+#                                 the record does not name; 2 cannot run. It guards against mistakes, not against an
+#                                 implementer who also rewrites the sum, which lives in the plan they commit
+#                                 (ADR-0052, ADR-0098).
+#   po-gate redact <file>         prints <file> with each secret the pre-commit scan would refuse replaced by
+#                                 [redacted], a private key block by one [redacted] line; the file is not changed;
+#                                 0, or 2 when the file cannot be read
 #
 # A story lands through a pull request the forge rebuilds (ADR-0080, ADR-0081), which no local hook sees; put
 # `po-gate ship-allowed <id>` in CI, on a checkout of the story branch tip, never a merge ref: it compares against HEAD.
@@ -82,16 +91,16 @@ ship_allowed() {
     || refuse "the code of $1 changed after its review (tree $tree); the verdict no longer applies — /po-review $1"
 }
 
-# What /po-ship step 3.2 can file is a list item opening with its severity; anything else naming a severity there
-# would be dropped or only reach the person, so it is refused while the reviewer can still be asked again (ADR-0094).
-# The accepted motif is exactly the one step 3.2 opens: lowercase severity, then its separator (ADR-0096).
-# Exit of the awk: 0 shape kept, 1 lines refused (printed), 2 no `## Findings` in the last block.
+# /po-ship step 3.2 files only a list item opening with its severity; anything else naming one is refused while the
+# reviewer can still be asked again (ADR-0094). The accepted motif is exactly the one it opens (ADR-0096).
+# Awk exit: 0 kept, 1 refused (printed), 3 no `## Findings`; its own read failure, 2, is unreadable.
 shape_unreadable() { echo "po-gate: cannot check the findings of ${1:-<id>}: $2" >&2; exit 2; }
 findings_shape() {
   local review rel out rc=0
   [ -n "${1:-}" ] || shape_unreadable "" "usage: po-gate findings-shape <id>"
   rel="docs/reviews/$1.md"; review="$(top)/$rel"
   [ -f "$review" ] || shape_unreadable "$1" "$1 has not been reviewed ($rel)"
+  [ -r "$review" ] || shape_unreadable "$1" "$rel cannot be read"
   grep -qE '^([-*] )?Ship allowed:' "$review" \
     || shape_unreadable "$1" "the review has no verdict block (no 'Ship allowed:' line)"
   out="$(awk -v rel="$rel" '
@@ -111,11 +120,11 @@ findings_shape() {
         else bad = first(l)
         if (bad) { print rel ":" n ": " l; refused = 1 }
       }
-      if (!seen) exit 2
+      if (!seen) exit 3
       exit refused ? 1 : 0
     }
   ' "$review")" || rc=$?
-  [ "$rc" -ne 2 ] || refuse "the last review of $1 has no '## Findings' section — the shape of templates/review.md" || return 1
+  [ "$rc" -ne 3 ] || refuse "the last review of $1 has no '## Findings' section — the shape of templates/review.md" || return 1
   [ "$rc" -eq 0 ] && return 0
   [ "$rc" -eq 1 ] || shape_unreadable "$1" "could not read the findings (awk exit $rc)"
   while IFS= read -r line; do refuse "$line" || true; done <<< "$out"
@@ -233,6 +242,71 @@ github-token|40|github_pat_[A-Za-z0-9_]+
 stripe-secret-key|24|(sk|rk)_(live|test)_[A-Za-z0-9]+
 anthropic-key|40|sk-ant-[A-Za-z0-9_-]+'
 
+# The rule both the scan and `redact` apply, so a value the commit hook refuses is one `redact` erases. Loaded into
+# any awk program that sets ENVIRON["SECRET_PATTERNS"]; next_secret() sets SM_START and SM_LEN on the first match of
+# pattern i at or after position from that qualifies. A match that does not qualify is skipped past whole, not by
+# one character, as the scan always did.
+SECRET_MATCHER='
+  function load_secret_patterns(   n, rows, i, p1, rest, p2) {
+    n = split(ENVIRON["SECRET_PATTERNS"], rows, "\n")
+    for (i = 1; i <= n; i++) {
+      if (rows[i] == "") continue
+      p1 = index(rows[i], "|"); rest = substr(rows[i], p1 + 1); p2 = index(rest, "|")
+      np++; prule[np] = substr(rows[i], 1, p1 - 1); plen[np] = substr(rest, 1, p2 - 1) + 0; pat[np] = substr(rest, p2 + 1)
+    }
+  }
+  function next_secret(s, i, from,   rest, pos, before) {
+    rest = substr(s, from); pos = from - 1
+    while (match(rest, pat[i])) {
+      before = pos + RSTART - 1 > 0 ? substr(s, pos + RSTART - 1, 1) : ""
+      if ((before !~ /[A-Za-z0-9_]/ || substr(rest, RSTART, 1) !~ /[A-Za-z0-9_]/) && RLENGTH >= plen[i]) {
+        SM_START = pos + RSTART; SM_LEN = RLENGTH; return 1
+      }
+      pos += RSTART + RLENGTH - 1; rest = substr(rest, RSTART + RLENGTH)
+      if (RLENGTH == 0) return 0
+    }
+    return 0
+  }
+'
+
+# Prints <file> with each qualifying match of SECRET_PATTERNS replaced by [redacted]; a private key line, through the
+# next END line or the end of the file, becomes one [redacted] line. Every match is judged on the original line, as the
+# scan judges it, and each run of flagged characters becomes one [redacted]. The file itself is left as it was.
+redact() {
+  local file="$1"
+  [ -n "$file" ] && [ -f "$file" ] && [ -r "$file" ] || { echo "po-gate: redact: cannot read '$file'" >&2; exit 2; }
+  SECRET_PATTERNS="$SECRET_PATTERNS" awk "$SECRET_MATCHER"'
+    BEGIN { load_secret_patterns() }
+    inkey { if ($0 ~ /-----END[A-Z ]*PRIVATE KEY/) inkey = 0; next }
+    {
+      line = $0
+      for (i = 1; i <= np; i++) {
+        if (prule[i] != "private-key" || !next_secret(line, i, 1)) continue
+        print "[redacted]"
+        # The END may sit on the BEGIN line itself, after the header.
+        if (substr(line, SM_START + SM_LEN) !~ /-----END[A-Z ]*PRIVATE KEY/) inkey = 1
+        next
+      }
+      split("", marked)
+      for (i = 1; i <= np; i++) {
+        if (prule[i] == "private-key") continue
+        from = 1
+        while (next_secret(line, i, from)) {
+          for (k = SM_START; k < SM_START + SM_LEN; k++) marked[k] = 1
+          from = SM_START + SM_LEN
+        }
+      }
+      out = ""; n = length(line); k = 1
+      while (k <= n) {
+        if (k in marked) { out = out "[redacted]"; while (k in marked) k++; continue }
+        j = k; while (j <= n && !(j in marked)) j++
+        out = out substr(line, k, j - k); k = j
+      }
+      print out
+    }
+  ' "$file" || { echo "po-gate: redact: could not read '$file'" >&2; exit 2; }
+}
+
 # Prints one line per hit on stdout, never the matched text; returns 1 only when the index cannot be read.
 secret_scan() {
   local paths path base diff out rc=0
@@ -250,35 +324,19 @@ secret_scan() {
     --src-prefix=a/ --dst-prefix=b/ -U0 ${DIFF_BASE:+"$DIFF_BASE"})" \
     || refuse "could not read the staged diff; refusing the commit" || return 1
   [ -n "$diff" ] || return 0
-  out="$(SECRET_PATTERNS="$SECRET_PATTERNS" awk '
+  out="$(SECRET_PATTERNS="$SECRET_PATTERNS" awk "$SECRET_MATCHER"'
     function header_path(s, pre) {
       sub(/\t$/, "", s)
       if (s ~ /^".*"$/) s = substr(s, 2, length(s) - 2)
       if (substr(s, 1, 2) == pre) s = substr(s, 3)
       return s
     }
-    function hit(s, i,   rest, pos, before) {
-      rest = s; pos = 0
-      while (match(rest, pat[i])) {
-        before = pos + RSTART - 1 > 0 ? substr(s, pos + RSTART - 1, 1) : ""
-        if ((before !~ /[A-Za-z0-9_]/ || substr(rest, RSTART, 1) !~ /[A-Za-z0-9_]/) && RLENGTH >= plen[i]) return 1
-        pos += RSTART + RLENGTH - 1; rest = substr(rest, RSTART + RLENGTH)
-        if (RLENGTH == 0) return 0
-      }
-      return 0
-    }
+    function hit(s, i) { return next_secret(s, i, 1) }
     function added(s,   i, seen) {
       split("", seen)
       for (i = 1; i <= np; i++) if (!(prule[i] in seen) && hit(s, i)) { seen[prule[i]] = 1; print "po-gate: " file ":" line ": " prule[i] " (value not shown)" }
     }
-    BEGIN {
-      n = split(ENVIRON["SECRET_PATTERNS"], rows, "\n")
-      for (i = 1; i <= n; i++) {
-        if (rows[i] == "") continue
-        p1 = index(rows[i], "|"); rest = substr(rows[i], p1 + 1); p2 = index(rest, "|")
-        np++; prule[np] = substr(rows[i], 1, p1 - 1); plen[np] = substr(rest, 1, p2 - 1) + 0; pat[np] = substr(rest, p2 + 1)
-      }
-    }
+    BEGIN { load_secret_patterns() }
     remold > 0 || remnew > 0 {
       c = substr($0, 1, 1)
       if (c == "-" && remold > 0) { remold--; next }
@@ -514,13 +572,115 @@ floor_guard() {
   exit 1
 }
 
+# --- oracle intact ---
+
+oracle_unreadable() { echo "po-gate: cannot check the oracle of ${1:-<id>}: $2" >&2; exit 2; }
+
+# table_rows <file> <section> <first header cell> (`-` reads stdin): the rows of the first table in `## <section>`
+# whose first header cell matches, cells trimmed, enclosing backticks removed, joined by \037. Other tables of the
+# section are never read.
+table_rows() {
+  awk -v section="## $2" -v head="$3" '
+    function clean(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); if (s ~ /^`.*`$/) s = substr(s, 2, length(s) - 2); return s }
+    function cells(line,   n, parts, i, out) {
+      sub(/^[[:space:]]*\|/, "", line); sub(/\|[[:space:]]*$/, "", line)
+      n = split(line, parts, "|"); out = ""
+      for (i = 1; i <= n; i++) out = out (i > 1 ? "\037" : "") clean(parts[i])
+      return out
+    }
+    /^## / { t = $0; sub(/[[:space:]]+$/, "", t); if (done) exit; insec = (t == section); state = 0; next }
+    !insec { next }
+    state == 2 && $0 !~ /^\|/ { done = 1; insec = 0; next }
+    state == 0 && /^\|/ { split(cells($0), h, "\037"); state = (h[1] == head) ? 1 : 3; next }
+    state == 3 && $0 !~ /^\|/ { state = 0; next }
+    state == 3 { next }
+    state == 1 { state = 2; next }
+    state == 2 { print cells($0) }
+  ' "$1"
+}
+
+# Every input is read from the commit story/<id> points at, never from the working tree.
+oracle_intact() {
+  local id="$1" repo plan rows row path want have sum record changes ch cpath what why logged
+  local -a bad=() unlogged=() lines=()
+  [ -n "$id" ] || oracle_unreadable "" "usage: po-gate oracle-intact <id>"
+  repo="$(top)"
+  git -C "$repo" rev-parse --verify --quiet "story/$id^{commit}" >/dev/null \
+    || oracle_unreadable "$id" "branch story/$id does not resolve"
+  git -C "$repo" cat-file -e "story/$id:docs/plans/$id.md" 2>/dev/null \
+    || oracle_unreadable "$id" "story/$id holds no docs/plans/$id.md"
+  plan="$(git -C "$repo" cat-file blob "story/$id:docs/plans/$id.md")" \
+    || oracle_unreadable "$id" "cannot read docs/plans/$id.md on story/$id"
+  if ! grep -qE '^## Acceptance tests[[:space:]]*$' <<< "$plan"; then
+    echo "po-gate: $id has no oracle: its plan has no ## Acceptance tests section"; exit 0
+  fi
+  rows="$(table_rows - "Acceptance tests" "Oracle file" <<< "$plan")" \
+    || oracle_unreadable "$id" "awk failed while reading ## Acceptance tests"
+  if [ -z "$rows" ]; then
+    if awk '/^## / { t = $0; sub(/[[:space:]]+$/, "", t); on = (t == "## Acceptance tests"); next } on && /^—/ { f = 1 } END { exit !f }' <<< "$plan"; then
+      echo "po-gate: $id has no oracle: its plan writes — under ## Acceptance tests"; exit 0
+    fi
+    oracle_unreadable "$id" "## Acceptance tests of the plan names no oracle file and writes no —"
+  fi
+  while IFS= read -r row; do
+    IFS=$'\037' read -r path want _ <<< "$row"
+    { [ -n "$path" ] && [[ "$want" =~ ^[0-9]+[[:space:]]+[0-9]+$ ]]; } \
+      || oracle_unreadable "$id" "unreadable row in the oracle table of the plan: ${row//$'\037'/ | }"
+    want="$(tr -s '[:space:]' ' ' <<< "$want" | sed 's/ $//')"
+    if ! git -C "$repo" cat-file -e "story/$id:$path" 2>/dev/null; then
+      bad+=("$path"$'\037'missing)
+      continue
+    fi
+    sum="$(git -C "$repo" cat-file blob "story/$id:$path" | cksum)" \
+      || oracle_unreadable "$id" "cannot read $path on story/$id"
+    have="$(awk '{print $1 " " $2}' <<< "$sum")"
+    [ "$have" = "$want" ] || bad+=("$path"$'\037'changed)
+  done <<< "$rows"
+  [ ${#bad[@]} -gt 0 ] || exit 0
+
+  git -C "$repo" cat-file -e "story/$id:docs/verif/$id.md" 2>/dev/null \
+    || oracle_unreadable "$id" "an oracle file differs and story/$id holds no docs/verif/$id.md"
+  record="$(git -C "$repo" cat-file blob "story/$id:docs/verif/$id.md")" \
+    || oracle_unreadable "$id" "cannot read docs/verif/$id.md on story/$id"
+  changes="$(table_rows - "Oracle changes" "Oracle file" <<< "$record")" \
+    || oracle_unreadable "$id" "awk failed while reading ## Oracle changes"
+  for row in "${bad[@]}"; do
+    IFS=$'\037' read -r path ch <<< "$row"
+    logged=0
+    while IFS= read -r cpath; do
+      [ -n "$cpath" ] || continue
+      IFS=$'\037' read -r cpath what why <<< "$cpath"
+      [ "$cpath" = "$path" ] || continue
+      lines+=("$path: changed, logged in ## Oracle changes — $what — $why")
+      logged=1
+    done <<< "$changes"
+    [ "$logged" -eq 1 ] && continue
+    if [ "$ch" = missing ]; then
+      unlogged+=("$path: missing on story/$id, without a row in ## Oracle changes")
+    else
+      unlogged+=("$path: changed without a row in ## Oracle changes")
+    fi
+  done
+  if [ ${#unlogged[@]} -gt 0 ]; then
+    printf '%s\n' "${unlogged[@]}"
+    [ ${#lines[@]} -eq 0 ] || printf '%s\n' "${lines[@]}"
+    echo "po-gate: ${#unlogged[@]} oracle file(s) of $id changed without a row in ## Oracle changes" >&2
+    exit 1
+  fi
+  printf '%s\n' "${lines[@]}"
+  echo "po-gate: ${#lines[@]} logged oracle change(s) of $id to judge" >&2
+  exit 0
+}
+
 case "${1:-}" in
   floor-guard)    floor_guard "${2:-}" "${3:-}" ;;
+  oracle-intact)  oracle_intact "${2:-}" ;;
   plan-validated) plan_validated "${2:?story id required}" ;;
   ship-allowed)   ship_allowed "${2:?story id required}" ;;
   findings-shape) findings_shape "${2:-}" ;;
   verif-current)  verif_current "${2:?story id required}" ;;
   qa-current)     qa_current "${2:?story id required}" ;;
   pre-commit)     pre_commit "${2:-}" ;;
+  redact)         redact "${2:-}" ;;
   *) echo "po-gate: unknown subcommand '${1:-}' (see the header of this script)" >&2; exit 2 ;;
 esac

@@ -6,13 +6,13 @@ validated: no
 
 [Story](../stories.md)
 
-Written by `/po-flow`. On the short track this one file stands in for both the research and the plan: there is no `docs/research/<id>.md`. Keep it to about 150 lines at most.
+Written by the planner. On the short track this one file stands in for both the research and the plan: there is no `docs/research/<id>.md`. Keep it to about 150 lines.
 
 ## Verified facts
 <What the code actually does around this story, each fact opened in the code and given with its `path:line`. Any assumption of the story that proved wrong comes first. The implementer and the reviewer read this section in place of a research file.>
 
 ## Escalation signals
-<Each escalation signal, marked `absent`, with where it was checked — once on the story text before reading the code, once after reading it. A signal present sends the story to the full track and no short plan is written, except a technical choice, where this file stays on disk with the line `Technical choice: waiting for a human` and the story goes to `/po-research <id>`, as `## Approval` of `/po-flow` says.>
+<Each escalation signal, marked `absent`, with where it was checked — once on the story text before reading the code, once after reading it. A signal present sends the story to the full track and no short plan is written: the planner takes that track in the same lane, and a technical choice also puts the line `Technical choice: waiting for a human` in that plan, as the planner's `## Limits` says.>
 
 | Signal | Before reading the code | After reading the code |
 | --- | --- | --- |
@@ -32,6 +32,16 @@ Written by `/po-flow`. On the short track this one file stands in for both the r
 
 | New code | Rung that holds | Why each rung above fails |
 | --- | --- | --- |
+
+## Acceptance tests
+<The oracle: the tests the plan's author wrote from the story's acceptance criteria, before any code, in files of their own that the story's `Owns` lists. Each test goes through the interface the tasks below fix, never an internal detail. One test per acceptance criterion that a test can check, each counted in `Test budget`. The implementer adds its own tests to other files, so no sum moves, and changes an oracle file only through `## Oracle changes` of the verification record. For a story where no criterion can be checked by a test (purely visual), or an exploration story, which its measure judges, write `—` with its reason in place of both tables. The sum is exactly what `cksum < <path>` prints, taken once the file is written.>
+
+| Oracle file | cksum |
+| --- | --- |
+| `<path>` | `<crc> <size>` |
+
+| Criterion | Test |
+| --- | --- |
 
 ## Tasks
 <Six at most; more means the story leaves the short track.>

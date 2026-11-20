@@ -6,8 +6,8 @@
 # A single argument after `--` runs through `bash -c` and is recorded as given; several run as argv and are
 # recorded joined by spaces. The command's output and exit code pass through untouched. The row written under
 # `## Runs` of docs/verif/<id>.md holds the label, the command, the exit code, the tree of the working copy
-# (`git add -A` + `git write-tree` on a copy of the index) and the UTC time — never the output.
-# Exit 125 means po-run itself refused or failed, and then the command did not run or its row is missing.
+# (`git add -A` + `git write-tree` on a copy of the index) and the UTC time and duration — never the output.
+# Exit 125 means po-run refused or failed, and the command did not run or its row is missing.
 set -euo pipefail
 
 refuse() { echo "po-run: $*" >&2; exit 125; }
@@ -49,6 +49,7 @@ mkdir -p "$top/docs/verif" || refuse "cannot create docs/verif"
 record="$top/docs/verif/$story.md"
 
 set +e
+SECONDS=0
 if [ $# -eq 1 ]; then bash -c "$1"; else "$@"; fi
 code=$?
 set -e
@@ -58,7 +59,7 @@ append() {
     if [ -s "$record" ] && [ -n "$(tail -c 1 "$record")" ]; then echo; fi
     printf '## Runs\n\n| Check | Command | Exit | Tree | Time (UTC) |\n| --- | --- | --- | --- | --- |\n'
   fi
-  printf '| %s | `%s` | %s | %s | %s |\n' "$label" "$command_text" "$code" "$tree" "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  printf '| %s | `%s` | %s | %s | %s |\n' "$label" "$command_text" "$code" "$tree" "$(date -u +%Y-%m-%dT%H:%M:%SZ) (${SECONDS}s)"
 }
 append >> "$record" || refuse "the check exited $code but its row could not be appended to $record"
 exit "$code"

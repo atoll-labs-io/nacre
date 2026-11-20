@@ -18,7 +18,7 @@
 #   po-bounds.sh qa            Write: the path must lie in docs/qa/<id>/ of the story whose linked
 #                              story/<id> worktree holds it; the rest of docs/ is refused too.
 #                              Bash: every git call must use a reading verb of an allowlist
-#                              (ADR-0026); an unknown verb, or none, is refused, and so are any
+#                              (ADR-0026, ADR-0103); an unknown verb, or none, is refused, and so are any
 #                              --output and a symbolic-ref given a target or a writing option.
 #                              Edit is refused.
 #   po-bounds.sh reviewer      two zones (ADR-0047, ADR-0051). A story worktree (as for the implementer,
@@ -316,7 +316,7 @@ step_dir() {
   return 0
 }
 
-QA_GIT_VERBS=" status diff log show rev-parse ls-files ls-tree cat-file merge-base grep blame describe symbolic-ref shortlog "
+QA_GIT_VERBS=" status diff log show rev-parse ls-files ls-tree cat-file merge-base grep blame describe symbolic-ref shortlog check-ignore check-attr "
 
 # Prints the simple commands of the Bash command read on stdin, one per line, words separated by
 # \037, each word prefixed with c (the command word), q (some part quoted), u (neither) or r (the

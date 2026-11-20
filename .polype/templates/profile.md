@@ -1,6 +1,6 @@
 # Profile — <boilerplate name>
 
-A profile describes one boilerplate once, so that setup, architecture, planning and execution all read the same facts about it. It lives at `boilerplates/<name>/profile.md`. `bin/po-lint` checks it against this template: every `## ` heading below must be present, the command names must stay as they are, each capability must come from the list in `## Capabilities`, the platforms of `## Platform` must be values of the `Platform` setting, and the driver of `## QA driver` must name a file of the `qa-drivers` skill.
+A profile describes one boilerplate once, so that setup, architecture, planning and execution all read the same facts about it. It lives at `boilerplates/<name>/profile.md`. `bin/po-lint` checks it against this template: every `## ` heading below must be present, the command names must stay as they are, each capability must come from the list in `## Capabilities`, the platforms of `## Platform` must be values of the `Platform` setting, the driver of `## QA driver` must name a file of the `qa-drivers` skill, and `## Strictness` must hold its three lines.
 
 ## Identity and licence
 
@@ -33,6 +33,14 @@ Dev:               —
 ```
 
 These names are the ones of the `## Commands` block of `AGENTS.local.md`, and the values are copied there verbatim. `—` means the boilerplate has no such command. A `Test` command must accept paths to test files. `Dev` serves what a person looks at and prints the address it serves.
+
+## Strictness
+
+- Strict check: <one command, or —>
+- Turned on by: <file and setting of the base, or —>
+- Passes at the commit profiled: not run
+
+The strict check is one command that runs the compiler at its strictest and the linter with its warnings turned into errors. `Turned on by` names the file of the base and the setting in it that switch that strictness on. The third line is `yes`, `no` or `not run`: `yes` only when the command was run at the commit profiled and exited 0, and a command nobody ran is `not run`. A base where no strict check is possible writes `—` on the first two lines and `not run` on the third, then gives the reason in one sentence.
 
 ## Code map
 
