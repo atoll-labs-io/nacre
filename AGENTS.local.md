@@ -36,6 +36,9 @@ Model strong:      opus
 Model light:       sonnet
 Light up to:       2
 Project CLAUDE file: absorbed
+Forge checks:        —
+Decision inbox:      .polype/inbox/
+Private folder:      ~/.local/state/polype/private/
 ```
 
 | Setting | Values |

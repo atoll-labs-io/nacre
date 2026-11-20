@@ -48,5 +48,12 @@ Quoted from `AGENTS.local.md`, never decided here.
 | E2E | <value> |
 | Build | <value> |
 
+## Strict check
+Retained by default; it reaches the project only through the `Typecheck` setting, which the person edits.
+- **Command**: <the strict command>
+- **Passes on the base**: <yes | no | not run>
+- **In `Typecheck`**: <yes | not yet: the story "<title>" switches the base to it, to be written>
+- **Decision**: [ADR-<NNNN>](<ADR directory, relative to docs/><NNNN>-<slug>.md)
+
 ## Conventions
 The rules live in the « Conventions » section of `AGENTS.local.md`, which every agent loads through `AGENTS.md`. This file does not repeat them.
