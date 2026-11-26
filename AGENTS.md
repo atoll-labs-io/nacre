@@ -102,7 +102,7 @@ Severity decides what a review blocks. **Critical** stops the ship. **Major** is
 
 `/po-research` creates the worktree from the freshest `Target branch` (after a fetch when a remote exists), copies the ignored `.env*` files into it, and runs `Install`. It does not run the tests: the health of `Target branch` is not the story's concern. Every later stage confirms the path and the branch before doing anything; any mismatch ends the stage — no `git switch`, `checkout` or `stash` to make things fit, no alternative path.
 
-A worktree has one occupant at a time. Every shell command a subagent runs inside it starts with `cd <absolute worktree path> &&` or uses `git -C <absolute worktree path>`, because a subagent's shell does not stay where it was.
+A worktree has one occupant at a time. Inside it, git runs as `git -C <absolute worktree path>`, never after a `cd`, and everything else starts with `cd <absolute worktree path> &&`, since a subagent's shell forgets its directory.
 
 While a story is running, its worktree legitimately holds uncommitted work under `docs/`: the research, the design of a story with a screen (`docs/designs/<id>/`), the plan, the QA evidence (`docs/qa/<id>/`) between the walk and `/po-qa`'s commit and, during a fix run, the review; and, outside `docs/`, the oracle files that `## Acceptance tests` of the plan names, until the implementer commits them with the story. Anything else uncommitted that the current agent did not create is a reason to stop.
 
